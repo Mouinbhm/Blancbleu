@@ -11,7 +11,7 @@ const {
   updateEquipage,
   deleteUnit,
   getStats,
-} = require("../controllers/unitController");
+} = require("../controllers/UnitController");
 
 // ─── Stats (avant /:id pour ne pas être capturé) ──────────────────────────────
 router.get("/stats", protect, getStats);

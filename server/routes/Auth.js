@@ -9,7 +9,7 @@ const {
   updateProfile,
   getAllUsers,
   toggleUser,
-} = require("../controllers/authController");
+} = require("../controllers/AuthController");
 
 // ─── Publiques ────────────────────────────────────────────────────────────────
 router.post("/register", register);
