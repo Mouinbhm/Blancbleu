@@ -1,17 +1,18 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
 // ─── Helper : génère un JWT ───────────────────────────────────────────────────
 const generateToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
 // ─── Helper : réponse utilisateur sans le mot de passe ───────────────────────
 const userPayload = (user) => ({
-  id:     user._id,
-  nom:    user.nom,
+  id: user._id,
+  nom: user.nom,
   prenom: user.prenom,
-  email:  user.email,
-  role:   user.role,
+  email: user.email,
+  role: user.role,
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,20 +25,30 @@ const register = async (req, res) => {
     const { nom, prenom, email, password, role } = req.body;
 
     if (!nom || !prenom || !email || !password) {
-      return res.status(400).json({ message: 'Tous les champs sont obligatoires' });
+      return res
+        .status(400)
+        .json({ message: "Tous les champs sont obligatoires" });
     }
 
     const existe = await User.findOne({ email });
     if (existe) {
-      return res.status(409).json({ message: 'Cet email est déjà utilisé' });
+      return res.status(409).json({ message: "Cet email est déjà utilisé" });
     }
 
-    const user = await User.create({ nom, prenom, email, password, role });
+    const salt = await bcrypt.genSalt(10);
+    const hashed = await bcrypt.hash(password, salt);
+    const user = await User.create({
+      nom,
+      prenom,
+      email,
+      password: hashed,
+      role,
+    });
 
     res.status(201).json({
-      message: 'Compte créé avec succès',
-      token:   generateToken(user._id),
-      user:    userPayload(user),
+      message: "Compte créé avec succès",
+      token: generateToken(user._id),
+      user: userPayload(user),
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -54,28 +65,32 @@ const login = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email et mot de passe requis' });
+      return res.status(400).json({ message: "Email et mot de passe requis" });
     }
 
     // select('+password') car le champ est select: false dans le modèle
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email }).select("+password");
     if (!user) {
-      return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
+      return res
+        .status(401)
+        .json({ message: "Email ou mot de passe incorrect" });
     }
 
     if (!user.actif) {
-      return res.status(403).json({ message: 'Ce compte a été désactivé' });
+      return res.status(403).json({ message: "Ce compte a été désactivé" });
     }
 
     const valid = await user.comparePassword(password);
     if (!valid) {
-      return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
+      return res
+        .status(401)
+        .json({ message: "Email ou mot de passe incorrect" });
     }
 
     res.json({
-      message: 'Connexion réussie',
-      token:   generateToken(user._id),
-      user:    userPayload(user),
+      message: "Connexion réussie",
+      token: generateToken(user._id),
+      user: userPayload(user),
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -106,26 +121,34 @@ const updatePassword = async (req, res) => {
     const { ancienPassword, nouveauPassword } = req.body;
 
     if (!ancienPassword || !nouveauPassword) {
-      return res.status(400).json({ message: 'Les deux mots de passe sont requis' });
+      return res
+        .status(400)
+        .json({ message: "Les deux mots de passe sont requis" });
     }
 
     if (nouveauPassword.length < 6) {
-      return res.status(400).json({ message: 'Le nouveau mot de passe doit contenir au moins 6 caractères' });
+      return res
+        .status(400)
+        .json({
+          message:
+            "Le nouveau mot de passe doit contenir au moins 6 caractères",
+        });
     }
 
-    const user = await User.findById(req.user._id).select('+password');
+    const user = await User.findById(req.user._id).select("+password");
     const valid = await user.comparePassword(ancienPassword);
 
     if (!valid) {
-      return res.status(401).json({ message: 'Ancien mot de passe incorrect' });
+      return res.status(401).json({ message: "Ancien mot de passe incorrect" });
     }
 
-    user.password = nouveauPassword;
-    await user.save(); // déclenche le hook pre('save') qui hash le mdp
+    const salt3 = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(nouveauPassword, salt3);
+    await user.save({ validateBeforeSave: false }); // déclenche le hook pre('save') qui hash le mdp
 
     res.json({
-      message: 'Mot de passe mis à jour',
-      token:   generateToken(user._id),
+      message: "Mot de passe mis à jour",
+      token: generateToken(user._id),
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -141,16 +164,15 @@ const updateProfile = async (req, res) => {
   try {
     const { nom, prenom } = req.body;
     const champs = {};
-    if (nom)    champs.nom    = nom;
+    if (nom) champs.nom = nom;
     if (prenom) champs.prenom = prenom;
 
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      champs,
-      { new: true, runValidators: true }
-    );
+    const user = await User.findByIdAndUpdate(req.user._id, champs, {
+      new: true,
+      runValidators: true,
+    });
 
-    res.json({ message: 'Profil mis à jour', user: userPayload(user) });
+    res.json({ message: "Profil mis à jour", user: userPayload(user) });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -179,14 +201,14 @@ const toggleUser = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) {
-      return res.status(404).json({ message: 'Utilisateur introuvable' });
+      return res.status(404).json({ message: "Utilisateur introuvable" });
     }
 
     user.actif = !user.actif;
     await user.save();
 
     res.json({
-      message: `Compte ${user.actif ? 'activé' : 'désactivé'}`,
+      message: `Compte ${user.actif ? "activé" : "désactivé"}`,
       user: userPayload(user),
     });
   } catch (err) {
