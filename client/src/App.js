@@ -1,5 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import Layout from "./components/layout/Layout";
+import { AuthProvider } from "./context/AuthContext";
+import PrivateRoute from "./components/PrivateRoute";
+
+// Pages
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Interventions from "./pages/Interventions";
 import Carte from "./pages/Carte";
@@ -7,20 +11,71 @@ import Flotte from "./pages/Flotte";
 import AideIA from "./pages/AideIA";
 import Rapports from "./pages/Rapports";
 
-export default function App() {
+function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="interventions" element={<Interventions />} />
-          <Route path="carte" element={<Carte />} />
-          <Route path="flotte" element={<Flotte />} />
-          <Route path="ia" element={<AideIA />} />
-          <Route path="rapports" element={<Rapports />} />
-        </Route>
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          {/* ── Publique ───────────────────────────────────────── */}
+          <Route path="/login" element={<Login />} />
+
+          {/* ── Privées (protégées par JWT) ─────────────────────── */}
+          <Route
+            path="/dashboard"
+            element={
+              <PrivateRoute>
+                <Dashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/interventions"
+            element={
+              <PrivateRoute>
+                <Interventions />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/carte"
+            element={
+              <PrivateRoute>
+                <Carte />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/flotte"
+            element={
+              <PrivateRoute>
+                <Flotte />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/aide-ia"
+            element={
+              <PrivateRoute>
+                <AideIA />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/rapports"
+            element={
+              <PrivateRoute>
+                <Rapports />
+              </PrivateRoute>
+            }
+          />
+
+          {/* ── Redirection par défaut ──────────────────────────── */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }
+
+export default App;
