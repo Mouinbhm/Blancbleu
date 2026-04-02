@@ -3,8 +3,9 @@ import { AuthProvider } from "./context/AuthContext";
 import PrivateRoute from "./components/PrivateRoute";
 import Layout from "./components/layout/Layout";
 
-// Pages
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Interventions from "./pages/Interventions";
 import Carte from "./pages/Carte";
@@ -17,10 +18,12 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          {/* ── Publique ─────────────────────────────────────── */}
+          {/* Publiques */}
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
-          {/* ── Privées — toutes sous Layout (sidebar + topbar) ── */}
+          {/* Privées sous Layout */}
           <Route
             element={
               <PrivateRoute>
@@ -36,7 +39,6 @@ function App() {
             <Route path="/rapports" element={<Rapports />} />
           </Route>
 
-          {/* ── Redirections par défaut ──────────────────────── */}
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

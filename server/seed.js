@@ -21,9 +21,9 @@ const seed = async () => {
     const salt = await bcrypt.genSalt(10);
     const users = await User.insertMany([
       {
-        nom: "Dupont",
-        prenom: "Marie",
-        email: "admin@blancbleu.fr",
+        nom: "Ben Hadj Mohamed",
+        prenom: "Mouine",
+        email: "belhajmouin@gmail.com",
         password: await bcrypt.hash("admin123", salt),
         role: "admin",
         actif: true,
@@ -37,8 +37,8 @@ const seed = async () => {
         actif: true,
       },
       {
-        nom: "Bernard",
-        prenom: "Sophie",
+        nom: "Farhat",
+        prenom: "Chokri",
         email: "superviseur@blancbleu.fr",
         password: await bcrypt.hash("superviseur123", salt),
         role: "superviseur",

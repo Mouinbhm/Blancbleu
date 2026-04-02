@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
@@ -34,15 +35,12 @@ export default function Login() {
   return (
     <div style={s.page}>
       <style>{css}</style>
-
-      {/* ── Fond ── */}
       <div style={s.bgGrid} />
       <div style={s.bgGlow1} />
       <div style={s.bgGlow2} />
 
       {/* ══════════ GAUCHE ══════════ */}
       <div style={s.left}>
-        {/* Logo */}
         <div style={s.logo} className="fadeUp">
           <div style={s.logoIcon}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -69,7 +67,6 @@ export default function Login() {
           </div>
         </div>
 
-        {/* Titre principal */}
         <div style={s.heroBlock} className="fadeUp delay1">
           <div style={s.heroEyebrow}>
             <span style={s.eyebrowDot} /> Plateforme de gestion opérationnelle
@@ -89,7 +86,6 @@ export default function Login() {
           </p>
         </div>
 
-        {/* Badges services */}
         <div style={s.badges} className="fadeUp delay2">
           {[
             { icon: "🚑", label: "VSAV / SMUR / VSL" },
@@ -104,7 +100,6 @@ export default function Login() {
           ))}
         </div>
 
-        {/* Stats */}
         <div style={s.stats} className="fadeUp delay3">
           {[
             { val: "< 8 min", label: "Temps de réponse" },
@@ -165,15 +160,10 @@ export default function Login() {
             <div style={s.field}>
               <div style={s.labelRow}>
                 <label style={s.label}>Mot de passe</label>
-                <button
-                  type="button"
-                  style={s.forgot}
-                  onClick={() =>
-                    alert("Contactez votre administrateur système.")
-                  }
-                >
+                {/* ✅ Link vers /forgot-password — plus de alert() */}
+                <Link to="/forgot-password" style={s.forgot}>
                   Mot de passe oublié ?
-                </button>
+                </Link>
               </div>
               <div style={s.wrap}>
                 <svg
@@ -258,7 +248,6 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Pied de carte */}
           <div style={s.cardFoot}>
             <span style={s.footDot} /> Connexion sécurisée SSL · JWT
           </div>
@@ -268,7 +257,6 @@ export default function Login() {
   );
 }
 
-/* ─── CSS animations ───────────────────────────────────────────── */
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=DM+Sans:wght@400;500&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
@@ -285,7 +273,6 @@ const css = `
   button:not(:disabled):active{transform:scale(.98)}
 `;
 
-/* ─── Styles ────────────────────────────────────────────────────── */
 const s = {
   page: {
     display: "flex",
@@ -328,8 +315,6 @@ const s = {
     animation: "pulse2 9s ease-in-out infinite",
     pointerEvents: "none",
   },
-
-  /* Gauche */
   left: {
     flex: 1,
     display: "flex",
@@ -339,7 +324,6 @@ const s = {
     position: "relative",
     zIndex: 1,
   },
-
   logo: {
     display: "flex",
     alignItems: "center",
@@ -372,7 +356,6 @@ const s = {
     fontWeight: 500,
     marginTop: "4px",
   },
-
   heroBlock: { marginBottom: "40px" },
   heroEyebrow: {
     display: "flex",
@@ -409,7 +392,6 @@ const s = {
     lineHeight: 1.7,
     maxWidth: "420px",
   },
-
   badges: {
     display: "flex",
     flexWrap: "wrap",
@@ -432,7 +414,6 @@ const s = {
     fontWeight: 500,
     letterSpacing: "0.03em",
   },
-
   stats: { display: "flex", gap: "40px" },
   stat: { display: "flex", flexDirection: "column", gap: "4px" },
   statVal: {
@@ -442,8 +423,6 @@ const s = {
     color: "#ffffff",
   },
   statLabel: { fontSize: "12px", color: "#334155", letterSpacing: "0.04em" },
-
-  /* Droite */
   right: {
     width: "500px",
     minWidth: "500px",
@@ -480,7 +459,6 @@ const s = {
     letterSpacing: "-0.01em",
   },
   cardSub: { fontSize: "14px", color: "#475569", lineHeight: 1.6 },
-
   err: {
     display: "flex",
     alignItems: "center",
@@ -493,7 +471,6 @@ const s = {
     fontSize: "14px",
     marginBottom: "20px",
   },
-
   form: {
     display: "flex",
     flexDirection: "column",
@@ -515,10 +492,6 @@ const s = {
   forgot: {
     fontSize: "12px",
     color: "#1D6EF5",
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    padding: 0,
     textDecoration: "underline",
     textUnderlineOffset: "2px",
   },
@@ -553,7 +526,6 @@ const s = {
     alignItems: "center",
     padding: "4px",
   },
-
   btn: {
     display: "flex",
     alignItems: "center",
@@ -582,7 +554,6 @@ const s = {
     borderRadius: "50%",
     animation: "spin .7s linear infinite",
   },
-
   cardFoot: {
     display: "flex",
     alignItems: "center",

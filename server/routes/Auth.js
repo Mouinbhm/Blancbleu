@@ -9,18 +9,26 @@ const {
   updateProfile,
   getAllUsers,
   toggleUser,
-} = require("../controllers/AuthController");
+} = require("../controllers/authController");
+const {
+  forgotPassword,
+  verifyResetToken,
+  resetPassword,
+} = require("../controllers/passwordController");
 
 // ─── Publiques ────────────────────────────────────────────────────────────────
 router.post("/register", register);
 router.post("/login", login);
+router.post("/forgot-password", forgotPassword);
+router.get("/reset-password/:token", verifyResetToken);
+router.post("/reset-password", resetPassword);
 
-// ─── Privées ─────────────────────────────────────────────────────────────────
+// ─── Privées ──────────────────────────────────────────────────────────────────
 router.get("/me", protect, getMe);
 router.patch("/password", protect, updatePassword);
 router.patch("/profile", protect, updateProfile);
 
-// ─── Admin seulement ─────────────────────────────────────────────────────────
+// ─── Admin ────────────────────────────────────────────────────────────────────
 router.get("/users", protect, authorize("admin"), getAllUsers);
 router.patch("/users/:id/toggle", protect, authorize("admin"), toggleUser);
 
