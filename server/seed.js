@@ -28,14 +28,7 @@ const seed = async () => {
         role: "admin",
         actif: true,
       },
-      {
-        nom: "Martin",
-        prenom: "Lucas",
-        email: "dispatcher@blancbleu.fr",
-        password: await bcrypt.hash("dispatcher123", salt),
-        role: "dispatcher",
-        actif: true,
-      },
+
       {
         nom: "Farhat",
         prenom: "Chokri",
