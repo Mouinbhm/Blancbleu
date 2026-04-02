@@ -1,7 +1,9 @@
 import axios from "axios";
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+
 const api = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: API_URL,
   headers: { "Content-Type": "application/json" },
 });
 
@@ -16,8 +18,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    const isLoginRequest = error.config?.url === "/auth/login";
-    if (error.response?.status === 401 && !isLoginRequest) {
+    if (error.response?.status === 401) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       window.location.href = "/login";
@@ -89,3 +90,49 @@ export const updateUnitStatus = (id, s) => unitService.updateStatus(id, s);
 export const analyzeIncident = (data) => aiService.analyze(data);
 
 export default api;
+
+// ════════════════════════════════════════════════════════════════════════════
+// PERSONNEL
+// ════════════════════════════════════════════════════════════════════════════
+export const personnelService = {
+  getAll: (params = {}) => api.get("/personnel", { params }),
+  getOne: (id) => api.get(`/personnel/${id}`),
+  getStats: () => api.get("/personnel/stats"),
+  create: (data) => api.post("/personnel", data),
+  update: (id, data) => api.patch(`/personnel/${id}`, data),
+  updateStatut: (id, statut) =>
+    api.patch(`/personnel/${id}/status`, { statut }),
+  assignerUnite: (id, uniteId) =>
+    api.patch(`/personnel/${id}/assign`, { uniteId }),
+  delete: (id) => api.delete(`/personnel/${id}`),
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// ÉQUIPEMENTS
+// ════════════════════════════════════════════════════════════════════════════
+export const equipementService = {
+  getAll: (params = {}) => api.get("/equipements", { params }),
+  getOne: (id) => api.get(`/equipements/${id}`),
+  getStats: () => api.get("/equipements/stats"),
+  getAlertes: () => api.get("/equipements/alertes"),
+  create: (data) => api.post("/equipements", data),
+  update: (id, data) => api.patch(`/equipements/${id}`, data),
+  updateEtat: (id, etat) => api.patch(`/equipements/${id}/etat`, { etat }),
+  enregistrerControle: (id, data) =>
+    api.patch(`/equipements/${id}/controle`, data),
+  delete: (id) => api.delete(`/equipements/${id}`),
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// MAINTENANCES
+// ════════════════════════════════════════════════════════════════════════════
+export const maintenanceService = {
+  getAll: (params = {}) => api.get("/maintenances", { params }),
+  getOne: (id) => api.get(`/maintenances/${id}`),
+  getStats: () => api.get("/maintenances/stats"),
+  create: (data) => api.post("/maintenances", data),
+  update: (id, data) => api.patch(`/maintenances/${id}`, data),
+  updateStatut: (id, statut) =>
+    api.patch(`/maintenances/${id}/status`, { statut }),
+  delete: (id) => api.delete(`/maintenances/${id}`),
+};
