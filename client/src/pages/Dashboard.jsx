@@ -1,87 +1,100 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import KpiCard from "../components/ui/KpiCard";
 import InterventionCard from "../components/interventions/InterventionCard";
 import UnitsPanel from "../components/units/UnitsPanel";
-
-const MOCK_INTERVENTIONS = [
-  {
-    id: 1,
-    ref: "#INT-2025-0847",
-    priority: 1,
-    type: "Arrêt cardiaque",
-    address: "14 Rue Victor Hugo, Lyon 3ème",
-    unit: "AMB-03",
-    status: "en-route",
-    elapsed: "00:04:32",
-    aiScore: 94,
-  },
-  {
-    id: 2,
-    ref: "#INT-2025-0841",
-    priority: 1,
-    type: "AVC suspecté",
-    address: "8 Av. Berthelot, Lyon 7ème",
-    unit: "AMB-05",
-    status: "sur-place",
-    elapsed: "00:12:18",
-    aiScore: 91,
-  },
-  {
-    id: 3,
-    ref: "#INT-2025-0838",
-    priority: 2,
-    type: "Accident voie pub.",
-    address: "Quai Gailleton, Lyon 2ème",
-    unit: "AMB-07",
-    status: "en-route",
-    elapsed: "00:07:05",
-    aiScore: 78,
-  },
-  {
-    id: 4,
-    ref: "#INT-2025-0832",
-    priority: 2,
-    type: "Traumatisme",
-    address: "Parc Tête d'Or, Lyon",
-    unit: "AMB-02",
-    status: "sur-place",
-    elapsed: "00:19:44",
-    aiScore: 65,
-  },
-  {
-    id: 5,
-    ref: "#INT-2025-0829",
-    priority: 3,
-    type: "Malaise général",
-    address: "Gare Part-Dieu, Lyon 3ème",
-    unit: "AMB-09",
-    status: "en-route",
-    elapsed: "00:03:20",
-    aiScore: 55,
-  },
-  {
-    id: 6,
-    ref: "#INT-2025-0825",
-    priority: 3,
-    type: "Chute domicile",
-    address: "150 Cours Lafayette, Lyon",
-    unit: "AMB-04",
-    status: "attente",
-    elapsed: "00:01:47",
-    aiScore: 42,
-  },
-];
+import { interventionService, unitService } from "../services/api";
 
 const FILTERS = ["Tout", "P1 Critique", "P2 Urgent", "P3 Standard"];
 
+// ─── Calcul durée écoulée ─────────────────────────────────────────────────────
+function elapsed(heureAppel) {
+  if (!heureAppel) return "—";
+  const diff = Math.floor((Date.now() - new Date(heureAppel)) / 1000);
+  const h = String(Math.floor(diff / 3600)).padStart(2, "0");
+  const m = String(Math.floor((diff % 3600) / 60)).padStart(2, "0");
+  const s = String(diff % 60).padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+
+// ─── Convertit une intervention backend → format InterventionCard ─────────────
+function toCardData(i) {
+  const statusMap = {
+    en_cours: "en-route",
+    en_attente: "attente",
+    terminee: "terminee",
+    annulee: "annulee",
+  };
+  const priorityMap = { P1: 1, P2: 2, P3: 3 };
+  return {
+    id: i._id,
+    ref: i.numero || `#${i._id.slice(-6).toUpperCase()}`,
+    priority: priorityMap[i.priorite] || 3,
+    type: i.typeIncident,
+    address: i.adresse,
+    unit: i.unitAssignee?.nom || "—",
+    status: statusMap[i.statut] || i.statut,
+    elapsed: elapsed(i.heureAppel),
+    aiScore: i.scoreIA || 0,
+    raw: i,
+  };
+}
+
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState("Tout");
   const [selected, setSelected] = useState(null);
+  const [interventions, setInterventions] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [tick, setTick] = useState(0); // pour rafraîchir les durées
 
+  // ── Chargement initial ────────────────────────────────────────────────────
+  const loadData = useCallback(async () => {
+    try {
+      const [intRes, unitRes, statsRes] = await Promise.all([
+        interventionService.getAll({ statut: "en_cours", limit: 20 }),
+        unitService.getAll(),
+        interventionService.getStats(),
+      ]);
+      setInterventions((intRes.data.interventions || []).map(toCardData));
+      setUnits(unitRes.data);
+      setStats(statsRes.data);
+    } catch (err) {
+      console.error("Dashboard load error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // ── Refresh auto toutes les 30s ───────────────────────────────────────────
+  useEffect(() => {
+    const iv = setInterval(loadData, 30000);
+    return () => clearInterval(iv);
+  }, [loadData]);
+
+  // ── Tick toutes les secondes pour mettre à jour les durées ────────────────
+  useEffect(() => {
+    const iv = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // ── Recalcul des durées à chaque tick ─────────────────────────────────────
+  const liveInterventions = interventions.map((i) => ({
+    ...i,
+    elapsed: elapsed(i.raw?.heureAppel),
+  }));
+
+  // ── Filtres ───────────────────────────────────────────────────────────────
   const filtered =
     filter === "Tout"
-      ? MOCK_INTERVENTIONS
-      : MOCK_INTERVENTIONS.filter((i) =>
+      ? liveInterventions
+      : liveInterventions.filter((i) =>
           filter === "P1 Critique"
             ? i.priority === 1
             : filter === "P2 Urgent"
@@ -89,40 +102,57 @@ export default function Dashboard() {
               : i.priority === 3,
         );
 
+  // ── KPIs dynamiques ───────────────────────────────────────────────────────
+  const actives = stats?.parStatut?.enCours || 0;
+  const enAttente = stats?.parStatut?.enAttente || 0;
+  const terminees = stats?.parStatut?.terminees || 0;
+  const disponibles = units.filter((u) => u.statut === "disponible").length;
+
+  // ── Action : changer statut intervention ──────────────────────────────────
+  const handleChangeStatus = async (id, statut) => {
+    try {
+      await interventionService.updateStatus(id, statut);
+      await loadData();
+      setSelected(null);
+    } catch {
+      alert("Erreur lors de la mise à jour.");
+    }
+  };
+
   return (
     <div className="p-7 fade-in">
       {/* KPI STRIP */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-7">
         <KpiCard
           label="Interventions actives"
-          value={12}
+          value={loading ? "…" : actives}
           color="danger"
           icon="emergency"
-          trend="↑2 depuis 1h"
+          trend={loading ? "" : `${enAttente} en attente`}
           trendType="bad"
         />
         <KpiCard
           label="En attente"
-          value={4}
+          value={loading ? "…" : enAttente}
           color="warning"
           icon="hourglass_empty"
-          trend="Avg: 02:15"
+          trend={`${disponibles} unités dispo`}
         />
         <KpiCard
           label="Terminées aujourd'hui"
-          value={31}
+          value={loading ? "…" : terminees}
           color="success"
           icon="check_circle"
-          trend="↑8% vs hier"
+          trend={`Total : ${stats?.total || 0}`}
           trendType="good"
         />
         <KpiCard
-          label="TMR moyen"
-          value="5.8 min"
+          label="Unités disponibles"
+          value={loading ? "…" : disponibles}
           color="primary"
-          icon="speed"
-          trend="↓0.4min vs hier"
-          trendType="good"
+          icon="ambulance"
+          trend={`/ ${units.length} total`}
+          trendType={disponibles > 0 ? "good" : "bad"}
         />
       </div>
 
@@ -138,14 +168,30 @@ export default function Dashboard() {
             Aide IA
           </p>
           <p className="text-sm text-white font-medium">
-            Hausse de <span className="text-yellow-400 font-bold">+12%</span>{" "}
-            des appels P1 prévue dans 2h. Suggestion : Redéployer{" "}
-            <span className="text-blue-300 font-bold">AMB-09</span> vers Secteur
-            4.
+            {interventions.filter((i) => i.priority === 1).length > 0 ? (
+              <>
+                <span className="text-yellow-400 font-bold">
+                  {interventions.filter((i) => i.priority === 1).length}{" "}
+                  intervention(s) P1
+                </span>{" "}
+                en cours — {disponibles} unité(s) disponible(s) pour renfort.
+              </>
+            ) : (
+              <>
+                Système opérationnel —{" "}
+                <span className="text-green-400 font-bold">
+                  {disponibles} unité(s)
+                </span>{" "}
+                disponible(s).
+              </>
+            )}
           </p>
         </div>
-        <button className="text-xs font-bold text-primary border border-primary/40 px-3 py-1.5 rounded-lg hover:bg-primary hover:text-white transition-all flex-shrink-0">
-          Appliquer
+        <button
+          onClick={() => navigate("/aide-ia")}
+          className="text-xs font-bold text-primary border border-primary/40 px-3 py-1.5 rounded-lg hover:bg-primary hover:text-white transition-all flex-shrink-0"
+        >
+          Analyser
         </button>
       </div>
 
@@ -159,7 +205,9 @@ export default function Dashboard() {
                 Interventions en cours
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                {filtered.length} intervention(s) affichée(s)
+                {loading
+                  ? "Chargement…"
+                  : `${filtered.length} intervention(s) affichée(s)`}
               </p>
             </div>
             <div className="flex gap-1 bg-surface rounded-lg p-1 border border-slate-200">
@@ -179,15 +227,49 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="space-y-3">
-            {filtered.map((i) => (
-              <InterventionCard
-                key={i.id}
-                data={i}
-                onClick={() => setSelected(selected?.id === i.id ? null : i)}
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-slate-400 gap-3">
+              <div
+                style={{
+                  width: 20,
+                  height: 20,
+                  border: "2px solid #e2e8f0",
+                  borderTop: "2px solid #1D6EF5",
+                  borderRadius: "50%",
+                  animation: "spin .7s linear infinite",
+                }}
               />
-            ))}
-          </div>
+              Chargement des interventions…
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-16">
+              <span
+                className="material-symbols-outlined text-slate-300"
+                style={{ fontSize: 48 }}
+              >
+                emergency
+              </span>
+              <p className="text-slate-400 mt-3 text-sm">
+                Aucune intervention en cours
+              </p>
+              <button
+                onClick={() => navigate("/interventions")}
+                className="mt-4 bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
+              >
+                Voir toutes les interventions
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((i) => (
+                <InterventionCard
+                  key={i.id}
+                  data={i}
+                  onClick={() => setSelected(selected?.id === i.id ? null : i)}
+                />
+              ))}
+            </div>
+          )}
 
           {/* Detail panel */}
           {selected && (
@@ -211,6 +293,9 @@ export default function Dashboard() {
                   ["Priorité", `P${selected.priority}`],
                   ["Durée", selected.elapsed],
                   ["Score IA", `${selected.aiScore}%`],
+                  ["Adresse", selected.address],
+                  ["Patient", selected.raw?.patient?.nom || "Inconnu"],
+                  ["État patient", selected.raw?.patient?.etat || "—"],
                 ].map(([k, v]) => (
                   <div key={k} className="bg-surface rounded-lg p-3">
                     <p className="text-xs font-mono text-slate-400 uppercase tracking-widest mb-1">
@@ -221,20 +306,42 @@ export default function Dashboard() {
                 ))}
               </div>
               <div className="flex gap-3 mt-4">
-                <button className="flex-1 py-2.5 bg-primary text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors">
+                <button
+                  onClick={() =>
+                    navigate(
+                      `/carte?unitId=${selected.raw?.unitAssignee?._id || ""}`,
+                    )
+                  }
+                  className="flex-1 py-2.5 bg-primary text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors"
+                >
                   Voir sur la carte
                 </button>
-                <button className="flex-1 py-2.5 border border-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-surface transition-colors">
-                  Modifier le statut
-                </button>
+                {selected.status === "en-route" && (
+                  <button
+                    onClick={() => handleChangeStatus(selected.id, "terminee")}
+                    className="flex-1 py-2.5 bg-emerald-500 text-white rounded-xl font-bold text-sm hover:bg-emerald-600 transition-colors"
+                  >
+                    Marquer terminée
+                  </button>
+                )}
+                {selected.status === "attente" && (
+                  <button
+                    onClick={() => navigate("/interventions")}
+                    className="flex-1 py-2.5 border border-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-surface transition-colors"
+                  >
+                    Assigner une unité
+                  </button>
+                )}
               </div>
             </div>
           )}
         </div>
 
-        {/* Units Panel */}
-        <UnitsPanel />
+        {/* Units Panel — données dynamiques */}
+        <UnitsPanel units={units} loading={loading} />
       </div>
+
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }

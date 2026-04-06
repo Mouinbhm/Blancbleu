@@ -1,106 +1,105 @@
-import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-const initialUnits = [
-  {
-    code: "AMB-01",
-    status: "disponible",
-    location: "Secteur Nord",
-    zone: "Nord",
-  },
-  { code: "AMB-03", status: "en-route", location: "ETA 4 min", zone: "Sud" },
-  { code: "AMB-05", status: "sur-place", location: "INT-0841", zone: "Est" },
-  { code: "AMB-07", status: "en-route", location: "ETA 6 min", zone: "Ouest" },
-  { code: "AMB-09", status: "en-route", location: "ETA 2 min", zone: "Centre" },
-  {
-    code: "AMB-11",
-    status: "disponible",
-    location: "Secteur Est",
-    zone: "Est",
-  },
-  { code: "AMB-15", status: "hors-service", location: "Garage", zone: "—" },
-];
-
-const statusConfig = {
-  disponible: {
-    dot: "bg-emerald-500",
-    text: "text-emerald-600",
-    label: "DISPONIBLE",
-    pulse: true,
-  },
-  "en-route": {
-    dot: "bg-yellow-500",
-    text: "text-yellow-600",
-    label: "EN ROUTE",
-    pulse: false,
-  },
-  "sur-place": {
-    dot: "bg-red-500",
-    text: "text-red-600",
-    label: "SUR PLACE",
-    pulse: false,
-  },
-  "hors-service": {
-    dot: "bg-slate-400",
-    text: "text-slate-500",
-    label: "HORS SERVICE",
-    pulse: false,
-  },
+const statutColor = {
+  disponible: "bg-emerald-400",
+  en_mission: "bg-yellow-400",
+  maintenance: "bg-red-400",
+  indisponible: "bg-slate-400",
+};
+const statutLabel = {
+  disponible: "Disponible",
+  en_mission: "En mission",
+  maintenance: "Maintenance",
+  indisponible: "Indisponible",
 };
 
-export default function UnitsPanel() {
-  const [units] = useState(initialUnits);
-  const available = units.filter((u) => u.status === "disponible").length;
+export default function UnitsPanel({ units = [], loading = false }) {
+  const navigate = useNavigate();
+  const disponibles = units.filter((u) => u.statut === "disponible").length;
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col">
+    <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
         <h3 className="font-brand font-bold text-navy text-sm">
           Unités ambulancières
         </h3>
-        <span className="bg-blue-100 text-blue-700 text-xs font-mono font-bold px-2 py-0.5 rounded-full">
-          {available} dispo
+        <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-full">
+          {disponibles} dispo
         </span>
       </div>
 
-      {/* List */}
-      <div className="flex-1 divide-y divide-slate-100 overflow-y-auto max-h-80">
-        {units.map((unit) => {
-          const s = statusConfig[unit.status] || statusConfig["hors-service"];
-          return (
+      {/* Liste */}
+      <div className="overflow-y-auto" style={{ maxHeight: "420px" }}>
+        {loading ? (
+          <div className="flex items-center justify-center py-10 text-slate-400 gap-2">
             <div
-              key={unit.code}
-              className="px-4 py-3 flex items-center gap-3 hover:bg-blue-50/50 cursor-pointer transition-colors group"
+              style={{
+                width: 16,
+                height: 16,
+                border: "2px solid #e2e8f0",
+                borderTop: "2px solid #1D6EF5",
+                borderRadius: "50%",
+                animation: "spin .7s linear infinite",
+              }}
+            />
+            <span className="text-xs">Chargement…</span>
+          </div>
+        ) : units.length === 0 ? (
+          <div className="text-center py-10 text-slate-400 text-xs">
+            Aucune unité enregistrée
+          </div>
+        ) : (
+          units.map((u) => (
+            <div
+              key={u._id}
+              onClick={() => navigate(`/carte?unitId=${u._id}`)}
+              className="flex items-center gap-3 px-4 py-3 border-b border-slate-50 hover:bg-blue-50 cursor-pointer transition-colors group"
             >
+              {/* Indicateur statut */}
               <span
-                className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${s.dot} ${s.pulse ? "animate-pulse" : ""}`}
+                className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${statutColor[u.statut] || "bg-slate-400"}`}
               />
+
+              {/* Infos */}
               <div className="flex-1 min-w-0">
-                <p className="font-mono text-xs font-bold text-navy">
-                  {unit.code}
-                </p>
+                <p className="font-mono font-bold text-navy text-sm">{u.nom}</p>
                 <p className="text-xs text-slate-400 truncate">
-                  {unit.location}
+                  {u.interventionEnCours
+                    ? `INT-${u.interventionEnCours.numero || "en cours"}`
+                    : u.position?.adresse || u.type}
                 </p>
               </div>
-              <span
-                className={`text-xs font-mono font-bold ${s.text} hidden group-hover:hidden`}
-              >
-                {s.label}
-              </span>
-              <button className="opacity-0 group-hover:opacity-100 text-xs text-primary border border-primary px-2 py-1 rounded-lg transition-all hover:bg-primary hover:text-white font-medium">
-                Affecter
-              </button>
+
+              {/* Statut + flèche */}
+              <div className="flex items-center gap-1">
+                <span
+                  className={`text-xs font-semibold ${
+                    u.statut === "disponible"
+                      ? "text-emerald-600"
+                      : u.statut === "en_mission"
+                        ? "text-yellow-600"
+                        : "text-red-500"
+                  }`}
+                >
+                  {statutLabel[u.statut] || u.statut}
+                </span>
+                <span className="material-symbols-outlined text-slate-300 text-sm group-hover:text-primary transition-colors">
+                  chevron_right
+                </span>
+              </div>
             </div>
-          );
-        })}
+          ))
+        )}
       </div>
 
-      {/* CTA */}
-      <div className="p-3 border-t border-slate-100">
-        <button className="w-full py-3 bg-primary text-white rounded-xl font-brand font-bold text-sm hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
-          <span className="material-symbols-outlined text-lg">add_circle</span>
-          Nouvelle intervention
+      {/* Footer */}
+      <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100">
+        <button
+          onClick={() => navigate("/flotte")}
+          className="w-full text-xs font-bold text-primary hover:text-blue-700 transition-colors text-center"
+        >
+          Gérer la flotte →
         </button>
       </div>
     </div>
