@@ -11,33 +11,35 @@ const navItems = [
     badge: 4,
   },
   { path: "/carte", icon: "map", label: "Carte en direct" },
-  { path: "/flotte", icon: "ambulance", label: "Flotte & Ressources" },
+  { path: "/flotte", icon: "ambulance", label: "Flotte & Véhicules" },
   { path: "/aide-ia", icon: "psychology", label: "Aide IA" },
   { path: "/rapports", icon: "assessment", label: "Rapports" },
+  { path: "/factures", icon: "receipt_long", label: "Factures" },
 ];
 
 const pageTitles = {
   "/dashboard": "Tableau de bord — Vue opérationnelle",
   "/interventions": "Interventions — Gestion des appels",
-  "/carte": "Carte en direct — Vue opérationnelle",
-  "/flotte": "Flotte & Ressources",
-  "/aide-ia": "Aide à la décision — Intelligence Artificielle",
+  "/carte": "Carte en direct — Suivi des unités",
+  "/flotte": "Flotte & Véhicules — Gestion des ambulances",
+  "/aide-ia": "Aide IA — Priorisation intelligente",
   "/rapports": "Rapports Opérationnels",
+  "/factures": "Factures — Gestion de la facturation",
 };
 
 export default function Layout() {
   const location = useLocation();
   const { user, logout } = useAuth();
-  const [shiftTime, setShiftTime] = useState("06:24:11");
+  const [shiftTime, setShiftTime] = useState("00:00:00");
   const [notifOpen, setNotifOpen] = useState(false);
 
   useEffect(() => {
-    let s = 6 * 3600 + 24 * 60 + 11;
+    const start = Date.now();
     const iv = setInterval(() => {
-      s++;
-      const h = String(Math.floor(s / 3600)).padStart(2, "0");
-      const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
-      const sc = String(s % 60).padStart(2, "0");
+      const elapsed = Math.floor((Date.now() - start) / 1000);
+      const h = String(Math.floor(elapsed / 3600)).padStart(2, "0");
+      const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, "0");
+      const sc = String(elapsed % 60).padStart(2, "0");
       setShiftTime(`${h}:${m}:${sc}`);
     }, 1000);
     return () => clearInterval(iv);
@@ -49,30 +51,45 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-screen bg-surface">
-      {/* SIDEBAR */}
+      {/* ═══════════════ SIDEBAR ═══════════════ */}
       <aside className="w-60 h-screen fixed left-0 top-0 bg-navy flex flex-col z-50 shadow-xl">
-        <div className="px-6 py-5 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-white text-lg">
+        {/* Logo */}
+        <div className="px-5 py-4 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+              <span
+                className="material-symbols-outlined text-white"
+                style={{ fontSize: "18px" }}
+              >
                 emergency
               </span>
             </div>
             <div>
-              <div className="font-brand text-xl font-bold leading-none">
-                <span className="text-white">Blanc</span>
-                <span className="text-primary">Bleu</span>
+              <div
+                style={{
+                  fontFamily: "'Sora',sans-serif",
+                  fontWeight: 800,
+                  fontSize: "15px",
+                  lineHeight: 1.2,
+                }}
+              >
+                <span className="text-white">Ambulances </span>
+                <span className="text-primary">Blanc Bleu</span>
               </div>
-              <p className="text-xs text-slate-500 font-mono tracking-widest mt-0.5">
-                DISPATCH · AI
+              <p
+                className="text-slate-600 font-mono tracking-widest"
+                style={{ fontSize: "8px", marginTop: "2px" }}
+              >
+                NICE · DISPATCH · AI
               </p>
             </div>
           </div>
         </div>
 
+        {/* Navigation */}
         <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
           <p className="text-xs font-mono text-slate-600 uppercase tracking-widest px-4 py-2">
-            Principal
+            Opérations
           </p>
           {navItems.slice(0, 3).map((item) => (
             <NavLink
@@ -101,7 +118,7 @@ export default function Layout() {
           ))}
 
           <p className="text-xs font-mono text-slate-600 uppercase tracking-widest px-4 py-2 mt-3">
-            Ressources
+            Gestion
           </p>
           {navItems.slice(3).map((item) => (
             <NavLink
@@ -123,7 +140,40 @@ export default function Layout() {
           ))}
         </nav>
 
-        <div className="px-4 pb-5 border-t border-white/10 pt-4 space-y-3">
+        {/* Infos entreprise */}
+        <div className="px-4 py-3 border-t border-white/5">
+          <div className="flex items-center gap-2 px-1 mb-2">
+            <span
+              className="material-symbols-outlined text-slate-600"
+              style={{ fontSize: "13px" }}
+            >
+              location_on
+            </span>
+            <span
+              className="text-slate-600 font-mono"
+              style={{ fontSize: "9px", letterSpacing: "0.05em" }}
+            >
+              59 BD MADELEINE, NICE
+            </span>
+          </div>
+          <div className="flex items-center gap-2 px-1">
+            <span
+              className="material-symbols-outlined text-slate-600"
+              style={{ fontSize: "13px" }}
+            >
+              call
+            </span>
+            <span
+              className="text-slate-600 font-mono"
+              style={{ fontSize: "9px", letterSpacing: "0.05em" }}
+            >
+              SAMU 15 · POMPIERS 18
+            </span>
+          </div>
+        </div>
+
+        {/* Dispatcher */}
+        <div className="px-4 pb-4 border-t border-white/10 pt-3 space-y-2">
           <div className="flex items-center gap-3 bg-white/5 rounded-xl p-3 border border-white/10">
             <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
               {initials}
@@ -132,7 +182,10 @@ export default function Layout() {
               <p className="text-white text-xs font-semibold truncate">
                 {user ? `${user.prenom} ${user.nom}` : "Dispatcher"}
               </p>
-              <p className="text-yellow-400 font-mono text-xs">
+              <p
+                className="text-yellow-400 font-mono"
+                style={{ fontSize: "11px" }}
+              >
                 SHIFT: {shiftTime}
               </p>
             </div>
@@ -141,34 +194,50 @@ export default function Layout() {
               title="Déconnexion"
               className="text-slate-500 hover:text-red-400 transition-colors"
             >
-              <span className="material-symbols-outlined text-lg">logout</span>
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: "18px" }}
+              >
+                logout
+              </span>
             </button>
           </div>
           <div className="flex items-center gap-2 px-1">
             <span className="w-2 h-2 rounded-full bg-success animate-pulse flex-shrink-0" />
-            <span className="text-xs font-mono text-slate-500 tracking-widest">
+            <span
+              className="text-slate-600 font-mono"
+              style={{ fontSize: "9px", letterSpacing: "0.1em" }}
+            >
               SYSTÈME OPÉRATIONNEL
             </span>
           </div>
         </div>
       </aside>
 
-      {/* MAIN */}
+      {/* ═══════════════ MAIN ═══════════════ */}
       <div className="flex-1 ml-60 flex flex-col min-h-screen">
+        {/* TOPBAR */}
         <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-40 flex items-center justify-between px-8 shadow-sm">
-          <h1 className="font-brand font-semibold text-navy text-sm">
-            {pageTitles[location.pathname] || "BlancBleu"}
-          </h1>
+          <div>
+            <h1 className="font-brand font-semibold text-navy text-sm">
+              {pageTitles[location.pathname] || "Ambulances Blanc Bleu"}
+            </h1>
+            <p style={{ fontSize: "11px", color: "#94a3b8" }}>
+              Ambulances Blanc Bleu · Nice, Alpes-Maritimes
+            </p>
+          </div>
+
           <div className="flex items-center gap-2 bg-surface rounded-lg border border-slate-200 px-3 py-2 w-56">
             <span className="material-symbols-outlined text-slate-400 text-lg">
               search
             </span>
             <input
               type="text"
-              placeholder="Rechercher..."
+              placeholder="Rechercher une intervention…"
               className="bg-transparent text-sm outline-none w-full text-slate-700 placeholder-slate-400"
             />
           </div>
+
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-400 font-mono">
               {new Date().toLocaleDateString("fr-FR", {
@@ -198,17 +267,17 @@ export default function Layout() {
                   {[
                     {
                       t: "P1 — Arrêt cardiaque",
-                      s: "AMB-03 dispatché",
+                      s: "Unité AMB-03 dispatchée",
                       c: "text-danger",
                     },
                     {
-                      t: "P2 — Accident route",
-                      s: "En attente d'unité",
+                      t: "P2 — Accident route A8",
+                      s: "En attente d'une unité",
                       c: "text-warning",
                     },
                     {
                       t: "IA — Recommandation",
-                      s: "Redéployer AMB-09",
+                      s: "Redéployer AMB-05 secteur E",
                       c: "text-primary",
                     },
                   ].map((n, i) => (
@@ -232,6 +301,7 @@ export default function Layout() {
             </div>
           </div>
         </header>
+
         <main className="flex-1 overflow-auto">
           <Outlet />
         </main>

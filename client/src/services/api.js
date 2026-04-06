@@ -136,3 +136,16 @@ export const maintenanceService = {
     api.patch(`/maintenances/${id}/status`, { statut }),
   delete: (id) => api.delete(`/maintenances/${id}`),
 };
+
+// ════════════════════════════════════════════════════════════════════════════
+// FACTURES
+// ════════════════════════════════════════════════════════════════════════════
+export const factureService = {
+  getAll: (params = {}) => api.get("/factures", { params }),
+  getOne: (id) => api.get(`/factures/${id}`),
+  getStats: () => api.get("/factures/stats"),
+  create: (data) => api.post("/factures", data),
+  update: (id, data) => api.patch(`/factures/${id}`, data),
+  updateStatut: (id, statut) => api.patch(`/factures/${id}/statut`, { statut }),
+  delete: (id) => api.delete(`/factures/${id}`),
+};

@@ -36,6 +36,7 @@ app.use("/api/ai", require("./routes/ai"));
 app.use("/api/personnel", require("./routes/personnel"));
 app.use("/api/equipements", require("./routes/equipements"));
 app.use("/api/maintenances", require("./routes/maintenances"));
+app.use("/api/factures", require("./routes/factures"));
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", message: "BlancBleu API is running 🚑" });

@@ -12,6 +12,7 @@ import Carte from "./pages/Carte";
 import Flotte from "./pages/Flotte";
 import AideIA from "./pages/AideIA";
 import Rapports from "./pages/Rapports";
+import Factures from "./pages/Factures";
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
             <Route path="/flotte" element={<Flotte />} />
             <Route path="/aide-ia" element={<AideIA />} />
             <Route path="/rapports" element={<Rapports />} />
+            <Route path="/factures" element={<Factures />} />
           </Route>
 
           <Route path="/" element={<Navigate to="/login" replace />} />
