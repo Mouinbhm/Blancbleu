@@ -1,15 +1,11 @@
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { interventionService } from "../../services/api";
 
-const navItems = [
+const NAV_BASE = [
   { path: "/dashboard", icon: "dashboard", label: "Tableau de bord" },
-  {
-    path: "/interventions",
-    icon: "emergency",
-    label: "Interventions",
-    badge: 4,
-  },
+  { path: "/interventions", icon: "emergency", label: "Interventions" },
   { path: "/carte", icon: "map", label: "Carte en direct" },
   { path: "/flotte", icon: "ambulance", label: "Flotte & Véhicules" },
   { path: "/aide-ia", icon: "psychology", label: "Aide IA" },
@@ -30,8 +26,80 @@ const pageTitles = {
 export default function Layout() {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [shiftTime, setShiftTime] = useState("00:00:00");
   const [notifOpen, setNotifOpen] = useState(false);
+  const [notifs, setNotifs] = useState([]);
+  const [notifCount, setNotifCount] = useState(0);
+  const notifRef = useRef(null);
+
+  // ── Charger interventions actives comme notifications ─────────────────────
+  useEffect(() => {
+    const loadNotifs = async () => {
+      try {
+        const { data } = await interventionService.getAll({
+          statut: "en_attente",
+          limit: 10,
+        });
+        const enAttente = data.interventions || [];
+        const { data: data2 } = await interventionService.getAll({
+          statut: "en_cours",
+          limit: 5,
+        });
+        const enCours = data2.interventions || [];
+
+        const notifList = [
+          ...enAttente.map((i) => ({
+            id: i._id,
+            title: `${i.priorite} — ${i.typeIncident}`,
+            sub: "En attente d'une unité",
+            color:
+              i.priorite === "P1"
+                ? "text-danger"
+                : i.priorite === "P2"
+                  ? "text-warning"
+                  : "text-primary",
+            path: "/interventions",
+            time: new Date(i.createdAt),
+          })),
+          ...enCours.slice(0, 3).map((i) => ({
+            id: i._id + "_cours",
+            title: `${i.priorite} — ${i.typeIncident}`,
+            sub: `Unité ${i.unitAssignee?.nom || "—"} dispatchée`,
+            color:
+              i.priorite === "P1"
+                ? "text-danger"
+                : i.priorite === "P2"
+                  ? "text-warning"
+                  : "text-primary",
+            path: "/interventions",
+            time: new Date(i.createdAt),
+          })),
+        ]
+          .sort((a, b) => b.time - a.time)
+          .slice(0, 8);
+
+        setNotifs(notifList);
+        setNotifCount(enAttente.length);
+      } catch {
+        /* silencieux */
+      }
+    };
+    loadNotifs();
+    const iv = setInterval(loadNotifs, 30000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // ── Fermer le panneau si clic en dehors ───────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setNotifOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   useEffect(() => {
     const start = Date.now();
@@ -91,7 +159,7 @@ export default function Layout() {
           <p className="text-xs font-mono text-slate-600 uppercase tracking-widest px-4 py-2">
             Opérations
           </p>
-          {navItems.slice(0, 3).map((item) => (
+          {NAV_BASE.slice(0, 3).map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
@@ -109,9 +177,9 @@ export default function Layout() {
                 </span>
                 {item.label}
               </div>
-              {item.badge && (
+              {item.path === "/interventions" && notifCount > 0 && (
                 <span className="bg-danger text-white text-xs font-mono font-bold px-1.5 py-0.5 rounded-full">
-                  {item.badge}
+                  {notifCount}
                 </span>
               )}
             </NavLink>
@@ -120,7 +188,7 @@ export default function Layout() {
           <p className="text-xs font-mono text-slate-600 uppercase tracking-widest px-4 py-2 mt-3">
             Gestion
           </p>
-          {navItems.slice(3).map((item) => (
+          {NAV_BASE.slice(3).map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
@@ -247,7 +315,7 @@ export default function Layout() {
                 year: "numeric",
               })}
             </span>
-            <div className="relative">
+            <div className="relative" ref={notifRef}>
               <button
                 onClick={() => setNotifOpen(!notifOpen)}
                 className="relative w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-surface transition-colors"
@@ -255,40 +323,63 @@ export default function Layout() {
                 <span className="material-symbols-outlined text-slate-500 text-lg">
                   notifications
                 </span>
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger rounded-full border-2 border-white" />
+                {notifCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger rounded-full border-2 border-white" />
+                )}
               </button>
               {notifOpen && (
-                <div className="absolute right-0 top-11 w-72 bg-white rounded-xl shadow-xl border border-slate-200 z-50">
-                  <div className="p-4 border-b border-slate-100">
+                <div className="absolute right-0 top-11 w-80 bg-white rounded-xl shadow-xl border border-slate-200 z-50">
+                  <div className="p-4 border-b border-slate-100 flex items-center justify-between">
                     <p className="font-brand font-bold text-navy text-sm">
                       Notifications
                     </p>
+                    {notifCount > 0 && (
+                      <span className="bg-danger text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                        {notifCount} en attente
+                      </span>
+                    )}
                   </div>
-                  {[
-                    {
-                      t: "P1 — Arrêt cardiaque",
-                      s: "Unité AMB-03 dispatchée",
-                      c: "text-danger",
-                    },
-                    {
-                      t: "P2 — Accident route A8",
-                      s: "En attente d'une unité",
-                      c: "text-warning",
-                    },
-                    {
-                      t: "IA — Recommandation",
-                      s: "Redéployer AMB-05 secteur E",
-                      c: "text-primary",
-                    },
-                  ].map((n, i) => (
-                    <div
-                      key={i}
-                      className="px-4 py-3 border-b border-slate-50 hover:bg-surface cursor-pointer"
-                    >
-                      <p className={`text-xs font-bold ${n.c}`}>{n.t}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{n.s}</p>
+                  {notifs.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-slate-400 text-xs">
+                      <span className="material-symbols-outlined text-3xl block mb-2">
+                        notifications_none
+                      </span>
+                      Aucune notification
                     </div>
-                  ))}
+                  ) : (
+                    notifs.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => {
+                          navigate(n.path);
+                          setNotifOpen(false);
+                        }}
+                        className="px-4 py-3 border-b border-slate-50 hover:bg-surface cursor-pointer transition-colors"
+                      >
+                        <p className={`text-xs font-bold ${n.color}`}>
+                          {n.title}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5">{n.sub}</p>
+                        <p className="text-xs text-slate-300 mt-0.5">
+                          {n.time.toLocaleTimeString("fr-FR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                  <div className="p-3 border-t border-slate-100">
+                    <button
+                      onClick={() => {
+                        navigate("/interventions");
+                        setNotifOpen(false);
+                      }}
+                      className="w-full text-xs font-bold text-primary text-center hover:underline"
+                    >
+                      Voir toutes les interventions →
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

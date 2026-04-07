@@ -1,5 +1,6 @@
 const Intervention = require("../models/Intervention");
 const Unit = require("../models/Unit");
+const Facture = require("../models/Facture");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // @desc    Lister toutes les interventions (filtres + pagination)
@@ -67,6 +68,27 @@ const createIntervention = async (req, res) => {
   try {
     const data = { ...req.body, dispatcher: req.user._id };
     const intervention = await Intervention.create(data);
+
+    // ── Créer automatiquement une facture en attente ──────────────────────
+    try {
+      const montantBase = {
+        P1: 450, // Urgence critique
+        P2: 280, // Urgence standard
+        P3: 150, // Transport standard
+      };
+      await Facture.create({
+        date: new Date(),
+        motif: intervention.typeIncident,
+        lieu: intervention.adresse,
+        montant: montantBase[intervention.priorite] || 150,
+        statut: "en-attente",
+        patient: intervention.patient?.nom || "Inconnu",
+        intervention: intervention._id,
+        notes: `Facture générée automatiquement — Priorité ${intervention.priorite}`,
+      });
+    } catch (factureErr) {
+      console.warn("Facture auto non créée:", factureErr.message);
+    }
 
     const io = req.app.get("io");
     io.emit("intervention:nouvelle", intervention);
