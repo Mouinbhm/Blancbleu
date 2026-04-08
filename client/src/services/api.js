@@ -139,8 +139,26 @@ export const maintenanceService = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// FACTURES
+// GÉODÉCISION
 // ════════════════════════════════════════════════════════════════════════════
+export const geoService = {
+  // Unités disponibles triées par proximité depuis un incident
+  unitsNearby: (lat, lng, priorite = "P2", limit = 5) =>
+    api.get("/geo/units/nearby", { params: { lat, lng, priorite, limit } }),
+
+  // ETA entre une unité et un incident
+  calculerETA: (unitId, incidentLat, incidentLng, priorite = "P2") =>
+    api.get("/geo/eta", {
+      params: { unitId, incidentLat, incidentLng, priorite },
+    }),
+
+  // Distance entre 2 points GPS
+  distance: (lat1, lng1, lat2, lng2) =>
+    api.get("/geo/distance", { params: { lat1, lng1, lat2, lng2 } }),
+
+  // Vérifier zone Nice
+  checkZone: (lat, lng) => api.get("/geo/zone/check", { params: { lat, lng } }),
+};
 export const factureService = {
   getAll: (params = {}) => api.get("/factures", { params }),
   getOne: (id) => api.get(`/factures/${id}`),

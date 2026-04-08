@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { aiService, unitService, interventionService } from "../services/api";
+import {
+  aiService,
+  unitService,
+  interventionService,
+  geoService,
+} from "../services/api";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const TYPES = [
@@ -118,6 +123,7 @@ export default function AideIA() {
   const [created, setCreated] = useState(null);
   const [modelStatus, setModelStatus] = useState(null);
   const [units, setUnits] = useState([]);
+  const [nearbyUnits, setNearbyUnits] = useState([]);
   const [error, setError] = useState("");
 
   // Vérifier statut du modèle ML au chargement
@@ -230,6 +236,22 @@ export default function AideIA() {
       };
 
       const { data } = await aiService.analyze(payload);
+
+      // ── Unités proches par géodécision ────────────────────────────────
+      // Coordonnées par défaut : centre Nice si pas de GPS saisi
+      const defaultLat = 43.7102;
+      const defaultLng = 7.262;
+      try {
+        const geoRes = await geoService.unitsNearby(
+          defaultLat,
+          defaultLng,
+          data.priorite,
+          3,
+        );
+        setNearbyUnits(geoRes.data.units || []);
+      } catch {
+        /* silencieux */
+      }
 
       // Trouver une unité disponible correspondante
       const uniteRec =
@@ -663,6 +685,56 @@ export default function AideIA() {
                   </span>
                 </div>
               </div>
+
+              {/* Unités proches — géodécision */}
+              {nearbyUnits.length > 0 && (
+                <div className="px-5 pb-4">
+                  <p className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-2">
+                    📍 Unités disponibles par proximité
+                  </p>
+                  <div className="space-y-2">
+                    {nearbyUnits.map((u, i) => (
+                      <div
+                        key={u._id}
+                        className={`flex items-center gap-3 p-3 rounded-xl border ${
+                          i === 0
+                            ? "border-primary bg-blue-50"
+                            : "border-slate-100 bg-white"
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                            i === 0
+                              ? "bg-primary text-white"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {i + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-mono font-bold text-navy text-sm">
+                            {u.nom}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {u.type} · {u.position?.adresse?.split(",")[0]}
+                          </p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="font-mono font-bold text-sm text-primary">
+                            {u.geo?.etaFormate}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {u.geo?.distanceKm} km
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-300 mt-2 text-center">
+                    Triées par distance · ETA calculé avec profil urbain Nice
+                  </p>
+                </div>
+              )}
 
               {/* Justification IA */}
               {result.justification?.length > 0 && (

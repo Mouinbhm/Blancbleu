@@ -37,6 +37,7 @@ app.use("/api/auth", require("./routes/auth"));
 app.use("/api/interventions", require("./routes/interventions"));
 app.use("/api/units", require("./routes/units"));
 app.use("/api/ai", require("./routes/ai"));
+app.use("/api/geo", require("./routes/geo"));
 app.use("/api/personnel", require("./routes/personnel"));
 app.use("/api/equipements", require("./routes/equipements"));
 app.use("/api/maintenances", require("./routes/maintenances"));
