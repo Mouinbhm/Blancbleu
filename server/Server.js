@@ -18,6 +18,10 @@ const io = new Server(server, {
 
 app.set("io", io);
 
+// ─── Initialiser le service Socket.IO ────────────────────────────────────────
+const socketService = require("./services/socketService");
+socketService.init(io);
+
 app.use(
   cors({
     origin:

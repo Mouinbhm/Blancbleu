@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { aiService, unitService } from "../services/api";
+import { aiService, unitService, interventionService } from "../services/api";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const TYPES = [
@@ -114,6 +114,8 @@ export default function AideIA() {
   });
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [created, setCreated] = useState(null);
   const [modelStatus, setModelStatus] = useState(null);
   const [units, setUnits] = useState([]);
   const [error, setError] = useState("");
@@ -150,6 +152,45 @@ export default function AideIA() {
         ? f.symptoms.filter((x) => x !== s)
         : [...f.symptoms, s],
     }));
+
+  // ── Créer l'intervention depuis le résultat IA ───────────────────────────
+  const handleCreateIntervention = async () => {
+    if (!result) return;
+    setCreating(true);
+    setError("");
+    try {
+      const payload = {
+        typeIncident: form.type,
+        priorite: result.priorite,
+        adresse: form.address || "Nice",
+        scoreIA: result.score,
+        statut: result.uniteObj ? "en_cours" : "en_attente",
+        patient: {
+          nom: "Inconnu",
+          age: parseInt(form.age) || 40,
+          etat: form.etat,
+          symptomes: form.symptoms,
+          nbVictimes: form.victims,
+        },
+        notes:
+          `[IA BlancBleu] ${result.modele} — Confiance: ${result.confiance}% — ${form.notes || ""}`.trim(),
+        unitAssignee: result.uniteObj?._id || undefined,
+      };
+
+      const { data } = await interventionService.create(payload);
+      setCreated(data.intervention);
+
+      // Rediriger vers interventions après 2s
+      setTimeout(() => navigate("/interventions"), 2000);
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Erreur lors de la création de l'intervention.",
+      );
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const handleAnalyze = async () => {
     if (!form.type) {
@@ -666,21 +707,53 @@ export default function AideIA() {
               </div>
 
               {/* Actions */}
-              <div className="px-5 pb-5 flex gap-3">
-                <button
-                  onClick={() => navigate("/interventions")}
-                  className="flex-1 py-3.5 bg-danger text-white rounded-xl font-brand font-bold text-sm hover:bg-red-700 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-200"
-                >
-                  <span className="material-symbols-outlined">task_alt</span>
-                  CRÉER L'INTERVENTION
-                </button>
-                <button
-                  onClick={() => navigate("/carte")}
-                  className="flex-1 py-3.5 border-2 border-primary text-primary rounded-xl font-brand font-bold text-sm hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
-                >
-                  <span className="material-symbols-outlined">map</span>
-                  VOIR CARTE
-                </button>
+              <div className="px-5 pb-5 flex flex-col gap-3">
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">
+                    ⚠ {error}
+                  </div>
+                )}
+                {created ? (
+                  <div className="flex-1 py-3.5 bg-emerald-500 text-white rounded-xl font-brand font-bold text-sm flex items-center justify-center gap-2">
+                    <span className="material-symbols-outlined">
+                      check_circle
+                    </span>
+                    Intervention {created.numero} créée — redirection...
+                  </div>
+                ) : (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleCreateIntervention}
+                      disabled={creating}
+                      className="flex-1 py-3.5 bg-danger text-white rounded-xl font-brand font-bold text-sm hover:bg-red-700 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {creating ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Création...
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined">
+                            task_alt
+                          </span>
+                          CRÉER L'INTERVENTION
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => navigate("/carte")}
+                      className="flex-1 py-3.5 border-2 border-primary text-primary rounded-xl font-brand font-bold text-sm hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <span className="material-symbols-outlined">map</span>
+                      VOIR CARTE
+                    </button>
+                  </div>
+                )}
+                <p className="text-xs text-slate-400 text-center">
+                  Priorité <strong>{result?.priorite}</strong> · Score IA :{" "}
+                  <strong>{result?.score}</strong> · {result?.modele}
+                </p>
               </div>
             </div>
           )}

@@ -1,6 +1,9 @@
-const Intervention = require("../models/Intervention");
-const Unit = require("../models/Unit");
-const Facture = require("../models/Facture");
+const Intervention  = require('../models/Intervention');
+const Unit          = require('../models/Unit');
+const Facture       = require('../models/Facture');
+const { autoDispatch }               = require('../services/dispatchService');
+const socketService                  = require('../services/socketService');
+const { haversine, calculerETA, formatETA } = require('../utils/geoUtils');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // @desc    Lister toutes les interventions (filtres + pagination)
@@ -12,15 +15,15 @@ const getInterventions = async (req, res) => {
     const { statut, priorite, limit = 50, page = 1 } = req.query;
     const filter = {};
 
-    if (statut) filter.statut = statut;
+    if (statut)   filter.statut   = statut;
     if (priorite) filter.priorite = priorite;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const [interventions, total] = await Promise.all([
       Intervention.find(filter)
-        .populate("unitAssignee", "nom immatriculation statut")
-        .populate("dispatcher", "nom prenom")
+        .populate('unitAssignee', 'nom immatriculation statut')
+        .populate('dispatcher',  'nom prenom')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit)),
@@ -30,7 +33,7 @@ const getInterventions = async (req, res) => {
     res.json({
       interventions,
       total,
-      page: parseInt(page),
+      page:  parseInt(page),
       pages: Math.ceil(total / parseInt(limit)),
     });
   } catch (err) {
@@ -46,11 +49,11 @@ const getInterventions = async (req, res) => {
 const getIntervention = async (req, res) => {
   try {
     const intervention = await Intervention.findById(req.params.id)
-      .populate("unitAssignee", "nom immatriculation statut position equipage")
-      .populate("dispatcher", "nom prenom email");
+      .populate('unitAssignee', 'nom immatriculation statut position equipage')
+      .populate('dispatcher',  'nom prenom email');
 
     if (!intervention) {
-      return res.status(404).json({ message: "Intervention introuvable" });
+      return res.status(404).json({ message: 'Intervention introuvable' });
     }
 
     res.json(intervention);
@@ -67,33 +70,81 @@ const getIntervention = async (req, res) => {
 const createIntervention = async (req, res) => {
   try {
     const data = { ...req.body, dispatcher: req.user._id };
-    const intervention = await Intervention.create(data);
 
-    // ── Créer automatiquement une facture en attente ──────────────────────
-    try {
-      const montantBase = {
-        P1: 450, // Urgence critique
-        P2: 280, // Urgence standard
-        P3: 150, // Transport standard
-      };
-      await Facture.create({
-        date: new Date(),
-        motif: intervention.typeIncident,
-        lieu: intervention.adresse,
-        montant: montantBase[intervention.priorite] || 150,
-        statut: "en-attente",
-        patient: intervention.patient?.nom || "Inconnu",
-        intervention: intervention._id,
-        notes: `Facture générée automatiquement — Priorité ${intervention.priorite}`,
-      });
-    } catch (factureErr) {
-      console.warn("Facture auto non créée:", factureErr.message);
+    // ── Auto-dispatch intelligent ─────────────────────────────────────────
+    let dispatchResult = null;
+    if (!data.unitAssignee && data.coordonnees?.lat && data.coordonnees?.lng) {
+      try {
+        dispatchResult = await autoDispatch({
+          priorite:     data.priorite     || 'P2',
+          typeIncident: data.typeIncident  || 'Autre',
+          lat:          data.coordonnees.lat,
+          lng:          data.coordonnees.lng,
+        });
+        if (dispatchResult.unite) {
+          data.unitAssignee = dispatchResult.unite._id;
+          data.statut       = 'en_cours';
+          data.heureDepart  = new Date();
+        }
+      } catch (e) {
+        console.warn('Auto-dispatch échoué:', e.message);
+      }
     }
 
-    const io = req.app.get("io");
-    io.emit("intervention:nouvelle", intervention);
+    const intervention = await Intervention.create(data);
 
-    res.status(201).json({ message: "Intervention créée", intervention });
+    // ── Mettre l'unité en mission ─────────────────────────────────────────
+    if (data.unitAssignee) {
+      await Unit.findByIdAndUpdate(data.unitAssignee, {
+        statut:              'en_mission',
+        interventionEnCours: intervention._id,
+      });
+      socketService.emitStatutUnite(data.unitAssignee, 'en_mission',
+        dispatchResult?.unite?.nom || '');
+    }
+
+    // ── Facture automatique ───────────────────────────────────────────────
+    try {
+      const montants = { P1:450, P2:280, P3:150 };
+      await Facture.create({
+        date:         new Date(),
+        motif:        intervention.typeIncident,
+        lieu:         intervention.adresse,
+        montant:      montants[intervention.priorite] || 150,
+        statut:       'en-attente',
+        patient:      intervention.patient?.nom || 'Inconnu',
+        intervention: intervention._id,
+        notes:        `Auto-générée — Priorité ${intervention.priorite}`,
+      });
+    } catch (e) {
+      console.warn('Facture auto non créée:', e.message);
+    }
+
+    // ── Socket.IO — diffusion temps réel ─────────────────────────────────
+    socketService.emitNouvelleIntervention(intervention);
+    if (intervention.priorite === 'P1') {
+      socketService.emitAlerteP1(intervention);
+    }
+    if (dispatchResult?.unite) {
+      socketService.emitDispatch(
+        intervention._id,
+        dispatchResult.unite,
+        dispatchResult.etaFormate,
+      );
+    }
+
+    res.status(201).json({
+      message:      'Intervention créée',
+      intervention,
+      dispatch:     dispatchResult ? {
+        unite:         dispatchResult.unite?.nom,
+        score:         dispatchResult.scoreTotal,
+        eta:           dispatchResult.etaFormate,
+        distanceKm:    dispatchResult.distanceKm,
+        alternatives:  dispatchResult.alternatives,
+        justification: dispatchResult.justification,
+      } : null,
+    });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -109,17 +160,17 @@ const updateIntervention = async (req, res) => {
     const intervention = await Intervention.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true, runValidators: true },
+      { new: true, runValidators: true }
     );
 
     if (!intervention) {
-      return res.status(404).json({ message: "Intervention introuvable" });
+      return res.status(404).json({ message: 'Intervention introuvable' });
     }
 
-    const io = req.app.get("io");
-    io.emit("intervention:modifiee", intervention);
+    const io = req.app.get('io');
+    io.emit('intervention:modifiee', intervention);
 
-    res.json({ message: "Intervention mise à jour", intervention });
+    res.json({ message: 'Intervention mise à jour', intervention });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -135,52 +186,42 @@ const updateIntervention = async (req, res) => {
 const updateStatus = async (req, res) => {
   try {
     const { statut } = req.body;
-    const statutsValides = ["en_attente", "en_cours", "terminee", "annulee"];
+    const statutsValides = ['en_attente', 'en_cours', 'terminee', 'annulee'];
 
     if (!statutsValides.includes(statut)) {
-      return res
-        .status(400)
-        .json({
-          message: `Statut invalide. Valeurs acceptées : ${statutsValides.join(", ")}`,
-        });
+      return res.status(400).json({ message: `Statut invalide. Valeurs acceptées : ${statutsValides.join(', ')}` });
     }
 
     // Horodatages automatiques selon la transition
     const update = { statut };
-    if (statut === "en_cours") update.heureDepart = new Date();
-    if (statut === "terminee") update.heureTerminee = new Date();
+    if (statut === 'en_cours')  update.heureDepart   = new Date();
+    if (statut === 'terminee')  update.heureTerminee = new Date();
 
     const intervention = await Intervention.findByIdAndUpdate(
       req.params.id,
       update,
-      { new: true, runValidators: true },
-    ).populate("unitAssignee", "nom immatriculation _id");
+      { new: true, runValidators: true }
+    ).populate('unitAssignee', 'nom immatriculation _id');
 
     if (!intervention) {
-      return res.status(404).json({ message: "Intervention introuvable" });
+      return res.status(404).json({ message: 'Intervention introuvable' });
     }
 
     // Libérer l'unité assignée si l'intervention se termine ou est annulée
-    if (
-      (statut === "terminee" || statut === "annulee") &&
-      intervention.unitAssignee
-    ) {
+    if ((statut === 'terminee' || statut === 'annulee') && intervention.unitAssignee) {
       await Unit.findByIdAndUpdate(intervention.unitAssignee._id, {
-        statut: "disponible",
+        statut: 'disponible',
         interventionEnCours: null,
       });
 
-      const io = req.app.get("io");
-      io.emit("unit:statut_maj", {
-        unitId: intervention.unitAssignee._id,
-        statut: "disponible",
-      });
+      const io = req.app.get('io');
+      io.emit('unit:statut_maj', { unitId: intervention.unitAssignee._id, statut: 'disponible' });
     }
 
-    const io = req.app.get("io");
-    io.emit("intervention:statut_maj", intervention);
+    const io = req.app.get('io');
+    io.emit('intervention:statut_maj', intervention);
 
-    res.json({ message: "Statut mis à jour", intervention });
+    res.json({ message: 'Statut mis à jour', intervention });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -197,15 +238,15 @@ const assignUnit = async (req, res) => {
     const { unitId } = req.body;
 
     if (!unitId) {
-      return res.status(400).json({ message: "unitId est obligatoire" });
+      return res.status(400).json({ message: 'unitId est obligatoire' });
     }
 
     // Vérifier que l'unité existe et est disponible
     const unit = await Unit.findById(unitId);
     if (!unit) {
-      return res.status(404).json({ message: "Unité introuvable" });
+      return res.status(404).json({ message: 'Unité introuvable' });
     }
-    if (unit.statut !== "disponible") {
+    if (unit.statut !== 'disponible') {
       return res.status(400).json({
         message: `Impossible d'assigner — l'unité est actuellement "${unit.statut}"`,
       });
@@ -216,27 +257,27 @@ const assignUnit = async (req, res) => {
       req.params.id,
       {
         unitAssignee: unitId,
-        statut: "en_cours",
-        heureDepart: new Date(),
+        statut:       'en_cours',
+        heureDepart:  new Date(),
       },
-      { new: true },
-    ).populate("unitAssignee", "nom immatriculation statut");
+      { new: true }
+    ).populate('unitAssignee', 'nom immatriculation statut');
 
     if (!intervention) {
-      return res.status(404).json({ message: "Intervention introuvable" });
+      return res.status(404).json({ message: 'Intervention introuvable' });
     }
 
     // Mettre l'unité en mission
     await Unit.findByIdAndUpdate(unitId, {
-      statut: "en_mission",
+      statut: 'en_mission',
       interventionEnCours: intervention._id,
     });
 
-    const io = req.app.get("io");
-    io.emit("intervention:assignee", intervention);
-    io.emit("unit:statut_maj", { unitId, statut: "en_mission" });
+    const io = req.app.get('io');
+    io.emit('intervention:assignee',  intervention);
+    io.emit('unit:statut_maj', { unitId, statut: 'en_mission' });
 
-    res.json({ message: "Unité assignée avec succès", intervention });
+    res.json({ message: 'Unité assignée avec succès', intervention });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -251,7 +292,7 @@ const unassignUnit = async (req, res) => {
   try {
     const intervention = await Intervention.findById(req.params.id);
     if (!intervention) {
-      return res.status(404).json({ message: "Intervention introuvable" });
+      return res.status(404).json({ message: 'Intervention introuvable' });
     }
 
     const unitId = intervention.unitAssignee;
@@ -259,25 +300,25 @@ const unassignUnit = async (req, res) => {
     // Remettre l'intervention en attente
     const updated = await Intervention.findByIdAndUpdate(
       req.params.id,
-      { unitAssignee: null, statut: "en_attente" },
-      { new: true },
+      { unitAssignee: null, statut: 'en_attente' },
+      { new: true }
     );
 
     // Libérer l'unité si elle était assignée
     if (unitId) {
       await Unit.findByIdAndUpdate(unitId, {
-        statut: "disponible",
+        statut: 'disponible',
         interventionEnCours: null,
       });
 
-      const io = req.app.get("io");
-      io.emit("unit:statut_maj", { unitId, statut: "disponible" });
+      const io = req.app.get('io');
+      io.emit('unit:statut_maj', { unitId, statut: 'disponible' });
     }
 
-    const io = req.app.get("io");
-    io.emit("intervention:modifiee", updated);
+    const io = req.app.get('io');
+    io.emit('intervention:modifiee', updated);
 
-    res.json({ message: "Unité désassignée", intervention: updated });
+    res.json({ message: 'Unité désassignée', intervention: updated });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -293,21 +334,21 @@ const deleteIntervention = async (req, res) => {
     const intervention = await Intervention.findByIdAndDelete(req.params.id);
 
     if (!intervention) {
-      return res.status(404).json({ message: "Intervention introuvable" });
+      return res.status(404).json({ message: 'Intervention introuvable' });
     }
 
     // Libérer l'unité si elle était assignée
     if (intervention.unitAssignee) {
       await Unit.findByIdAndUpdate(intervention.unitAssignee, {
-        statut: "disponible",
+        statut: 'disponible',
         interventionEnCours: null,
       });
     }
 
-    const io = req.app.get("io");
-    io.emit("intervention:supprimee", { id: req.params.id });
+    const io = req.app.get('io');
+    io.emit('intervention:supprimee', { id: req.params.id });
 
-    res.json({ message: "Intervention supprimée" });
+    res.json({ message: 'Intervention supprimée' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -326,30 +367,31 @@ const getStats = async (req, res) => {
       enCours,
       terminees,
       annulees,
-      parPriorite,
-      parType,
     ] = await Promise.all([
       Intervention.countDocuments(),
-      Intervention.countDocuments({ statut: "en_attente" }),
-      Intervention.countDocuments({ statut: "en_cours" }),
-      Intervention.countDocuments({ statut: "terminee" }),
-      Intervention.countDocuments({ statut: "annulee" }),
-      Intervention.aggregate([
-        { $group: { _id: "$priorite", count: { $sum: 1 } } },
-        { $sort: { _id: 1 } },
-      ]),
-      Intervention.aggregate([
-        { $group: { _id: "$typeIncident", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 5 },
-      ]),
+      Intervention.countDocuments({ statut: 'en_attente' }),
+      Intervention.countDocuments({ statut: 'en_cours' }),
+      Intervention.countDocuments({ statut: 'terminee' }),
+      Intervention.countDocuments({ statut: 'annulee' }),
+    ]);
+
+    const parPrioriteRaw = await Intervention.aggregate([
+      { $group: { _id: '$priorite', count: { $sum: 1 } } },
+    ]);
+    const parPriorite = { P1: 0, P2: 0, P3: 0 };
+    parPrioriteRaw.forEach(p => { if (p._id) parPriorite[p._id] = p.count; });
+
+    const parTypeRaw = await Intervention.aggregate([
+      { $group: { _id: '$typeIncident', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
     ]);
 
     res.json({
       total,
-      parStatut: { enAttente, enCours, terminees, annulees },
+      parStatut:  { enAttente, enCours, terminees, annulees },
       parPriorite,
-      parType,
+      parType:    parTypeRaw,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
