@@ -168,3 +168,13 @@ export const factureService = {
   updateStatut: (id, statut) => api.patch(`/factures/${id}/statut`, { statut }),
   delete: (id) => api.delete(`/factures/${id}`),
 };
+
+// ════════════════════════════════════════════════════════════════════════════
+// WORKFLOW — STATE MACHINE
+// ════════════════════════════════════════════════════════════════════════════
+export const workflowService = {
+  getStatus: (id) => api.get(`/workflow/${id}/status`),
+  transition: (id, statut, notes) =>
+    api.patch(`/workflow/${id}/transition`, { statut, notes }),
+  getAll: () => api.get("/workflow/transitions"),
+};

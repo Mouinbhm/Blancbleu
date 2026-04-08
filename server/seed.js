@@ -187,7 +187,7 @@ const seed = async () => {
         typeIncident: "Arrêt cardiaque",
         priorite: "P1",
         scoreIA: 92,
-        statut: "en_cours",
+        statut: "EN_ROUTE",
         patient: {
           nom: "Dupuis Michel",
           age: 67,
@@ -206,7 +206,7 @@ const seed = async () => {
         typeIncident: "Accident de la route",
         priorite: "P2",
         scoreIA: 68,
-        statut: "en_attente",
+        statut: "CREATED",
         patient: {
           nom: "Inconnu",
           etat: "conscient",
@@ -222,7 +222,7 @@ const seed = async () => {
         typeIncident: "AVC",
         priorite: "P1",
         scoreIA: 88,
-        statut: "en_cours",
+        statut: "EN_ROUTE",
         patient: {
           nom: "Ferrero Anna",
           age: 72,
@@ -241,7 +241,7 @@ const seed = async () => {
         typeIncident: "Malaise",
         priorite: "P3",
         scoreIA: 35,
-        statut: "terminee",
+        statut: "COMPLETED",
         patient: {
           nom: "Rosso Pierre",
           age: 45,
@@ -261,7 +261,7 @@ const seed = async () => {
         typeIncident: "Traumatisme grave",
         priorite: "P2",
         scoreIA: 71,
-        statut: "terminee",
+        statut: "COMPLETED",
         patient: {
           nom: "Garcia Luis",
           age: 28,
@@ -281,7 +281,7 @@ const seed = async () => {
         typeIncident: "Détresse respiratoire",
         priorite: "P1",
         scoreIA: 85,
-        statut: "en_attente",
+        statut: "CREATED",
         patient: {
           nom: "Inconnu",
           etat: "critique",
