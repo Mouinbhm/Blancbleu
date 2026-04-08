@@ -178,3 +178,14 @@ export const workflowService = {
     api.patch(`/workflow/${id}/transition`, { statut, notes }),
   getAll: () => api.get("/workflow/transitions"),
 };
+
+// ════════════════════════════════════════════════════════════════════════════
+// ESCALADE
+// ════════════════════════════════════════════════════════════════════════════
+export const escaladeService = {
+  analyser: (interventionId) =>
+    api.post("/escalade/analyser", { interventionId }),
+  dashboard: () => api.get("/escalade/dashboard"),
+  unitesStatus: () => api.get("/escalade/unites/status"),
+  scan: () => api.post("/escalade/scan"),
+};

@@ -1,29 +1,16 @@
 /**
  * BlancBleu — Service Socket.IO Temps Réel
- * Diffuse les événements critiques à tous les clients connectés
  */
-
 let _io = null;
 
 function init(io) {
   _io = io;
-
   io.on("connection", (socket) => {
     console.log(`🔌 Client connecté : ${socket.id}`);
-
-    // Client rejoint sa salle selon son rôle
-    socket.on("join:role", (role) => {
-      socket.join(`role:${role}`);
-      console.log(`  → ${socket.id} rejoint role:${role}`);
-    });
-
-    socket.on("disconnect", () => {
-      console.log(`❌ Client déconnecté : ${socket.id}`);
-    });
+    socket.on("join:role", (role) => socket.join(`role:${role}`));
+    socket.on("disconnect", () => console.log(`❌ Déconnecté : ${socket.id}`));
   });
 }
-
-// ─── Événements émis vers tous les clients ────────────────────────────────────
 
 function emitNouvelleIntervention(intervention) {
   if (!_io) return;
@@ -66,12 +53,16 @@ function emitDispatch(interventionId, unite, eta) {
 
 function emitAlerteP1(intervention) {
   if (!_io) return;
-  // Alerte critique → tous les rôles
   _io.emit("alerte:p1", {
     message: `🚨 P1 — ${intervention.typeIncident} à ${intervention.adresse}`,
     intervention: intervention._id,
     timestamp: new Date(),
   });
+}
+
+function emitEscalade(data) {
+  if (!_io) return;
+  _io.emit("escalade:alerte", { ...data, timestamp: new Date() });
 }
 
 function emitStats(stats) {
@@ -86,5 +77,6 @@ module.exports = {
   emitStatutUnite,
   emitDispatch,
   emitAlerteP1,
+  emitEscalade,
   emitStats,
 };
