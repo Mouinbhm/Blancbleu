@@ -84,3 +84,9 @@ io.on("connection", (socket) => {
     console.log(`🔌 Client déconnecté: ${socket.id}`),
   );
 });
+
+// ─── Simulation GPS (développement) ──────────────────────────────────────────
+if (process.env.NODE_ENV !== "production") {
+  const sim = require("./services/simulationService");
+  setTimeout(() => sim.demarrer(), 8000); // démarrer après 8s
+}

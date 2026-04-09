@@ -1,22 +1,26 @@
+/**
+ * BlancBleu — Controller Unités v2.0
+ * CRUD + géolocalisation temps réel
+ */
 const Unit = require("../models/Unit");
-const Intervention = require("../models/Intervention");
+const socketService = require("../services/socketService");
+const { audit } = require("../services/auditService");
 
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Lister toutes les unités (filtres: statut, type)
-// @route   GET /api/units
-// @access  Privé
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── GET /api/units ───────────────────────────────────────────────────────────
 const getUnits = async (req, res) => {
   try {
-    const { statut, type } = req.query;
-    const filter = {};
+    const { statut, type, disponible } = req.query;
+    const filtre = {};
+    if (statut) filtre.statut = statut;
+    if (type) filtre.type = type;
+    if (disponible === "true") filtre.statut = "disponible";
 
-    if (statut) filter.statut = statut;
-    if (type) filter.type = type;
-
-    const units = await Unit.find(filter)
-      .populate("interventionEnCours", "numero adresse priorite statut")
-      .sort({ nom: 1 });
+    const units = await Unit.find(filtre)
+      .populate(
+        "interventionEnCours",
+        "numero typeIncident priorite adresse statut",
+      )
+      .sort({ statut: 1, nom: 1 });
 
     res.json(units);
   } catch (err) {
@@ -24,21 +28,139 @@ const getUnits = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Détail d'une unité
-// @route   GET /api/units/:id
-// @access  Privé
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── GET /api/units/:id ───────────────────────────────────────────────────────
 const getUnit = async (req, res) => {
   try {
     const unit = await Unit.findById(req.params.id).populate(
       "interventionEnCours",
-      "numero adresse priorite statut patient",
     );
+    if (!unit) return res.status(404).json({ message: "Unité introuvable" });
+    res.json(unit);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 
-    if (!unit) {
+// ─── POST /api/units ──────────────────────────────────────────────────────────
+const createUnit = async (req, res) => {
+  try {
+    const unit = await Unit.create(req.body);
+    socketService.emitUnitStatusChanged({
+      unite: unit,
+      ancienStatut: null,
+      nouveauStatut: unit.statut,
+    });
+    res.status(201).json(unit);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// ─── PUT /api/units/:id ───────────────────────────────────────────────────────
+const updateUnit = async (req, res) => {
+  try {
+    const ancienne = await Unit.findById(req.params.id);
+    if (!ancienne)
       return res.status(404).json({ message: "Unité introuvable" });
+
+    const unit = await Unit.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (ancienne.statut !== unit.statut) {
+      socketService.emitUnitStatusChanged({
+        unite: unit,
+        ancienStatut: ancienne.statut,
+        nouveauStatut: unit.statut,
+      });
+      await audit.uniteStatusChange(
+        unit,
+        ancienne.statut,
+        unit.statut,
+        req.user,
+      );
     }
+
+    res.json(unit);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// ─── DELETE /api/units/:id ────────────────────────────────────────────────────
+const deleteUnit = async (req, res) => {
+  try {
+    await Unit.findByIdAndDelete(req.params.id);
+    res.json({ message: "Unité supprimée" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ─── PUT /api/units/:id/location ──────────────────────────────────────────────
+const updateLocation = async (req, res) => {
+  try {
+    const { lat, lng, vitesse, cap, precision, adresse } = req.body;
+
+    if (!lat || !lng)
+      return res.status(400).json({ message: "lat et lng requis" });
+    if (lat < -90 || lat > 90)
+      return res.status(400).json({ message: "lat invalide (-90 à 90)" });
+    if (lng < -180 || lng > 180)
+      return res.status(400).json({ message: "lng invalide (-180 à 180)" });
+
+    const unit = await Unit.findById(req.params.id);
+    if (!unit) return res.status(404).json({ message: "Unité introuvable" });
+
+    await unit.updateLocation(lat, lng, { vitesse, cap, precision, adresse });
+
+    // Diffuser la nouvelle position via Socket.IO
+    socketService.emitLocationUpdated({
+      unitId: unit._id,
+      nom: unit.nom,
+      type: unit.type,
+      statut: unit.statut,
+      position: unit.position,
+      interventionEnCours: unit.interventionEnCours,
+    });
+
+    res.json({ message: "Position mise à jour", position: unit.position });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ─── PATCH /api/units/:id/statut ──────────────────────────────────────────────
+const updateStatut = async (req, res) => {
+  try {
+    const { statut } = req.body;
+    const statutsValides = [
+      "disponible",
+      "en_mission",
+      "maintenance",
+      "hors_service",
+      "pause",
+    ];
+    if (!statutsValides.includes(statut))
+      return res
+        .status(400)
+        .json({
+          message: `Statut invalide. Valides: ${statutsValides.join(", ")}`,
+        });
+
+    const unit = await Unit.findById(req.params.id);
+    if (!unit) return res.status(404).json({ message: "Unité introuvable" });
+    const ancien = unit.statut;
+    unit.statut = statut;
+    await unit.save();
+
+    socketService.emitUnitStatusChanged({
+      unite: unit,
+      ancienStatut: ancien,
+      nouveauStatut: statut,
+    });
+    await audit.uniteStatusChange(unit, ancien, statut, req.user);
 
     res.json(unit);
   } catch (err) {
@@ -46,245 +168,35 @@ const getUnit = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Ajouter une nouvelle unité à la flotte
-// @route   POST /api/units
-// @access  Privé / admin ou superviseur
-// ─────────────────────────────────────────────────────────────────────────────
-const createUnit = async (req, res) => {
-  try {
-    const unit = await Unit.create(req.body);
-
-    const io = req.app.get("io");
-    io.emit("unit:nouvelle", unit);
-
-    res.status(201).json({ message: "Unité ajoutée à la flotte", unit });
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Modifier les informations d'une unité (infos véhicule, équipage…)
-// @route   PATCH /api/units/:id
-// @access  Privé / admin ou superviseur
-// ─────────────────────────────────────────────────────────────────────────────
-const updateUnit = async (req, res) => {
-  try {
-    const unit = await Unit.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
-
-    if (!unit) {
-      return res.status(404).json({ message: "Unité introuvable" });
-    }
-
-    const io = req.app.get("io");
-    io.emit("unit:modifiee", unit);
-
-    res.json({ message: "Unité mise à jour", unit });
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Changer le statut opérationnel d'une unité
-//          disponible | en_mission | indisponible | maintenance
-// @route   PATCH /api/units/:id/status
-// @access  Privé
-// ─────────────────────────────────────────────────────────────────────────────
-const updateStatus = async (req, res) => {
-  try {
-    const { statut } = req.body;
-    const statutsValides = [
-      "disponible",
-      "en_mission",
-      "indisponible",
-      "maintenance",
-    ];
-
-    if (!statutsValides.includes(statut)) {
-      return res.status(400).json({
-        message: `Statut invalide. Valeurs acceptées : ${statutsValides.join(", ")}`,
-      });
-    }
-
-    const update = { statut };
-
-    // Si l'unité quitte une mission manuellement, on la libère
-    if (statut === "disponible") {
-      update.interventionEnCours = null;
-    }
-
-    const unit = await Unit.findByIdAndUpdate(req.params.id, update, {
-      new: true,
-    });
-
-    if (!unit) {
-      return res.status(404).json({ message: "Unité introuvable" });
-    }
-
-    const io = req.app.get("io");
-    io.emit("unit:statut_maj", unit);
-
-    res.json({ message: "Statut mis à jour", unit });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Mettre à jour la position GPS d'une unité (temps réel)
-// @route   PATCH /api/units/:id/position
-// @access  Privé
-// ─────────────────────────────────────────────────────────────────────────────
-const updatePosition = async (req, res) => {
-  try {
-    const { lat, lng, adresse } = req.body;
-
-    if (lat === undefined || lng === undefined) {
-      return res.status(400).json({ message: "lat et lng sont obligatoires" });
-    }
-
-    const unit = await Unit.findByIdAndUpdate(
-      req.params.id,
-      {
-        position: {
-          lat,
-          lng,
-          adresse: adresse || "",
-          derniereMaj: new Date(),
-        },
-      },
-      { new: true },
-    );
-
-    if (!unit) {
-      return res.status(404).json({ message: "Unité introuvable" });
-    }
-
-    // Broadcast GPS en temps réel vers tous les clients connectés
-    const io = req.app.get("io");
-    io.emit("unit:position_maj", {
-      unitId: unit._id,
-      nom: unit.nom,
-      position: unit.position,
-      statut: unit.statut,
-    });
-
-    res.json({ message: "Position mise à jour", unit });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Gérer l'équipage d'une unité (ajouter / retirer un membre)
-// @route   PATCH /api/units/:id/equipage
-// @access  Privé / admin ou superviseur
-// ─────────────────────────────────────────────────────────────────────────────
-const updateEquipage = async (req, res) => {
-  try {
-    const { action, membre } = req.body;
-    // action: 'ajouter' | 'retirer'
-    // membre: { nom, role }
-
-    const unit = await Unit.findById(req.params.id);
-    if (!unit) {
-      return res.status(404).json({ message: "Unité introuvable" });
-    }
-
-    if (action === "ajouter") {
-      if (!membre?.nom || !membre?.role) {
-        return res
-          .status(400)
-          .json({ message: "nom et role du membre sont requis" });
-      }
-      unit.equipage.push(membre);
-    } else if (action === "retirer") {
-      if (!membre?._id) {
-        return res
-          .status(400)
-          .json({ message: "_id du membre est requis pour le retirer" });
-      }
-      unit.equipage = unit.equipage.filter(
-        (m) => m._id.toString() !== membre._id,
-      );
-    } else {
-      return res
-        .status(400)
-        .json({ message: 'action invalide — utilisez "ajouter" ou "retirer"' });
-    }
-
-    await unit.save();
-
-    res.json({
-      message: `Équipage mis à jour (${action})`,
-      equipage: unit.equipage,
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Supprimer une unité de la flotte
-// @route   DELETE /api/units/:id
-// @access  Privé / admin
-// ─────────────────────────────────────────────────────────────────────────────
-const deleteUnit = async (req, res) => {
-  try {
-    const unit = await Unit.findById(req.params.id);
-    if (!unit) {
-      return res.status(404).json({ message: "Unité introuvable" });
-    }
-
-    // Empêcher la suppression si l'unité est en mission
-    if (unit.statut === "en_mission") {
-      return res.status(400).json({
-        message: "Impossible de supprimer une unité en mission active",
-      });
-    }
-
-    await Unit.findByIdAndDelete(req.params.id);
-
-    const io = req.app.get("io");
-    io.emit("unit:supprimee", { id: req.params.id });
-
-    res.json({ message: "Unité supprimée de la flotte" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Statistiques de la flotte pour le dashboard
-// @route   GET /api/units/stats
-// @access  Privé
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── GET /api/units/stats ─────────────────────────────────────────────────────
 const getStats = async (req, res) => {
   try {
-    const [total, disponibles, enMission, indisponibles, maintenance, parType] =
+    const [total, disponibles, enMission, maintenance, horsService] =
       await Promise.all([
         Unit.countDocuments(),
         Unit.countDocuments({ statut: "disponible" }),
         Unit.countDocuments({ statut: "en_mission" }),
-        Unit.countDocuments({ statut: "indisponible" }),
         Unit.countDocuments({ statut: "maintenance" }),
-        Unit.aggregate([
-          { $group: { _id: "$type", count: { $sum: 1 } } },
-          { $sort: { _id: 1 } },
-        ]),
+        Unit.countDocuments({ statut: "hors_service" }),
       ]);
-
+    const parType = await Unit.aggregate([
+      {
+        $group: {
+          _id: "$type",
+          count: { $sum: 1 },
+          disponibles: {
+            $sum: { $cond: [{ $eq: ["$statut", "disponible"] }, 1, 0] },
+          },
+        },
+      },
+    ]);
     res.json({
       total,
-      parStatut: { disponibles, enMission, indisponibles, maintenance },
+      disponibles,
+      enMission,
+      maintenance,
+      horsService,
       parType,
-      tauxDisponibilite:
-        total > 0 ? Math.round((disponibles / total) * 100) : 0,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -296,9 +208,8 @@ module.exports = {
   getUnit,
   createUnit,
   updateUnit,
-  updateStatus,
-  updatePosition,
-  updateEquipage,
   deleteUnit,
+  updateLocation,
+  updateStatut,
   getStats,
 };
