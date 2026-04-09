@@ -121,11 +121,15 @@ router.patch("/:id/transition", protect, async (req, res) => {
     }
 
     // Émettre l'événement Socket.IO
-    socketService.emitStatutIntervention(
-      intervention._id,
+    socketService.emitStatusUpdated({
+      intervention,
+      ancienStatut: entreeJournal.de,
       nouveauStatut,
-      intervention.unitAssignee?.nom || "",
-    );
+      utilisateur: req.user?.email,
+    });
+
+    // Mettre à jour les stats
+    socketService.emitStatsUpdate();
 
     const progressionVal = InterventionStateMachine.progression(nouveauStatut);
 

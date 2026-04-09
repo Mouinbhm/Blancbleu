@@ -181,15 +181,10 @@ async function analyserEscalade(intervention, unite = null) {
   alertes.sort((a, b) => b.niveau.priorite - a.niveau.priorite);
 
   if (alertes.length > 0) {
-    socketService.emitEscalade({
-      interventionId: intervention._id,
-      numero: intervention.numero,
-      alertes: alertes.map((a) => ({
-        code: a.code,
-        message: a.message,
-        niveau: a.niveau.label,
-        couleur: a.niveau.couleur,
-      })),
+    socketService.emitEscalationTriggered({
+      intervention,
+      alertes,
+      niveauMaximal: alertes[0].niveau,
     });
   }
 

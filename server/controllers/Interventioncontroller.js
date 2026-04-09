@@ -125,17 +125,27 @@ const createIntervention = async (req, res) => {
     }
 
     // ── Socket.IO — diffusion temps réel ─────────────────────────────────
-    socketService.emitNouvelleIntervention(intervention);
-    if (intervention.priorite === "P1") {
-      socketService.emitAlerteP1(intervention);
-    }
+    socketService.emitInterventionCreated(intervention);
+
     if (dispatchResult?.unite) {
-      socketService.emitDispatch(
-        intervention._id,
-        dispatchResult.unite,
-        dispatchResult.etaFormate,
-      );
+      socketService.emitUnitAssigned({
+        intervention,
+        unite: dispatchResult.unite,
+        eta: dispatchResult.etaFormate,
+        score: dispatchResult.scoreTotal,
+        source: "AUTO",
+      });
+      socketService.emitDispatchCompleted({
+        intervention,
+        unite: dispatchResult.unite,
+        score: dispatchResult.scoreTotal,
+        eta: dispatchResult.etaFormate,
+        alternatives: dispatchResult.alternatives,
+      });
     }
+
+    // Mise à jour stats globales
+    socketService.emitStatsUpdate();
 
     // ── Audit traçabilité ─────────────────────────────────────────────────
     await audit.interventionCreee(intervention, req.user);
