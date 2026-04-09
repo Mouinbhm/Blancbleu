@@ -170,7 +170,7 @@ export default function AideIA() {
         priorite: result.priorite,
         adresse: form.address || "Nice",
         scoreIA: result.score,
-        statut: result.uniteObj ? "en_cours" : "en_attente",
+        statut: result.uniteObj ? "ASSIGNED" : "CREATED",
         patient: {
           nom: "Inconnu",
           age: parseInt(form.age) || 40,

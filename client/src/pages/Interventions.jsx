@@ -19,21 +19,31 @@ function elapsed(heureAppel) {
 // ─── Convertit intervention backend → format card ────────────────────────────
 function toCardData(i) {
   const statusMap = {
-    en_cours: "en-route",
-    en_attente: "attente",
-    terminee: "terminee",
-    annulee: "annulee",
+    // Anciens statuts → compatibilité
+    en_cours: "EN_ROUTE",
+    en_attente: "CREATED",
+    terminee: "COMPLETED",
+    annulee: "CANCELLED",
+    // Nouveaux statuts → passe-through
+    CREATED: "CREATED",
+    VALIDATED: "VALIDATED",
+    ASSIGNED: "ASSIGNED",
+    EN_ROUTE: "EN_ROUTE",
+    ON_SITE: "ON_SITE",
+    TRANSPORTING: "TRANSPORTING",
+    COMPLETED: "COMPLETED",
+    CANCELLED: "CANCELLED",
   };
   const priorityMap = { P1: 1, P2: 2, P3: 3 };
   return {
     id: i._id,
-    ref: i.numero || `#${i._id.slice(-6).toUpperCase()}`,
+    ref: i.numero || `#${i._id?.slice(-6).toUpperCase()}`,
     priority: priorityMap[i.priorite] || 3,
     type: i.typeIncident,
     address: i.adresse,
     unit: i.unitAssignee?.nom || "—",
     status: statusMap[i.statut] || i.statut,
-    elapsed: elapsed(i.heureAppel),
+    elapsed: elapsed(i.heureAppel || i.heureCreation || i.createdAt),
     aiScore: i.scoreIA || 0,
     raw: i,
   };
@@ -985,9 +995,9 @@ export default function Interventions() {
             : filter === "P3"
               ? i.priority === 3
               : filter === "En route"
-                ? i.status === "en-route"
+                ? ["EN_ROUTE", "ASSIGNED"].includes(i.status)
                 : filter === "Sur place"
-                  ? i.status === "sur-place"
+                  ? ["ON_SITE", "TRANSPORTING"].includes(i.status)
                   : true;
     const q = search.toLowerCase();
     const matchSearch =
@@ -1153,9 +1163,9 @@ export default function Interventions() {
                     location_on
                   </span>
                 </button>
-                {i.status === "en-route" && (
+                {["EN_ROUTE", "ASSIGNED", "ON_SITE"].includes(i.status) && (
                   <button
-                    onClick={() => handleStatusChange(i.id, "terminee")}
+                    onClick={() => handleStatusChange(i.id, "COMPLETED")}
                     title="Marquer terminée"
                     className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-green-50 hover:border-green-400 shadow-sm transition-all"
                   >
@@ -1164,7 +1174,7 @@ export default function Interventions() {
                     </span>
                   </button>
                 )}
-                {i.status === "attente" && (
+                {["CREATED", "VALIDATED"].includes(i.status) && (
                   <button
                     onClick={() => setIntAAssigner(i)}
                     title="Assigner une unité"
