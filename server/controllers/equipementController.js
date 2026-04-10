@@ -1,217 +1,197 @@
+/**
+ * BlancBleu — Controller Equipements v2.0
+ */
 const Equipement = require("../models/Equipement");
+const service = require("../services/equipementService");
 
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Lister tous les équipements (filtres: etat, uniteAssignee, categorie)
-// @route   GET /api/equipements
-// ─────────────────────────────────────────────────────────────────────────────
-const getEquipements = async (req, res) => {
-  try {
-    const { etat, uniteId, categorie } = req.query;
-    const filter = {};
-    if (etat) filter.etat = etat;
-    if (uniteId) filter.uniteAssignee = uniteId;
-    if (categorie) filter.categorie = categorie;
-
-    const equipements = await Equipement.find(filter)
-      .populate("uniteAssignee", "nom immatriculation statut")
-      .sort({ nom: 1 });
-
-    res.json(equipements);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+// Helper erreur métier
+const erreur = (res, err) => {
+  if (err.status) return res.status(err.status).json({ message: err.message });
+  console.error("Equipement error:", err);
+  return res.status(500).json({ message: err.message || "Erreur serveur" });
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Détail d'un équipement
-// @route   GET /api/equipements/:id
-// ─────────────────────────────────────────────────────────────────────────────
-const getEquipement = async (req, res) => {
+// ─── GET /api/equipements ─────────────────────────────────────────────────────
+const getAll = async (req, res) => {
   try {
-    const eq = await Equipement.findById(req.params.id).populate(
-      "uniteAssignee",
-      "nom immatriculation statut",
-    );
-    if (!eq) return res.status(404).json({ message: "Équipement introuvable" });
-    res.json(eq);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
+    const {
+      etat,
+      categorie,
+      uniteId,
+      estActif = "true",
+      page = 1,
+      limit = 50,
+      search,
+    } = req.query;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Créer un équipement
-// @route   POST /api/equipements
-// ─────────────────────────────────────────────────────────────────────────────
-const createEquipement = async (req, res) => {
-  try {
-    const eq = await Equipement.create(req.body);
-    res.status(201).json({ message: "Équipement créé", equipement: eq });
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-};
+    const filtre = {};
+    if (estActif !== "all") filtre.estActif = estActif === "true";
+    if (etat) filtre.etat = etat;
+    if (categorie) filtre.categorie = categorie;
+    if (uniteId) filtre.uniteAssignee = uniteId;
+    if (search) filtre.nom = { $regex: search, $options: "i" };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Modifier un équipement
-// @route   PATCH /api/equipements/:id
-// ─────────────────────────────────────────────────────────────────────────────
-const updateEquipement = async (req, res) => {
-  try {
-    const eq = await Equipement.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    }).populate("uniteAssignee", "nom immatriculation");
-    if (!eq) return res.status(404).json({ message: "Équipement introuvable" });
-    res.json({ message: "Équipement mis à jour", equipement: eq });
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Changer l'état d'un équipement
-// @route   PATCH /api/equipements/:id/etat
-// ─────────────────────────────────────────────────────────────────────────────
-const updateEtat = async (req, res) => {
-  try {
-    const { etat } = req.body;
-    const valides = ["opérationnel", "à-vérifier", "en-panne", "réformé"];
-    if (!valides.includes(etat)) {
-      return res
-        .status(400)
-        .json({ message: `État invalide. Valeurs : ${valides.join(", ")}` });
-    }
-
-    const eq = await Equipement.findByIdAndUpdate(
-      req.params.id,
-      { etat },
-      { new: true },
-    );
-    if (!eq) return res.status(404).json({ message: "Équipement introuvable" });
-    res.json({ message: "État mis à jour", equipement: eq });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Enregistrer un contrôle (met à jour dernierControle + prochainControle)
-// @route   PATCH /api/equipements/:id/controle
-// ─────────────────────────────────────────────────────────────────────────────
-const enregistrerControle = async (req, res) => {
-  try {
-    const { prochainControle, notes } = req.body;
-
-    const update = {
-      dernierControle: new Date(),
-      etat: "opérationnel",
-    };
-    if (prochainControle) update.prochainControle = new Date(prochainControle);
-    if (notes) update.notes = notes;
-
-    const eq = await Equipement.findByIdAndUpdate(req.params.id, update, {
-      new: true,
-    });
-    if (!eq) return res.status(404).json({ message: "Équipement introuvable" });
-    res.json({ message: "Contrôle enregistré", equipement: eq });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Supprimer un équipement
-// @route   DELETE /api/equipements/:id
-// ─────────────────────────────────────────────────────────────────────────────
-const deleteEquipement = async (req, res) => {
-  try {
-    const eq = await Equipement.findByIdAndDelete(req.params.id);
-    if (!eq) return res.status(404).json({ message: "Équipement introuvable" });
-    res.json({ message: "Équipement supprimé" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Alertes — équipements expirés ou à vérifier bientôt (30 jours)
-// @route   GET /api/equipements/alertes
-// ─────────────────────────────────────────────────────────────────────────────
-const getAlertes = async (req, res) => {
-  try {
-    const dans30Jours = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    const maintenant = new Date();
-
-    const [enPanne, aVerifier, expiresProchainement, expires] =
-      await Promise.all([
-        Equipement.find({ etat: "en-panne" }).populate("uniteAssignee", "nom"),
-        Equipement.find({ etat: "à-vérifier" }).populate(
-          "uniteAssignee",
-          "nom",
-        ),
-        Equipement.find({
-          dateExpiration: { $lte: dans30Jours, $gt: maintenant },
-        }).populate("uniteAssignee", "nom"),
-        Equipement.find({ dateExpiration: { $lte: maintenant } }).populate(
-          "uniteAssignee",
-          "nom",
-        ),
-      ]);
+    const [equips, total] = await Promise.all([
+      Equipement.find(filtre)
+        .populate("uniteAssignee", "nom type statut")
+        .sort({ etat: 1, nom: 1 })
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit)),
+      Equipement.countDocuments(filtre),
+    ]);
 
     res.json({
-      total:
-        enPanne.length +
-        aVerifier.length +
-        expiresProchainement.length +
-        expires.length,
-      enPanne,
-      aVerifier,
-      expiresProchainement,
-      expires,
+      equipements: equips,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    erreur(res, err);
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// @desc    Stats des équipements
-// @route   GET /api/equipements/stats
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── GET /api/equipements/stats ───────────────────────────────────────────────
 const getStats = async (req, res) => {
   try {
-    const [total, operationnels, aVerifier, enPanne, reformes, parCategorie] =
-      await Promise.all([
-        Equipement.countDocuments(),
-        Equipement.countDocuments({ etat: "opérationnel" }),
-        Equipement.countDocuments({ etat: "à-vérifier" }),
-        Equipement.countDocuments({ etat: "en-panne" }),
-        Equipement.countDocuments({ etat: "réformé" }),
-        Equipement.aggregate([
-          { $group: { _id: "$categorie", count: { $sum: 1 } } },
-          { $sort: { count: -1 } },
-        ]),
-      ]);
+    const stats = await service.getStats();
+    res.json(stats);
+  } catch (err) {
+    erreur(res, err);
+  }
+};
 
+// ─── GET /api/equipements/alerts/expiring ─────────────────────────────────────
+const getExpiring = async (req, res) => {
+  try {
+    const { expires, expirentBientot } = await service.detecterAlertes();
     res.json({
-      total,
-      parEtat: { operationnels, aVerifier, enPanne, reformes },
-      parCategorie,
+      expires,
+      expirentBientot,
+      total: expires.length + expirentBientot.length,
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    erreur(res, err);
+  }
+};
+
+// ─── GET /api/equipements/alerts/check-required ───────────────────────────────
+const getCheckRequired = async (req, res) => {
+  try {
+    const { controleRetard, controleBientot, enPanne } =
+      await service.detecterAlertes();
+    res.json({
+      controleRetard,
+      controleBientot,
+      enPanne,
+      total: controleRetard.length + controleBientot.length,
+    });
+  } catch (err) {
+    erreur(res, err);
+  }
+};
+
+// ─── GET /api/equipements/:id ─────────────────────────────────────────────────
+const getOne = async (req, res) => {
+  try {
+    const equip = await Equipement.findById(req.params.id).populate(
+      "uniteAssignee",
+      "nom type statut position",
+    );
+    if (!equip)
+      return res.status(404).json({ message: "Équipement introuvable" });
+    res.json(equip);
+  } catch (err) {
+    erreur(res, err);
+  }
+};
+
+// ─── POST /api/equipements ────────────────────────────────────────────────────
+const create = async (req, res) => {
+  try {
+    // Validation minimale
+    const { nom, categorie } = req.body;
+    if (!nom?.trim())
+      return res.status(400).json({ message: "Nom obligatoire" });
+    if (!categorie)
+      return res.status(400).json({ message: "Catégorie obligatoire" });
+
+    const equip = await service.creerEquipement(req.body);
+    res.status(201).json(equip);
+  } catch (err) {
+    erreur(res, err);
+  }
+};
+
+// ─── PUT /api/equipements/:id ─────────────────────────────────────────────────
+const update = async (req, res) => {
+  try {
+    const equip = await service.mettreAJour(req.params.id, req.body);
+    res.json(equip);
+  } catch (err) {
+    erreur(res, err);
+  }
+};
+
+// ─── DELETE /api/equipements/:id ──────────────────────────────────────────────
+const remove = async (req, res) => {
+  try {
+    const equip = await Equipement.findById(req.params.id);
+    if (!equip) return res.status(404).json({ message: "Introuvable" });
+    // Soft delete
+    equip.estActif = false;
+    equip.etat = "retiré";
+    await equip.save();
+    res.json({ message: "Équipement désactivé" });
+  } catch (err) {
+    erreur(res, err);
+  }
+};
+
+// ─── PATCH /api/equipements/:id/assign ───────────────────────────────────────
+const assign = async (req, res) => {
+  try {
+    const { uniteId } = req.body;
+    if (!uniteId) return res.status(400).json({ message: "uniteId requis" });
+    const equip = await service.affecter(req.params.id, uniteId);
+    res.json({ message: "Équipement affecté", equipement: equip });
+  } catch (err) {
+    erreur(res, err);
+  }
+};
+
+// ─── PATCH /api/equipements/:id/unassign ─────────────────────────────────────
+const unassign = async (req, res) => {
+  try {
+    const equip = await service.desaffecter(req.params.id);
+    res.json({ message: "Équipement désaffecté", equipement: equip });
+  } catch (err) {
+    erreur(res, err);
+  }
+};
+
+// ─── PATCH /api/equipements/:id/status ───────────────────────────────────────
+const updateStatus = async (req, res) => {
+  try {
+    const { etat, notes } = req.body;
+    if (!etat) return res.status(400).json({ message: "etat requis" });
+    const equip = await service.changerEtat(req.params.id, etat, notes);
+    res.json({ message: `État mis à jour : ${etat}`, equipement: equip });
+  } catch (err) {
+    erreur(res, err);
   }
 };
 
 module.exports = {
-  getEquipements,
-  getEquipement,
-  createEquipement,
-  updateEquipement,
-  updateEtat,
-  enregistrerControle,
-  deleteEquipement,
-  getAlertes,
+  getAll,
   getStats,
+  getExpiring,
+  getCheckRequired,
+  getOne,
+  create,
+  update,
+  remove,
+  assign,
+  unassign,
+  updateStatus,
 };

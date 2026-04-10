@@ -9,9 +9,7 @@ import {
 import useSocket from "../hooks/useSocket";
 
 const TABS = ["Ambulances", "Personnel", "Équipements", "Maintenance"];
-
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR") : "—");
-
 const Spinner = () => (
   <div className="flex items-center justify-center py-16 text-slate-400 gap-3">
     <div
@@ -28,20 +26,20 @@ const Spinner = () => (
   </div>
 );
 
+const inputStyle = {
+  padding: "10px 12px",
+  borderRadius: "8px",
+  border: "1px solid #e2e8f0",
+  fontSize: "14px",
+  color: "#0f172a",
+  outline: "none",
+  width: "100%",
+  backgroundColor: "#f8fafc",
+  fontFamily: "inherit",
+};
+
 // ─── Modal Voir Unité ─────────────────────────────────────────────────────────
 function ModalVoirUnite({ unite, onClose }) {
-  const statutColor = {
-    disponible: "bg-emerald-100 text-emerald-700",
-    en_mission: "bg-blue-100 text-blue-700",
-    maintenance: "bg-yellow-100 text-yellow-700",
-    indisponible: "bg-red-100 text-red-700",
-  };
-  const statutLabel = {
-    disponible: "Disponible",
-    en_mission: "En mission",
-    maintenance: "Maintenance",
-    indisponible: "Indisponible",
-  };
   return (
     <div
       style={{
@@ -73,9 +71,6 @@ function ModalVoirUnite({ unite, onClose }) {
             justifyContent: "space-between",
             padding: "20px 24px",
             borderBottom: "1px solid #f1f5f9",
-            position: "sticky",
-            top: 0,
-            background: "#fff",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -146,11 +141,6 @@ function ModalVoirUnite({ unite, onClose }) {
               val: unite.immatriculation,
             },
             {
-              icon: "circle",
-              label: "Statut",
-              val: statutLabel[unite.statut] || unite.statut,
-            },
-            {
               icon: "location_on",
               label: "Position",
               val: unite.position?.adresse || "—",
@@ -176,7 +166,6 @@ function ModalVoirUnite({ unite, onClose }) {
                   : "Aucun",
             },
             { icon: "build", label: "Année", val: unite.annee || "—" },
-            { icon: "note", label: "Notes", val: unite.notes || "Aucune note" },
           ].map((r) => (
             <div
               key={r.label}
@@ -190,12 +179,7 @@ function ModalVoirUnite({ unite, onClose }) {
             >
               <span
                 className="material-symbols-outlined"
-                style={{
-                  fontSize: "18px",
-                  color: "#94a3b8",
-                  width: 20,
-                  marginTop: 1,
-                }}
+                style={{ fontSize: "18px", color: "#94a3b8", width: 20 }}
               >
                 {r.icon}
               </span>
@@ -204,18 +188,12 @@ function ModalVoirUnite({ unite, onClose }) {
                   fontSize: "12px",
                   color: "#94a3b8",
                   minWidth: "130px",
-                  paddingTop: 1,
                 }}
               >
                 {r.label}
               </span>
               <span
-                style={{
-                  fontSize: "14px",
-                  fontWeight: 500,
-                  color: "#0f172a",
-                  flex: 1,
-                }}
+                style={{ fontSize: "14px", fontWeight: 500, color: "#0f172a" }}
               >
                 {r.val}
               </span>
@@ -262,24 +240,21 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
     kilometrage: "",
     carburant: "100",
     notes: "",
-    position: { adresse: "Base principale", lat: "48.8566", lng: "2.3522" },
+    position: {
+      adresse: "Base principale — 59 Bd Madeleine, Nice",
+      lat: "43.7102",
+      lng: "7.2620",
+    },
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name.startsWith("position.")) {
       const key = name.split(".")[1];
-      setForm((prev) => ({
-        ...prev,
-        position: { ...prev.position, [key]: value },
-      }));
-    } else {
-      setForm((prev) => ({ ...prev, [name]: value }));
-    }
+      setForm((p) => ({ ...p, position: { ...p.position, [key]: value } }));
+    } else setForm((p) => ({ ...p, [name]: value }));
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.nom || !form.immatriculation) {
@@ -289,7 +264,7 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
     setSaving(true);
     setError("");
     try {
-      const payload = {
+      const { data } = await unitService.create({
         ...form,
         kilometrage: parseInt(form.kilometrage) || 0,
         carburant: parseInt(form.carburant) || 100,
@@ -299,17 +274,15 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
           lat: parseFloat(form.position.lat),
           lng: parseFloat(form.position.lng),
         },
-      };
-      const { data } = await unitService.create(payload);
-      onSaved(data.unit);
+      });
+      onSaved(data.unit || data);
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || "Erreur lors de la création.");
+      setError(err.response?.data?.message || "Erreur.");
     } finally {
       setSaving(false);
     }
   };
-
   return (
     <div
       style={{
@@ -347,36 +320,9 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
             zIndex: 1,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: "10px",
-                backgroundColor: "#EFF6FF",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <span
-                className="material-symbols-outlined"
-                style={{ color: "#1D6EF5", fontSize: "20px" }}
-              >
-                add
-              </span>
-            </div>
-            <div>
-              <h2
-                style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a" }}
-              >
-                Nouvelle unité
-              </h2>
-              <p style={{ fontSize: "12px", color: "#94a3b8" }}>
-                Ajouter un véhicule à la flotte
-              </p>
-            </div>
-          </div>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+            Nouvelle unité
+          </h2>
           <button
             onClick={onClose}
             style={{
@@ -386,9 +332,6 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
               border: "1px solid #e2e8f0",
               background: "none",
               cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
             }}
           >
             <span
@@ -422,7 +365,6 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                 ⚠ {error}
               </div>
             )}
-
             <div
               style={{
                 display: "grid",
@@ -430,17 +372,17 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                 gap: "12px",
               }}
             >
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
                     fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
-                  Nom / ID *
+                  Nom *
                 </label>
                 <input
                   name="nom"
@@ -451,14 +393,14 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                   required
                 />
               </div>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
                     fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Immatriculation *
@@ -467,13 +409,12 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                   name="immatriculation"
                   value={form.immatriculation}
                   onChange={handleChange}
-                  placeholder="AB-123-CD"
+                  placeholder="AB-123-NI"
                   style={inputStyle}
                   required
                 />
               </div>
             </div>
-
             <div
               style={{
                 display: "grid",
@@ -481,14 +422,14 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                 gap: "12px",
               }}
             >
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
                     fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Type
@@ -499,22 +440,22 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                   onChange={handleChange}
                   style={inputStyle}
                 >
-                  {["VSAV", "SMUR", "VSL", "UMH", "Hélicoptère"].map((t) => (
+                  {["VSAV", "SMUR", "VSL", "VPSP", "AR"].map((t) => (
                     <option key={t}>{t}</option>
                   ))}
                 </select>
               </div>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
                     fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
-                  Statut initial
+                  Statut
                 </label>
                 <select
                   name="statut"
@@ -524,11 +465,9 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                 >
                   <option value="disponible">Disponible</option>
                   <option value="maintenance">Maintenance</option>
-                  <option value="indisponible">Indisponible</option>
                 </select>
               </div>
             </div>
-
             <div
               style={{
                 display: "grid",
@@ -536,14 +475,14 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                 gap: "12px",
               }}
             >
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
                     fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Année
@@ -557,14 +496,14 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                   style={inputStyle}
                 />
               </div>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
                     fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Kilométrage
@@ -578,14 +517,14 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                   style={inputStyle}
                 />
               </div>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
                     fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Carburant %
@@ -601,12 +540,15 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                 />
               </div>
             </div>
-
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-            >
+            <div>
               <label
-                style={{ fontSize: "12px", fontWeight: 500, color: "#64748b" }}
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  color: "#64748b",
+                  display: "block",
+                  marginBottom: 4,
+                }}
               >
                 Adresse / Base
               </label>
@@ -614,16 +556,18 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                 name="position.adresse"
                 value={form.position.adresse}
                 onChange={handleChange}
-                placeholder="Base principale"
                 style={inputStyle}
               />
             </div>
-
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-            >
+            <div>
               <label
-                style={{ fontSize: "12px", fontWeight: 500, color: "#64748b" }}
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  color: "#64748b",
+                  display: "block",
+                  marginBottom: 4,
+                }}
               >
                 Notes
               </label>
@@ -632,7 +576,6 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                 value={form.notes}
                 onChange={handleChange}
                 rows={2}
-                placeholder="Informations complémentaires…"
                 style={{ ...inputStyle, resize: "vertical" }}
               />
             </div>
@@ -656,7 +599,6 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                 background: "none",
                 cursor: "pointer",
                 fontSize: "13px",
-                fontWeight: 500,
                 color: "#64748b",
               }}
             >
@@ -674,35 +616,567 @@ function ModalNouvelleUnite({ onClose, onSaved }) {
                 fontSize: "13px",
                 fontWeight: 600,
                 color: "#fff",
+              }}
+            >
+              {saving ? "Création…" : "Ajouter l'unité"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal Nouvel Équipement ──────────────────────────────────────────────────
+function ModalNouvelEquipement({ units, onClose, onSaved }) {
+  const CATS = [
+    "Défibrillateur",
+    "Monitoring",
+    "Ventilation",
+    "Oxymétrie",
+    "Perfusion",
+    "Immobilisation",
+    "Protection",
+    "Médicament",
+    "Autre",
+  ];
+  const [form, setForm] = useState({
+    nom: "",
+    categorie: "",
+    numeroSerie: "",
+    fabricant: "",
+    modele: "",
+    etat: "opérationnel",
+    uniteAssignee: "",
+    dateAchat: "",
+    dernierControle: "",
+    dateExpiration: "",
+    notes: "",
+    quantite: 1,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.nom.trim()) {
+      setError("Nom obligatoire");
+      return;
+    }
+    if (!form.categorie) {
+      setError("Catégorie obligatoire");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const payload = { ...form };
+      if (!payload.uniteAssignee) delete payload.uniteAssignee;
+      if (!payload.dateAchat) delete payload.dateAchat;
+      if (!payload.dernierControle) delete payload.dernierControle;
+      if (!payload.dateExpiration) delete payload.dateExpiration;
+      const { data } = await equipementService.create(payload);
+      onSaved(data);
+    } catch (err) {
+      setError(err.response?.data?.message || "Erreur création");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.5)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: 16,
+          width: "100%",
+          maxWidth: 580,
+          maxHeight: "92vh",
+          overflowY: "auto",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+        }}
+      >
+        <div
+          style={{
+            padding: "20px 24px",
+            borderBottom: "1px solid #f1f5f9",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            position: "sticky",
+            top: 0,
+            background: "#fff",
+            zIndex: 1,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: "#EFF6FF",
                 display: "flex",
                 alignItems: "center",
-                gap: "8px",
+                justifyContent: "center",
+              }}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{ color: "#1D6EF5", fontSize: 20 }}
+              >
+                medical_services
+              </span>
+            </div>
+            <div>
+              <h2
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: "#0f172a",
+                  margin: 0,
+                }}
+              >
+                Nouvel équipement médical
+              </h2>
+              <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>
+                Ajouter à l'inventaire BlancBleu
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              border: "1px solid #e2e8f0",
+              background: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: 18, color: "#94a3b8" }}
+            >
+              close
+            </span>
+          </button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div
+            style={{
+              padding: "20px 24px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+            }}
+          >
+            {error && (
+              <div
+                style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  borderRadius: 8,
+                  padding: "8px 12px",
+                  color: "#dc2626",
+                  fontSize: 13,
+                }}
+              >
+                ⚠ {error}
+              </div>
+            )}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 12,
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  Nom *
+                </label>
+                <input
+                  value={form.nom}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, nom: e.target.value }))
+                  }
+                  placeholder="Défibrillateur ZOLL AED..."
+                  style={inputStyle}
+                  required
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  Catégorie *
+                </label>
+                <select
+                  value={form.categorie}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, categorie: e.target.value }))
+                  }
+                  style={inputStyle}
+                  required
+                >
+                  <option value="">Sélectionner...</option>
+                  {CATS.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 12,
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  Fabricant
+                </label>
+                <input
+                  value={form.fabricant}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, fabricant: e.target.value }))
+                  }
+                  placeholder="ZOLL, Philips, Laerdal..."
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  Modèle
+                </label>
+                <input
+                  value={form.modele}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, modele: e.target.value }))
+                  }
+                  placeholder="AED Plus, HeartStart..."
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 12,
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  N° de série
+                </label>
+                <input
+                  value={form.numeroSerie}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, numeroSerie: e.target.value }))
+                  }
+                  placeholder="SN-2024-001"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  Quantité
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={form.quantite}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, quantite: e.target.value }))
+                  }
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 12,
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  État
+                </label>
+                <select
+                  value={form.etat}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, etat: e.target.value }))
+                  }
+                  style={inputStyle}
+                >
+                  <option value="opérationnel">✅ Opérationnel</option>
+                  <option value="à-vérifier">⚠️ À vérifier</option>
+                  <option value="en-panne">❌ En panne</option>
+                  <option value="en-réparation">🔧 En réparation</option>
+                </select>
+              </div>
+              <div>
+                <label
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  Unité assignée
+                </label>
+                <select
+                  value={form.uniteAssignee}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, uniteAssignee: e.target.value }))
+                  }
+                  style={inputStyle}
+                >
+                  <option value="">— Aucune (base) —</option>
+                  {units
+                    .filter((u) => u.statut !== "maintenance")
+                    .map((u) => (
+                      <option key={u._id} value={u._id}>
+                        {u.nom} · {u.type}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: 12,
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  Date achat
+                </label>
+                <input
+                  type="date"
+                  value={form.dateAchat}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, dateAchat: e.target.value }))
+                  }
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  Dernier contrôle
+                </label>
+                <input
+                  type="date"
+                  value={form.dernierControle}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, dernierControle: e.target.value }))
+                  }
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  Expiration
+                </label>
+                <input
+                  type="date"
+                  value={form.dateExpiration}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, dateExpiration: e.target.value }))
+                  }
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+            <div>
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  textTransform: "uppercase",
+                  display: "block",
+                  marginBottom: 4,
+                }}
+              >
+                Notes
+              </label>
+              <textarea
+                value={form.notes}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, notes: e.target.value }))
+                }
+                rows={2}
+                placeholder="Informations complémentaires..."
+                style={{ ...inputStyle, resize: "vertical" }}
+              />
+            </div>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 10,
+              padding: "16px 24px",
+              borderTop: "1px solid #f1f5f9",
+            }}
+          >
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: "10px 20px",
+                borderRadius: 8,
+                border: "1px solid #e2e8f0",
+                background: "none",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 500,
+                color: "#64748b",
+              }}
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              style={{
+                padding: "10px 20px",
+                borderRadius: 8,
+                background: saving ? "#93c5fd" : "#1D6EF5",
+                border: "none",
+                cursor: saving ? "not-allowed" : "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
               }}
             >
               {saving ? (
-                <>
-                  <span
-                    style={{
-                      width: 14,
-                      height: 14,
-                      border: "2px solid rgba(255,255,255,0.3)",
-                      borderTop: "2px solid #fff",
-                      borderRadius: "50%",
-                      animation: "spin .7s linear infinite",
-                      display: "inline-block",
-                    }}
-                  />{" "}
-                  Enregistrement…
-                </>
+                "Création…"
               ) : (
                 <>
                   <span
                     className="material-symbols-outlined"
-                    style={{ fontSize: "16px" }}
+                    style={{ fontSize: 16 }}
                   >
-                    check
-                  </span>{" "}
-                  Ajouter l'unité
+                    add
+                  </span>
+                  Créer l'équipement
                 </>
               )}
             </button>
@@ -727,14 +1201,12 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
   const handleChange = (e) =>
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-
+    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.nom || !form.prenom || !form.role) {
-      setError("Nom, prénom et rôle sont obligatoires.");
+      setError("Nom, prénom et rôle obligatoires.");
       return;
     }
     setSaving(true);
@@ -743,15 +1215,14 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
       const payload = { ...form };
       if (!payload.uniteAssignee) delete payload.uniteAssignee;
       const { data } = await personnelService.create(payload);
-      onSaved(data.membre);
+      onSaved(data.membre || data);
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || "Erreur lors de l'ajout.");
+      setError(err.response?.data?.message || "Erreur.");
     } finally {
       setSaving(false);
     }
   };
-
   return (
     <div
       style={{
@@ -774,7 +1245,6 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
           boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
         }}
       >
-        {/* Header */}
         <div
           style={{
             display: "flex",
@@ -784,36 +1254,9 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
             borderBottom: "1px solid #f1f5f9",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: "10px",
-                backgroundColor: "#EFF6FF",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <span
-                className="material-symbols-outlined"
-                style={{ color: "#1D6EF5", fontSize: "20px" }}
-              >
-                person_add
-              </span>
-            </div>
-            <div>
-              <h2
-                style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a" }}
-              >
-                Ajouter un membre
-              </h2>
-              <p style={{ fontSize: "12px", color: "#94a3b8" }}>
-                Personnel Ambulances Blanc Bleu
-              </p>
-            </div>
-          </div>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+            Ajouter un membre
+          </h2>
           <button
             onClick={onClose}
             style={{
@@ -823,9 +1266,6 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
               border: "1px solid #e2e8f0",
               background: "none",
               cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
             }}
           >
             <span
@@ -836,8 +1276,6 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
             </span>
           </button>
         </div>
-
-        {/* Body */}
         <form onSubmit={handleSubmit}>
           <div
             style={{
@@ -861,8 +1299,6 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                 ⚠ {error}
               </div>
             )}
-
-            {/* Prénom + Nom */}
             <div
               style={{
                 display: "grid",
@@ -870,14 +1306,14 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                 gap: "12px",
               }}
             >
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
                     fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Prénom *
@@ -891,14 +1327,14 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                   style={inputStyle}
                 />
               </div>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
                     fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Nom *
@@ -913,8 +1349,6 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                 />
               </div>
             </div>
-
-            {/* Rôle + Statut */}
             <div
               style={{
                 display: "grid",
@@ -922,14 +1356,14 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                 gap: "12px",
               }}
             >
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
                     fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Rôle *
@@ -948,20 +1382,18 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                     "Chauffeur",
                     "Autre",
                   ].map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
+                    <option key={r}>{r}</option>
                   ))}
                 </select>
               </div>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
                     fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Statut
@@ -979,13 +1411,15 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                 </select>
               </div>
             </div>
-
-            {/* Unité assignée */}
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-            >
+            <div>
               <label
-                style={{ fontSize: "12px", fontWeight: 500, color: "#64748b" }}
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  color: "#64748b",
+                  display: "block",
+                  marginBottom: 4,
+                }}
               >
                 Unité assignée
               </label>
@@ -995,7 +1429,7 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                 onChange={handleChange}
                 style={inputStyle}
               >
-                <option value="">— Aucune unité —</option>
+                <option value="">— Aucune —</option>
                 {units.map((u) => (
                   <option key={u._id} value={u._id}>
                     {u.nom} ({u.immatriculation})
@@ -1003,8 +1437,6 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                 ))}
               </select>
             </div>
-
-            {/* Téléphone + Email */}
             <div
               style={{
                 display: "grid",
@@ -1012,14 +1444,14 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                 gap: "12px",
               }}
             >
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
                     fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Téléphone
@@ -1032,14 +1464,14 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                   style={inputStyle}
                 />
               </div>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
                     fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Email
@@ -1054,13 +1486,15 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                 />
               </div>
             </div>
-
-            {/* Date d'embauche */}
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-            >
+            <div>
               <label
-                style={{ fontSize: "12px", fontWeight: 500, color: "#64748b" }}
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  color: "#64748b",
+                  display: "block",
+                  marginBottom: 4,
+                }}
               >
                 Date d'embauche
               </label>
@@ -1073,8 +1507,6 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
               />
             </div>
           </div>
-
-          {/* Footer */}
           <div
             style={{
               display: "flex",
@@ -1094,7 +1526,6 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                 background: "none",
                 cursor: "pointer",
                 fontSize: "13px",
-                fontWeight: 500,
                 color: "#64748b",
               }}
             >
@@ -1112,37 +1543,9 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
                 fontSize: "13px",
                 fontWeight: 600,
                 color: "#fff",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
               }}
             >
-              {saving ? (
-                <>
-                  <span
-                    style={{
-                      width: 14,
-                      height: 14,
-                      border: "2px solid rgba(255,255,255,0.3)",
-                      borderTop: "2px solid #fff",
-                      borderRadius: "50%",
-                      animation: "spin .7s linear infinite",
-                      display: "inline-block",
-                    }}
-                  />{" "}
-                  Enregistrement…
-                </>
-              ) : (
-                <>
-                  <span
-                    className="material-symbols-outlined"
-                    style={{ fontSize: "16px" }}
-                  >
-                    check
-                  </span>{" "}
-                  Ajouter le membre
-                </>
-              )}
+              {saving ? "Enregistrement…" : "Ajouter le membre"}
             </button>
           </div>
         </form>
@@ -1151,40 +1554,8 @@ function ModalAjoutPersonnel({ units, onClose, onSaved }) {
   );
 }
 
-const inputStyle = {
-  padding: "10px 12px",
-  borderRadius: "8px",
-  border: "1px solid #e2e8f0",
-  fontSize: "14px",
-  color: "#0f172a",
-  outline: "none",
-  width: "100%",
-  backgroundColor: "#f8fafc",
-  fontFamily: "inherit",
-};
-
-// ─── Modal Voir Personnel ─────────────────────────────────────────────────────
+// ─── Modals Personnel (Voir / Modifier / Désactiver) ─────────────────────────
 function ModalVoirPersonnel({ membre, onClose }) {
-  const roleColor = {
-    Médecin: "bg-purple-100 text-purple-700",
-    Infirmier: "bg-blue-100 text-blue-700",
-    Ambulancier: "bg-teal-100 text-teal-700",
-    Secouriste: "bg-orange-100 text-orange-700",
-  };
-  const statutColor = {
-    "en-service": "bg-emerald-100 text-emerald-700",
-    conge: "bg-yellow-100 text-yellow-700",
-    formation: "bg-blue-100 text-blue-700",
-    maladie: "bg-red-100 text-red-700",
-    inactif: "bg-slate-100 text-slate-700",
-  };
-  const statutLabel = {
-    "en-service": "En service",
-    conge: "Congé",
-    formation: "Formation",
-    maladie: "Maladie",
-    inactif: "Inactif",
-  };
   return (
     <div
       style={{
@@ -1239,24 +1610,9 @@ function ModalVoirPersonnel({ membre, onClose }) {
               >
                 {membre.prenom} {membre.nom}
               </h2>
-              <span
-                style={{
-                  fontSize: "12px",
-                  padding: "2px 8px",
-                  borderRadius: "999px",
-                  fontWeight: 600,
-                  ...Object.fromEntries(
-                    (roleColor[membre.role] || "bg-slate-100 text-slate-700")
-                      .split(" ")
-                      .map((c) => [
-                        c.startsWith("bg-") ? "backgroundColor" : "color",
-                        c.startsWith("bg-") ? "#e2e8f0" : "#475569",
-                      ]),
-                  ),
-                }}
-              >
+              <p style={{ fontSize: "12px", color: "#94a3b8" }}>
                 {membre.role}
-              </span>
+              </p>
             </div>
           </div>
           <button
@@ -1268,9 +1624,6 @@ function ModalVoirPersonnel({ membre, onClose }) {
               border: "1px solid #e2e8f0",
               background: "none",
               cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
             }}
           >
             <span
@@ -1292,28 +1645,15 @@ function ModalVoirPersonnel({ membre, onClose }) {
           {[
             { icon: "badge", label: "Rôle", val: membre.role },
             {
-              icon: "circle",
-              label: "Statut",
-              val: statutLabel[membre.statut] || membre.statut,
-            },
-            {
               icon: "ambulance",
-              label: "Unité assignée",
-              val: membre.uniteAssignee?.nom || "Aucune unité",
+              label: "Unité",
+              val: membre.uniteAssignee?.nom || "Aucune",
             },
-            {
-              icon: "call",
-              label: "Téléphone",
-              val: membre.telephone || "Non renseigné",
-            },
-            {
-              icon: "mail",
-              label: "Email",
-              val: membre.email || "Non renseigné",
-            },
+            { icon: "call", label: "Téléphone", val: membre.telephone || "—" },
+            { icon: "mail", label: "Email", val: membre.email || "—" },
             {
               icon: "today",
-              label: "Date d'embauche",
+              label: "Embauche",
               val: fmtDate(membre.dateEmbauche),
             },
           ].map((r) => (
@@ -1323,7 +1663,7 @@ function ModalVoirPersonnel({ membre, onClose }) {
                 display: "flex",
                 alignItems: "center",
                 gap: "12px",
-                padding: "10px 0",
+                padding: "8px 0",
                 borderBottom: "1px solid #f8fafc",
               }}
             >
@@ -1337,7 +1677,7 @@ function ModalVoirPersonnel({ membre, onClose }) {
                 style={{
                   fontSize: "12px",
                   color: "#94a3b8",
-                  minWidth: "130px",
+                  minWidth: "100px",
                 }}
               >
                 {r.label}
@@ -1349,19 +1689,6 @@ function ModalVoirPersonnel({ membre, onClose }) {
               </span>
             </div>
           ))}
-          {membre.notes && (
-            <div
-              style={{
-                padding: "12px",
-                backgroundColor: "#f8fafc",
-                borderRadius: "8px",
-                fontSize: "13px",
-                color: "#64748b",
-              }}
-            >
-              📝 {membre.notes}
-            </div>
-          )}
         </div>
         <div
           style={{
@@ -1380,7 +1707,6 @@ function ModalVoirPersonnel({ membre, onClose }) {
               background: "none",
               cursor: "pointer",
               fontSize: "13px",
-              fontWeight: 500,
               color: "#64748b",
             }}
           >
@@ -1392,7 +1718,6 @@ function ModalVoirPersonnel({ membre, onClose }) {
   );
 }
 
-// ─── Modal Modifier Personnel ─────────────────────────────────────────────────
 function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
   const [form, setForm] = useState({
     nom: membre.nom || "",
@@ -1409,10 +1734,8 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
   const handleChange = (e) =>
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-
+    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.nom || !form.prenom) {
@@ -1425,17 +1748,14 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
       const payload = { ...form };
       if (!payload.uniteAssignee) delete payload.uniteAssignee;
       const { data } = await personnelService.update(membre._id, payload);
-      onSaved(data.membre);
+      onSaved(data.membre || data);
       onClose();
     } catch (err) {
-      setError(
-        err.response?.data?.message || "Erreur lors de la modification.",
-      );
+      setError(err.response?.data?.message || "Erreur.");
     } finally {
       setSaving(false);
     }
   };
-
   return (
     <div
       style={{
@@ -1470,39 +1790,11 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
             position: "sticky",
             top: 0,
             background: "#fff",
-            zIndex: 1,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: "10px",
-                backgroundColor: "#FFF7ED",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <span
-                className="material-symbols-outlined"
-                style={{ color: "#f59e0b", fontSize: "20px" }}
-              >
-                edit
-              </span>
-            </div>
-            <div>
-              <h2
-                style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a" }}
-              >
-                Modifier le membre
-              </h2>
-              <p style={{ fontSize: "12px", color: "#94a3b8" }}>
-                {membre.prenom} {membre.nom}
-              </p>
-            </div>
-          </div>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+            Modifier {membre.prenom} {membre.nom}
+          </h2>
           <button
             onClick={onClose}
             style={{
@@ -1512,9 +1804,6 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
               border: "1px solid #e2e8f0",
               background: "none",
               cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
             }}
           >
             <span
@@ -1555,14 +1844,13 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
                 gap: "12px",
               }}
             >
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
-                    fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Prénom *
@@ -1575,14 +1863,13 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
                   required
                 />
               </div>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
-                    fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Nom *
@@ -1603,17 +1890,16 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
                 gap: "12px",
               }}
             >
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
-                    fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
-                  Rôle *
+                  Rôle
                 </label>
                 <select
                   name="role"
@@ -1629,20 +1915,17 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
                     "Chauffeur",
                     "Autre",
                   ].map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
+                    <option key={r}>{r}</option>
                   ))}
                 </select>
               </div>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
-                    fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Statut
@@ -1661,11 +1944,14 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
                 </select>
               </div>
             </div>
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-            >
+            <div>
               <label
-                style={{ fontSize: "12px", fontWeight: 500, color: "#64748b" }}
+                style={{
+                  fontSize: "12px",
+                  color: "#64748b",
+                  display: "block",
+                  marginBottom: 4,
+                }}
               >
                 Unité assignée
               </label>
@@ -1675,10 +1961,10 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
                 onChange={handleChange}
                 style={inputStyle}
               >
-                <option value="">— Aucune unité —</option>
+                <option value="">— Aucune —</option>
                 {units.map((u) => (
                   <option key={u._id} value={u._id}>
-                    {u.nom} ({u.immatriculation})
+                    {u.nom}
                   </option>
                 ))}
               </select>
@@ -1690,14 +1976,13 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
                 gap: "12px",
               }}
             >
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
-                    fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Téléphone
@@ -1706,52 +1991,36 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
                   name="telephone"
                   value={form.telephone}
                   onChange={handleChange}
-                  placeholder="06 12 34 56 78"
                   style={inputStyle}
                 />
               </div>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-              >
+              <div>
                 <label
                   style={{
                     fontSize: "12px",
-                    fontWeight: 500,
                     color: "#64748b",
+                    display: "block",
+                    marginBottom: 4,
                   }}
                 >
                   Email
                 </label>
                 <input
                   name="email"
-                  type="email"
                   value={form.email}
                   onChange={handleChange}
                   style={inputStyle}
                 />
               </div>
             </div>
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-            >
+            <div>
               <label
-                style={{ fontSize: "12px", fontWeight: 500, color: "#64748b" }}
-              >
-                Date d'embauche
-              </label>
-              <input
-                name="dateEmbauche"
-                type="date"
-                value={form.dateEmbauche}
-                onChange={handleChange}
-                style={inputStyle}
-              />
-            </div>
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-            >
-              <label
-                style={{ fontSize: "12px", fontWeight: 500, color: "#64748b" }}
+                style={{
+                  fontSize: "12px",
+                  color: "#64748b",
+                  display: "block",
+                  marginBottom: 4,
+                }}
               >
                 Notes
               </label>
@@ -1759,8 +2028,7 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
                 name="notes"
                 value={form.notes}
                 onChange={handleChange}
-                rows={3}
-                placeholder="Informations complémentaires…"
+                rows={2}
                 style={{ ...inputStyle, resize: "vertical" }}
               />
             </div>
@@ -1784,7 +2052,6 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
                 background: "none",
                 cursor: "pointer",
                 fontSize: "13px",
-                fontWeight: 500,
                 color: "#64748b",
               }}
             >
@@ -1798,41 +2065,13 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
                 borderRadius: "8px",
                 background: saving ? "#93c5fd" : "#1D6EF5",
                 border: "none",
-                cursor: saving ? "not-allowed" : "pointer",
+                cursor: "pointer",
                 fontSize: "13px",
                 fontWeight: 600,
                 color: "#fff",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
               }}
             >
-              {saving ? (
-                <>
-                  <span
-                    style={{
-                      width: 14,
-                      height: 14,
-                      border: "2px solid rgba(255,255,255,0.3)",
-                      borderTop: "2px solid #fff",
-                      borderRadius: "50%",
-                      animation: "spin .7s linear infinite",
-                      display: "inline-block",
-                    }}
-                  />{" "}
-                  Enregistrement…
-                </>
-              ) : (
-                <>
-                  <span
-                    className="material-symbols-outlined"
-                    style={{ fontSize: "16px" }}
-                  >
-                    save
-                  </span>{" "}
-                  Enregistrer
-                </>
-              )}
+              {saving ? "Enregistrement…" : "Enregistrer"}
             </button>
           </div>
         </form>
@@ -1841,16 +2080,8 @@ function ModalModifierPersonnel({ membre, units, onClose, onSaved }) {
   );
 }
 
-// ─── Modal Désactiver Personnel ──────────────────────────────────────────────
 function ModalDesactiverPersonnel({ membre, onClose, onConfirm }) {
   const [loading, setLoading] = useState(false);
-
-  const handleConfirm = async () => {
-    setLoading(true);
-    await onConfirm();
-    setLoading(false);
-  };
-
   return (
     <div
       style={{
@@ -1869,166 +2100,95 @@ function ModalDesactiverPersonnel({ membre, onClose, onConfirm }) {
           background: "#fff",
           borderRadius: "16px",
           width: "100%",
-          maxWidth: "420px",
+          maxWidth: "400px",
           boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+          padding: 24,
+          textAlign: "center",
         }}
       >
-        {/* Header */}
-        <div style={{ padding: "24px 24px 0", textAlign: "center" }}>
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: "50%",
-              backgroundColor: "#FEF2F2",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 16px",
-            }}
-          >
-            <span
-              className="material-symbols-outlined"
-              style={{ fontSize: "28px", color: "#EF4444" }}
-            >
-              person_remove
-            </span>
-          </div>
-          <h2
-            style={{
-              fontSize: "17px",
-              fontWeight: 700,
-              color: "#0f172a",
-              marginBottom: "8px",
-            }}
-          >
-            Désactiver ce membre ?
-          </h2>
-          <p style={{ fontSize: "14px", color: "#64748b", lineHeight: 1.6 }}>
-            Vous êtes sur le point de désactiver{" "}
-            <strong style={{ color: "#0f172a" }}>
-              {membre.prenom} {membre.nom}
-            </strong>
-            .
-            <br />
-            Il ne sera plus visible dans la liste du personnel.
-          </p>
-        </div>
-
-        {/* Fiche résumé */}
         <div
           style={{
-            margin: "20px 24px",
-            padding: "14px 16px",
-            backgroundColor: "#f8fafc",
-            borderRadius: "10px",
-            border: "1px solid #e2e8f0",
+            width: 56,
+            height: 56,
+            borderRadius: "50%",
+            backgroundColor: "#FEF2F2",
             display: "flex",
             alignItems: "center",
-            gap: "12px",
+            justifyContent: "center",
+            margin: "0 auto 16px",
           }}
         >
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: "50%",
-              backgroundColor: "#EFF6FF",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 700,
-              color: "#1D6EF5",
-              fontSize: "14px",
-              flexShrink: 0,
-            }}
+          <span
+            className="material-symbols-outlined"
+            style={{ fontSize: "28px", color: "#EF4444" }}
           >
-            {`${membre.prenom?.[0] || ""}${membre.nom?.[0] || ""}`.toUpperCase()}
-          </div>
-          <div>
-            <p style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a" }}>
-              {membre.prenom} {membre.nom}
-            </p>
-            <p style={{ fontSize: "12px", color: "#94a3b8" }}>
-              {membre.role} · {membre.uniteAssignee?.nom || "Aucune unité"}
-            </p>
-          </div>
+            person_remove
+          </span>
         </div>
-
-        {/* Boutons */}
-        <div style={{ display: "flex", gap: "10px", padding: "0 24px 24px" }}>
+        <h2
+          style={{
+            fontSize: "17px",
+            fontWeight: 700,
+            color: "#0f172a",
+            marginBottom: 8,
+          }}
+        >
+          Désactiver ce membre ?
+        </h2>
+        <p style={{ fontSize: "14px", color: "#64748b", marginBottom: 20 }}>
+          <strong>
+            {membre.prenom} {membre.nom}
+          </strong>{" "}
+          ne sera plus visible dans la liste.
+        </p>
+        <div style={{ display: "flex", gap: 10 }}>
           <button
             onClick={onClose}
             style={{
               flex: 1,
-              padding: "11px",
-              borderRadius: "10px",
+              padding: 11,
+              borderRadius: 10,
               border: "1px solid #e2e8f0",
               background: "none",
               cursor: "pointer",
-              fontSize: "14px",
-              fontWeight: 500,
+              fontSize: 14,
               color: "#64748b",
             }}
           >
             Annuler
           </button>
           <button
-            onClick={handleConfirm}
+            onClick={async () => {
+              setLoading(true);
+              await onConfirm();
+              setLoading(false);
+            }}
             disabled={loading}
             style={{
               flex: 1,
-              padding: "11px",
-              borderRadius: "10px",
+              padding: 11,
+              borderRadius: 10,
               border: "none",
-              background: loading ? "#fca5a5" : "#EF4444",
-              cursor: loading ? "not-allowed" : "pointer",
-              fontSize: "14px",
+              background: "#EF4444",
+              cursor: "pointer",
+              fontSize: 14,
               fontWeight: 600,
               color: "#fff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
             }}
           >
-            {loading ? (
-              <>
-                <span
-                  style={{
-                    width: 14,
-                    height: 14,
-                    border: "2px solid rgba(255,255,255,0.3)",
-                    borderTop: "2px solid #fff",
-                    borderRadius: "50%",
-                    animation: "spin .7s linear infinite",
-                    display: "inline-block",
-                  }}
-                />{" "}
-                Désactivation…
-              </>
-            ) : (
-              <>
-                <span
-                  className="material-symbols-outlined"
-                  style={{ fontSize: "16px" }}
-                >
-                  person_off
-                </span>{" "}
-                Désactiver
-              </>
-            )}
+            {loading ? "Désactivation…" : "Désactiver"}
           </button>
         </div>
       </div>
     </div>
   );
 }
+
+// ─── COMPOSANT PRINCIPAL ──────────────────────────────────────────────────────
 export default function Flotte() {
   const navigate = useNavigate();
   const [tab, setTab] = useState("Ambulances");
   const [filter, setFilter] = useState("Tous");
-
   const [units, setUnits] = useState([]);
   const [personnel, setPersonnel] = useState([]);
   const [equipements, setEquipements] = useState([]);
@@ -2037,19 +2197,18 @@ export default function Flotte() {
   const [error, setError] = useState(null);
 
   // Modals
+  const [showNouvelleUnite, setShowNouvelleUnite] = useState(false);
+  const [showNouvelEquipement, setShowNouvelEquipement] = useState(false);
   const [showModalPersonnel, setShowModalPersonnel] = useState(false);
+  const [uniteVoir, setUniteVoir] = useState(null);
   const [membreVoir, setMembreVoir] = useState(null);
   const [membreModifier, setMembreModifier] = useState(null);
   const [membreDesactiver, setMembreDesactiver] = useState(null);
-  const [showNouvelleUnite, setShowNouvelleUnite] = useState(false);
-  const [uniteVoir, setUniteVoir] = useState(null);
 
-  // ── Socket.IO — mises à jour temps réel ──────────────────────────────────
-  const { subscribe, connected } = useSocket();
-
+  // Socket temps réel
+  const { subscribe } = useSocket();
   useEffect(() => {
-    // Position + carburant + km mis à jour en temps réel
-    const unsubLocation = subscribe("unit:location_updated", (data) => {
+    const u1 = subscribe("unit:location_updated", (data) => {
       setUnits((prev) =>
         prev.map((u) =>
           u._id?.toString() === data.unitId?.toString()
@@ -2064,9 +2223,7 @@ export default function Flotte() {
         ),
       );
     });
-
-    // Statut changé
-    const unsubStatus = subscribe("unit:status_changed", (data) => {
+    const u2 = subscribe("unit:status_changed", (data) => {
       setUnits((prev) =>
         prev.map((u) =>
           u._id?.toString() === data.unitId?.toString()
@@ -2075,10 +2232,9 @@ export default function Flotte() {
         ),
       );
     });
-
     return () => {
-      unsubLocation();
-      unsubStatus();
+      u1();
+      u2();
     };
   }, [subscribe]);
 
@@ -2096,7 +2252,7 @@ export default function Flotte() {
       }
       if (t === "Équipements") {
         const { data } = await equipementService.getAll();
-        setEquipements(data);
+        setEquipements(data.equipements || data || []);
       }
       if (t === "Maintenance") {
         const { data } = await maintenanceService.getAll();
@@ -2130,7 +2286,7 @@ export default function Flotte() {
     {
       l: "Maintenance",
       v: units.filter(
-        (u) => u.statut === "maintenance" || u.statut === "indisponible",
+        (u) => u.statut === "maintenance" || u.statut === "hors_service",
       ).length,
       bar: 7,
       color: "bg-yellow-500",
@@ -2152,94 +2308,99 @@ export default function Flotte() {
   const handleUnitStatus = async (id, statut) => {
     try {
       await unitService.updateStatus(id, statut);
-      setUnits((prev) =>
-        prev.map((u) => (u._id === id ? { ...u, statut } : u)),
-      );
+      setUnits((p) => p.map((u) => (u._id === id ? { ...u, statut } : u)));
     } catch {
-      alert("Erreur statut unité.");
+      alert("Erreur.");
     }
   };
-
   const handlePersonnelStatus = async (id, statut) => {
     try {
       await personnelService.updateStatut(id, statut);
-      setPersonnel((prev) =>
-        prev.map((p) => (p._id === id ? { ...p, statut } : p)),
-      );
+      setPersonnel((p) => p.map((m) => (m._id === id ? { ...m, statut } : m)));
     } catch {
-      alert("Erreur statut personnel.");
+      alert("Erreur.");
     }
   };
-
-  const handlePersonnelUpdate = (updated) => {
-    setPersonnel((prev) =>
-      prev.map((p) => (p._id === updated._id ? updated : p)),
-    );
-  };
-
   const handlePersonnelDelete = async (id) => {
     try {
       await personnelService.delete(id);
-      setPersonnel((prev) => prev.filter((p) => p._id !== id));
+      setPersonnel((p) => p.filter((m) => m._id !== id));
       setMembreDesactiver(null);
     } catch {
-      alert("Erreur lors de la désactivation.");
+      alert("Erreur.");
     }
   };
-
   const handleEquipementEtat = async (id, etat) => {
     try {
       await equipementService.updateEtat(id, etat);
-      setEquipements((prev) =>
-        prev.map((e) => (e._id === id ? { ...e, etat } : e)),
-      );
+      setEquipements((p) => p.map((e) => (e._id === id ? { ...e, etat } : e)));
     } catch {
-      alert("Erreur état équipement.");
+      alert("Erreur état.");
     }
   };
-
   const handleControle = async (id) => {
     try {
-      const { data } = await equipementService.enregistrerControle(id, {});
-      setEquipements((prev) =>
-        prev.map((e) => (e._id === id ? data.equipement : e)),
+      await equipementService.updateEtat(
+        id,
+        "opérationnel",
+        "Contrôle effectué",
+      );
+      setEquipements((p) =>
+        p.map((e) =>
+          e._id === id
+            ? { ...e, etat: "opérationnel", dernierControle: new Date() }
+            : e,
+        ),
       );
     } catch {
       alert("Erreur contrôle.");
     }
   };
-
   const handleMaintenanceStatus = async (id, statut) => {
     try {
       await maintenanceService.updateStatut(id, statut);
-      setMaintenances((prev) =>
-        prev.map((m) => (m._id === id ? { ...m, statut } : m)),
+      setMaintenances((p) =>
+        p.map((m) => (m._id === id ? { ...m, statut } : m)),
       );
     } catch {
-      alert("Erreur statut maintenance.");
+      alert("Erreur.");
     }
   };
 
   return (
     <div className="p-7 fade-in">
-      {/* Modals Unités */}
+      {/* Modals */}
       {showNouvelleUnite && (
         <ModalNouvelleUnite
           onClose={() => setShowNouvelleUnite(false)}
-          onSaved={(u) => setUnits((prev) => [u, ...prev])}
+          onSaved={(u) => {
+            setUnits((p) => [u, ...p]);
+            setShowNouvelleUnite(false);
+          }}
         />
       )}
-      {uniteVoir && (
-        <ModalVoirUnite unite={uniteVoir} onClose={() => setUniteVoir(null)} />
+      {showNouvelEquipement && (
+        <ModalNouvelEquipement
+          units={units}
+          onClose={() => setShowNouvelEquipement(false)}
+          onSaved={(e) => {
+            setEquipements((p) => [e, ...p]);
+            setShowNouvelEquipement(false);
+          }}
+        />
       )}
-
-      {/* Modals Personnel */}
       {showModalPersonnel && (
         <ModalAjoutPersonnel
           units={units}
           onClose={() => setShowModalPersonnel(false)}
-          onSaved={(nouveau) => setPersonnel((prev) => [nouveau, ...prev])}
+          onSaved={(m) => {
+            setPersonnel((p) => [m, ...p]);
+            setShowModalPersonnel(false);
+          }}
         />
+      )}
+      {uniteVoir && (
+        <ModalVoirUnite unite={uniteVoir} onClose={() => setUniteVoir(null)} />
       )}
       {membreVoir && (
         <ModalVoirPersonnel
@@ -2252,8 +2413,8 @@ export default function Flotte() {
           membre={membreModifier}
           units={units}
           onClose={() => setMembreModifier(null)}
-          onSaved={(updated) => {
-            handlePersonnelUpdate(updated);
+          onSaved={(u) => {
+            setPersonnel((p) => p.map((m) => (m._id === u._id ? u : m)));
             setMembreModifier(null);
           }}
         />
@@ -2276,13 +2437,26 @@ export default function Flotte() {
             Gestion opérationnelle des unités de secours
           </p>
         </div>
-        <button
-          onClick={() => setShowNouvelleUnite(true)}
-          className="bg-primary text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-blue-700 transition-colors shadow-lg shadow-primary/20"
-        >
-          <span className="material-symbols-outlined text-lg">add</span>Nouvelle
-          Unité
-        </button>
+        <div className="flex gap-2">
+          {tab === "Équipements" && (
+            <button
+              onClick={() => setShowNouvelEquipement(true)}
+              className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg"
+            >
+              <span className="material-symbols-outlined text-lg">
+                medical_services
+              </span>
+              Nouvel équipement
+            </button>
+          )}
+          <button
+            onClick={() => setShowNouvelleUnite(true)}
+            className="bg-primary text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-blue-700 transition-colors shadow-lg shadow-primary/20"
+          >
+            <span className="material-symbols-outlined text-lg">add</span>
+            Nouvelle Unité
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -2315,13 +2489,21 @@ export default function Flotte() {
               setTab(t);
               setFilter("Tous");
             }}
-            className={`px-5 py-3 text-sm font-semibold transition-all border-b-2 ${
-              tab === t
-                ? "border-primary text-primary"
-                : "border-transparent text-slate-500 hover:text-navy"
-            }`}
+            className={`px-5 py-3 text-sm font-semibold transition-all border-b-2 ${tab === t ? "border-primary text-primary" : "border-transparent text-slate-500 hover:text-navy"}`}
           >
             {t}
+            {t === "Équipements" &&
+              equipements.filter(
+                (e) => e.etat === "en-panne" || e.etat === "à-vérifier",
+              ).length > 0 && (
+                <span className="ml-2 px-1.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-600">
+                  {
+                    equipements.filter(
+                      (e) => e.etat === "en-panne" || e.etat === "à-vérifier",
+                    ).length
+                  }
+                </span>
+              )}
           </button>
         ))}
       </div>
@@ -2340,11 +2522,7 @@ export default function Flotte() {
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                  filter === f
-                    ? "bg-navy text-white"
-                    : "bg-white border border-slate-200 text-slate-500 hover:border-navy"
-                }`}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${filter === f ? "bg-navy text-white" : "bg-white border border-slate-200 text-slate-500 hover:border-navy"}`}
               >
                 {f}
               </button>
@@ -2357,7 +2535,7 @@ export default function Flotte() {
               <div className="text-center py-12 text-red-400">{error}</div>
             ) : filtered.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
-                Aucune unité trouvée
+                Aucune unité
               </div>
             ) : (
               <table className="w-full">
@@ -2386,7 +2564,7 @@ export default function Flotte() {
                   {filtered.map((u, i) => (
                     <tr
                       key={u._id}
-                      className={`border-b border-slate-100 hover:bg-blue-50 hover:border-l-4 hover:border-l-primary cursor-pointer transition-all ${i % 2 === 1 ? "bg-slate-50/30" : "bg-white"}`}
+                      className={`border-b border-slate-100 hover:bg-blue-50 transition-all ${i % 2 === 1 ? "bg-slate-50/30" : "bg-white"}`}
                     >
                       <td className="px-5 py-4 font-mono font-bold text-navy text-sm">
                         {u.nom}
@@ -2443,7 +2621,7 @@ export default function Flotte() {
                             </span>
                           </button>
                           <button
-                            title="Voir sur la carte"
+                            title="Carte"
                             onClick={() => navigate(`/carte?unitId=${u._id}`)}
                             className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-blue-50 hover:border-primary transition-all group"
                           >
@@ -2453,7 +2631,7 @@ export default function Flotte() {
                           </button>
                           {u.statut === "disponible" ? (
                             <button
-                              title="Mettre en maintenance"
+                              title="Maintenance"
                               onClick={() =>
                                 handleUnitStatus(u._id, "maintenance")
                               }
@@ -2465,7 +2643,7 @@ export default function Flotte() {
                             </button>
                           ) : u.statut === "maintenance" ? (
                             <button
-                              title="Remettre disponible"
+                              title="Disponible"
                               onClick={() =>
                                 handleUnitStatus(u._id, "disponible")
                               }
@@ -2489,56 +2667,10 @@ export default function Flotte() {
                 </tbody>
               </table>
             )}
-            <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-100">
               <span className="text-xs text-slate-500">
-                Affichage de {filtered.length} sur {units.length} unités
+                {filtered.length} / {units.length} unités
               </span>
-              <button
-                onClick={() => {
-                  const headers = [
-                    "ID",
-                    "Type",
-                    "Statut",
-                    "Adresse",
-                    "Équipage",
-                    "Carburant %",
-                    "Kilométrage",
-                  ];
-                  const rows = filtered.map((u) => [
-                    u.nom,
-                    u.type,
-                    u.statut === "disponible"
-                      ? "Disponible"
-                      : u.statut === "en_mission"
-                        ? "En mission"
-                        : u.statut === "maintenance"
-                          ? "Maintenance"
-                          : "Indisponible",
-                    u.position?.adresse || "",
-                    u.equipage?.length || 0,
-                    u.carburant || 0,
-                    u.kilometrage || 0,
-                  ]);
-                  const csv = [headers, ...rows]
-                    .map((r) => r.map((v) => `"${v}"`).join(","))
-                    .join("\n");
-                  const blob = new Blob(["\uFEFF" + csv], {
-                    type: "text/csv;charset=utf-8;",
-                  });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `flotte-blancbleu-${new Date().toISOString().slice(0, 10)}.csv`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }}
-                className="flex items-center gap-2 text-xs font-bold text-primary border border-primary/30 px-3 py-1.5 rounded-lg hover:bg-primary hover:text-white transition-all"
-              >
-                <span className="material-symbols-outlined text-sm">
-                  download
-                </span>
-                Exporter CSV
-              </button>
             </div>
           </div>
         </>
@@ -2567,41 +2699,22 @@ export default function Flotte() {
             <div className="text-center py-12 text-red-400">{error}</div>
           ) : personnel.length === 0 ? (
             <div className="text-center py-16">
-              <span
-                className="material-symbols-outlined text-slate-300"
-                style={{ fontSize: 48 }}
-              >
-                group
-              </span>
-              <p className="text-slate-400 mt-3 text-sm">
-                Aucun membre du personnel
-              </p>
-              <button
-                onClick={() => setShowModalPersonnel(true)}
-                className="mt-4 bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
-              >
-                Ajouter le premier membre
-              </button>
+              <p className="text-slate-400 text-sm">Aucun membre</p>
             </div>
           ) : (
             <table className="w-full">
               <thead>
                 <tr className="bg-navy">
-                  {[
-                    "Nom",
-                    "Rôle",
-                    "Unité assignée",
-                    "Statut",
-                    "Contact",
-                    "Actions",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="px-5 py-4 text-left font-mono text-xs text-white/70 uppercase tracking-widest"
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  {["Nom", "Rôle", "Unité", "Statut", "Contact", "Actions"].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        className="px-5 py-4 text-left font-mono text-xs text-white/70 uppercase tracking-widest"
+                      >
+                        {h}
+                      </th>
+                    ),
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -2651,7 +2764,7 @@ export default function Flotte() {
                     <td className="px-5 py-4">
                       <div className="flex gap-1">
                         <button
-                          title="Voir fiche"
+                          title="Voir"
                           onClick={() => setMembreVoir(p)}
                           className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-blue-50 hover:border-primary transition-all group"
                         >
@@ -2701,7 +2814,7 @@ export default function Flotte() {
             <p className="font-bold text-navy text-sm">
               {equipements.length} équipements médicaux
             </p>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
                 {equipements.filter((e) => e.etat === "en-panne").length} en
                 panne
@@ -2716,6 +2829,21 @@ export default function Flotte() {
             <Spinner />
           ) : error ? (
             <div className="text-center py-12 text-red-400">{error}</div>
+          ) : equipements.length === 0 ? (
+            <div className="text-center py-16">
+              <span
+                className="material-symbols-outlined text-slate-300"
+                style={{ fontSize: 48 }}
+              >
+                medical_services
+              </span>
+              <p className="text-slate-400 mt-3 text-sm">
+                Aucun équipement enregistré
+              </p>
+              <p className="text-slate-300 text-xs mt-1">
+                Cliquez sur "Nouvel équipement" en haut pour en ajouter
+              </p>
+            </div>
           ) : (
             <table className="w-full">
               <thead>
@@ -2744,8 +2872,15 @@ export default function Flotte() {
                     key={e._id}
                     className={`border-b border-slate-100 hover:bg-blue-50 transition-all ${i % 2 === 1 ? "bg-slate-50/30" : "bg-white"}`}
                   >
-                    <td className="px-5 py-4 font-semibold text-navy text-sm">
-                      {e.nom}
+                    <td className="px-5 py-4">
+                      <div className="font-semibold text-navy text-sm">
+                        {e.nom}
+                      </div>
+                      {e.fabricant && (
+                        <div className="text-xs text-slate-400">
+                          {e.fabricant} {e.modele}
+                        </div>
+                      )}
                     </td>
                     <td className="px-5 py-4 font-mono font-bold text-primary text-sm">
                       {e.uniteAssignee?.nom || "—"}
@@ -2759,19 +2894,30 @@ export default function Flotte() {
                         onChange={(ev) =>
                           handleEquipementEtat(e._id, ev.target.value)
                         }
-                        className={`px-2 py-1 rounded-full text-xs font-bold border-0 cursor-pointer ${e.etat === "opérationnel" ? "bg-emerald-100 text-emerald-700" : e.etat === "à-vérifier" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}
+                        className={`px-2 py-1 rounded-full text-xs font-bold border-0 cursor-pointer ${e.etat === "opérationnel" ? "bg-emerald-100 text-emerald-700" : e.etat === "à-vérifier" ? "bg-yellow-100 text-yellow-700" : e.etat === "en-réparation" ? "bg-blue-100 text-blue-700" : "bg-red-100 text-red-700"}`}
                       >
                         <option value="opérationnel">Opérationnel</option>
                         <option value="à-vérifier">À vérifier</option>
                         <option value="en-panne">En panne</option>
-                        <option value="réformé">Réformé</option>
+                        <option value="en-réparation">En réparation</option>
+                        <option value="retiré">Retiré</option>
                       </select>
                     </td>
                     <td className="px-5 py-4 font-mono text-sm text-slate-500">
                       {fmtDate(e.dernierControle)}
                     </td>
-                    <td className="px-5 py-4 font-mono text-sm text-slate-500">
-                      {fmtDate(e.dateExpiration)}
+                    <td className="px-5 py-4">
+                      <span
+                        className={`font-mono text-sm ${e.dateExpiration && new Date(e.dateExpiration) < new Date() ? "text-red-600 font-bold" : "text-slate-500"}`}
+                      >
+                        {fmtDate(e.dateExpiration)}
+                        {e.dateExpiration &&
+                          new Date(e.dateExpiration) < new Date() && (
+                            <span className="ml-1 text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">
+                              Expiré
+                            </span>
+                          )}
+                      </span>
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex gap-1">
@@ -2847,14 +2993,10 @@ export default function Flotte() {
             ))}
           </div>
           <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-slate-100">
               <p className="font-bold text-navy text-sm">
                 Planification des maintenances
               </p>
-              <button className="bg-primary text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-blue-700 transition-colors">
-                <span className="material-symbols-outlined text-sm">add</span>
-                Planifier
-              </button>
             </div>
             {loading ? (
               <Spinner />
@@ -2923,17 +3065,9 @@ export default function Flotte() {
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex gap-1">
-                          <button
-                            title="Voir détails"
-                            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-blue-50 hover:border-primary transition-all group"
-                          >
-                            <span className="material-symbols-outlined text-slate-400 text-sm group-hover:text-primary">
-                              visibility
-                            </span>
-                          </button>
                           {m.statut !== "terminé" && m.statut !== "annulé" && (
                             <button
-                              title="Marquer terminé"
+                              title="Terminer"
                               onClick={() =>
                                 handleMaintenanceStatus(m._id, "terminé")
                               }
@@ -2953,7 +3087,7 @@ export default function Flotte() {
             )}
             <div className="px-5 py-3 bg-slate-50 border-t border-slate-100">
               <span className="text-xs text-slate-500">
-                {maintenances.length} interventions de maintenance
+                {maintenances.length} interventions
               </span>
             </div>
           </div>
@@ -2983,7 +3117,6 @@ export default function Flotte() {
           </button>
         </div>
       </div>
-
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );

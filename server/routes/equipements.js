@@ -1,31 +1,35 @@
 const express = require("express");
 const router = express.Router();
-const { protect, authorize } = require("../middleware/auth");
+const { protect } = require("../middleware/auth");
 const {
-  getEquipements,
-  getEquipement,
-  createEquipement,
-  updateEquipement,
-  updateEtat,
-  enregistrerControle,
-  deleteEquipement,
-  getAlertes,
+  getAll,
   getStats,
+  getExpiring,
+  getCheckRequired,
+  getOne,
+  create,
+  update,
+  remove,
+  assign,
+  unassign,
+  updateStatus,
 } = require("../controllers/equipementController");
 
+// ── Alerts (avant /:id pour éviter conflit de route) ─────────────────────────
 router.get("/stats", protect, getStats);
-router.get("/alertes", protect, getAlertes);
-router.get("/", protect, getEquipements);
-router.post("/", protect, authorize("admin", "superviseur"), createEquipement);
-router.get("/:id", protect, getEquipement);
-router.patch(
-  "/:id",
-  protect,
-  authorize("admin", "superviseur"),
-  updateEquipement,
-);
-router.patch("/:id/etat", protect, updateEtat);
-router.patch("/:id/controle", protect, enregistrerControle);
-router.delete("/:id", protect, authorize("admin"), deleteEquipement);
+router.get("/alerts/expiring", protect, getExpiring);
+router.get("/alerts/check-required", protect, getCheckRequired);
+
+// ── CRUD ──────────────────────────────────────────────────────────────────────
+router.get("/", protect, getAll);
+router.get("/:id", protect, getOne);
+router.post("/", protect, create);
+router.put("/:id", protect, update);
+router.delete("/:id", protect, remove);
+
+// ── Actions métier ────────────────────────────────────────────────────────────
+router.patch("/:id/assign", protect, assign);
+router.patch("/:id/unassign", protect, unassign);
+router.patch("/:id/status", protect, updateStatus);
 
 module.exports = router;

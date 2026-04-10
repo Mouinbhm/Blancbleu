@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import InterventionCard from "../components/interventions/InterventionCard";
 import KpiCard from "../components/ui/KpiCard";
-import { interventionService, unitService } from "../services/api";
+import { interventionService, unitService, aiService } from "../services/api";
 
 const FILTERS = ["Tout", "P1", "P2", "P3", "En route", "Sur place"];
 
@@ -932,6 +932,487 @@ function ModalAssignerUnite({ intervention, units, onClose, onAssigned }) {
   );
 }
 
+// ─── Modal Analyse IA ─────────────────────────────────────────────────────────
+function ModalAnalyseIA({ intervention, units, onClose, onAssign }) {
+  const raw = intervention.raw || {};
+  const [loading, setLoading] = useState(true);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [assigning, setAssigning] = useState(null);
+
+  useEffect(() => {
+    const analyser = async () => {
+      try {
+        const payload = {
+          typeIncident: raw.typeIncident || intervention.type,
+          etatPatient: raw.patient?.etat || "inconnu",
+          age: raw.patient?.age || 40,
+          nbVictimes: raw.patient?.nbVictimes || 1,
+          symptomes: raw.patient?.symptomes || [],
+          adresse: raw.adresse || intervention.address || "",
+          priorite: raw.priorite || `P${intervention.priority}`,
+          arrivalMode: "ambulance",
+          mental: raw.patient?.etat === "inconscient" ? 3 : 1,
+          nrsPain: raw.patient?.etat === "critique" ? 8 : 3,
+          patientsPerHour: 5,
+        };
+        const { data } = await aiService.analyze(payload);
+        setResult(data);
+      } catch (e) {
+        setError("Modèle IA indisponible — analyse par règles");
+        // Fallback : recommander selon priorité
+        setResult({
+          priorite: raw.priorite || `P${intervention.priority}`,
+          confiance: null,
+          uniteRecommandee: raw.priorite === "P1" ? "SMUR" : "VSAV",
+          justification: ["Analyse par règles (IA non connectée)"],
+          source: "rules",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    analyser();
+  }, []);
+
+  // Filtrer les unités disponibles selon la recommandation
+  const typeRec = result?.uniteRecommandee || "VSAV";
+  const unitesOpt = units.filter(
+    (u) => u.statut === "disponible" && u.type === typeRec,
+  );
+  const unitesSec = units.filter(
+    (u) => u.statut === "disponible" && u.type !== typeRec,
+  );
+  const pColor = { P1: "#ef4444", P2: "#f59e0b", P3: "#3b82f6" };
+  const pc = pColor[result?.priorite] || "#1D6EF5";
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.6)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: 16,
+          width: "100%",
+          maxWidth: 600,
+          maxHeight: "90vh",
+          overflowY: "auto",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.35)",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            background: `linear-gradient(135deg, #0f172a, #1e3a5f)`,
+            padding: "20px 24px",
+            borderRadius: "16px 16px 0 0",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 6,
+              }}
+            >
+              <span
+                style={{
+                  background: pc,
+                  color: "#fff",
+                  padding: "3px 10px",
+                  borderRadius: 20,
+                  fontSize: 11,
+                  fontWeight: 700,
+                }}
+              >
+                {raw.priorite || `P${intervention.priority}`}
+              </span>
+              <span style={{ color: "#94a3b8", fontSize: 12 }}>
+                #{intervention.ref}
+              </span>
+            </div>
+            <h2
+              style={{
+                color: "#fff",
+                fontSize: 17,
+                fontWeight: 700,
+                margin: 0,
+              }}
+            >
+              {intervention.type}
+            </h2>
+            <p style={{ color: "#94a3b8", fontSize: 12, margin: "4px 0 0" }}>
+              📍 {intervention.address}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              border: "1px solid rgba(255,255,255,0.2)",
+              background: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: 18, color: "#94a3b8" }}
+            >
+              close
+            </span>
+          </button>
+        </div>
+
+        <div style={{ padding: 24 }}>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "32px 0" }}>
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  border: "4px solid #e2e8f0",
+                  borderTop: "4px solid #1D6EF5",
+                  borderRadius: "50%",
+                  animation: "spin .8s linear infinite",
+                  margin: "0 auto 16px",
+                }}
+              />
+              <p style={{ color: "#64748b", fontWeight: 600 }}>
+                Analyse IA en cours...
+              </p>
+              <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 4 }}>
+                Calcul de l'unité optimale
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Résultat IA */}
+              <div
+                style={{
+                  background: result?.source === "ml" ? "#eff6ff" : "#fff7ed",
+                  border: `1px solid ${result?.source === "ml" ? "#bfdbfe" : "#fed7aa"}`,
+                  borderRadius: 12,
+                  padding: "14px 18px",
+                  marginBottom: 20,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginBottom: 8,
+                  }}
+                >
+                  <span
+                    className="material-symbols-outlined"
+                    style={{
+                      color: result?.source === "ml" ? "#3b82f6" : "#f59e0b",
+                      fontSize: 20,
+                    }}
+                  >
+                    {result?.source === "ml" ? "psychology" : "rule"}
+                  </span>
+                  <span
+                    style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}
+                  >
+                    {result?.source === "ml"
+                      ? `Modèle ML · Confiance ${result.confiance}%`
+                      : "Analyse par règles médicales"}
+                  </span>
+                </div>
+                {result?.probabilites &&
+                  Object.keys(result.probabilites).length > 0 && (
+                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                      {Object.entries(result.probabilites).map(([k, v]) => (
+                        <div
+                          key={k}
+                          style={{
+                            flex: 1,
+                            textAlign: "center",
+                            background: k === result.priorite ? pc : "#f1f5f9",
+                            color: k === result.priorite ? "#fff" : "#64748b",
+                            borderRadius: 8,
+                            padding: "6px 4px",
+                          }}
+                        >
+                          <div style={{ fontSize: 11, fontWeight: 700 }}>
+                            {k}
+                          </div>
+                          <div style={{ fontSize: 14, fontWeight: 800 }}>
+                            {v}%
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                >
+                  {(result?.justification || []).map((j, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 8,
+                        fontSize: 12,
+                        color: "#475569",
+                      }}
+                    >
+                      <span
+                        className="material-symbols-outlined"
+                        style={{
+                          fontSize: 14,
+                          color: "#1D6EF5",
+                          flexShrink: 0,
+                          marginTop: 1,
+                        }}
+                      >
+                        info
+                      </span>
+                      {j}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Unité recommandée */}
+              <div style={{ marginBottom: 16 }}>
+                <p
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    marginBottom: 10,
+                  }}
+                >
+                  🎯 Unité recommandée :{" "}
+                  <span style={{ color: pc }}>{typeRec}</span>
+                  {result?.confiance && (
+                    <span
+                      style={{ marginLeft: 8, fontSize: 11, color: "#94a3b8" }}
+                    >
+                      ({result.confiance}% confiance)
+                    </span>
+                  )}
+                </p>
+                {unitesOpt.length === 0 && unitesSec.length === 0 ? (
+                  <div
+                    style={{
+                      background: "#fef2f2",
+                      border: "1px solid #fecaca",
+                      borderRadius: 10,
+                      padding: "12px 16px",
+                      color: "#dc2626",
+                      fontSize: 13,
+                    }}
+                  >
+                    ⚠ Aucune unité disponible actuellement
+                  </div>
+                ) : (
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                  >
+                    {[...unitesOpt, ...unitesSec].slice(0, 5).map((u, idx) => (
+                      <div
+                        key={u._id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12,
+                          padding: "12px 16px",
+                          border: `2px solid ${idx === 0 && unitesOpt.length > 0 ? pc : "#e2e8f0"}`,
+                          borderRadius: 12,
+                          background:
+                            idx === 0 && unitesOpt.length > 0
+                              ? "#eff6ff"
+                              : "#f8fafc",
+                          transition: "all .15s",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 10,
+                            background: idx === 0 ? pc : "#e2e8f0",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <span
+                            className="material-symbols-outlined"
+                            style={{
+                              color: idx === 0 ? "#fff" : "#94a3b8",
+                              fontSize: 20,
+                            }}
+                          >
+                            ambulance
+                          </span>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontWeight: 700,
+                                fontSize: 14,
+                                color: "#0f172a",
+                              }}
+                            >
+                              {u.nom}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                padding: "2px 8px",
+                                borderRadius: 20,
+                                background:
+                                  u.type === typeRec ? "#dbeafe" : "#f1f5f9",
+                                color:
+                                  u.type === typeRec ? "#1D6EF5" : "#64748b",
+                                fontWeight: 600,
+                              }}
+                            >
+                              {u.type}
+                            </span>
+                            {idx === 0 && unitesOpt.length > 0 && (
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  padding: "2px 8px",
+                                  borderRadius: 20,
+                                  background: "#dcfce7",
+                                  color: "#16a34a",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                ★ Optimal
+                              </span>
+                            )}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: "#94a3b8",
+                              marginTop: 2,
+                            }}
+                          >
+                            ⛽ {u.carburant}% · {u.equipage?.length || 0}{" "}
+                            membres ·{" "}
+                            {u.position?.adresse?.split(",")[0] || "Nice"}
+                          </div>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            setAssigning(u._id);
+                            await onAssign(u._id);
+                            setAssigning(null);
+                          }}
+                          disabled={assigning === u._id}
+                          style={{
+                            padding: "8px 16px",
+                            borderRadius: 8,
+                            border: "none",
+                            background:
+                              assigning === u._id
+                                ? "#93c5fd"
+                                : idx === 0 && unitesOpt.length > 0
+                                  ? pc
+                                  : "#1D6EF5",
+                            color: "#fff",
+                            cursor: "pointer",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            flexShrink: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                          }}
+                        >
+                          {assigning === u._id ? (
+                            "..."
+                          ) : (
+                            <>
+                              <span
+                                className="material-symbols-outlined"
+                                style={{ fontSize: 14 }}
+                              >
+                                check
+                              </span>
+                              Assigner
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div
+          style={{
+            padding: "12px 24px",
+            borderTop: "1px solid #f1f5f9",
+            display: "flex",
+            justifyContent: "flex-end",
+          }}
+        >
+          <button
+            onClick={onClose}
+            style={{
+              padding: "10px 24px",
+              borderRadius: 8,
+              border: "1px solid #e2e8f0",
+              background: "none",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 500,
+              color: "#64748b",
+            }}
+          >
+            Fermer
+          </button>
+        </div>
+      </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
+
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function Interventions() {
   const navigate = useNavigate();
@@ -943,6 +1424,7 @@ export default function Interventions() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [intAAssigner, setIntAAssigner] = useState(null);
+  const [intAnalyseIA, setIntAnalyseIA] = useState(null);
   const [tick, setTick] = useState(0);
 
   const loadData = useCallback(async () => {
@@ -1038,6 +1520,22 @@ export default function Interventions() {
           units={units}
           onClose={() => setShowModal(false)}
           onSaved={handleSaved}
+        />
+      )}
+      {intAnalyseIA && (
+        <ModalAnalyseIA
+          intervention={intAnalyseIA}
+          units={units}
+          onClose={() => setIntAnalyseIA(null)}
+          onAssign={async (unitId) => {
+            try {
+              await interventionService.assignUnit(intAnalyseIA.id, unitId);
+              await loadData();
+              setIntAnalyseIA(null);
+            } catch (e) {
+              alert(e.response?.data?.message || "Erreur assignation");
+            }
+          }}
         />
       )}
 
@@ -1150,8 +1648,19 @@ export default function Interventions() {
           {filtered.map((i) => (
             <div key={i.id} className="relative group">
               <InterventionCard data={i} onClick={() => {}} />
-              {/* Actions rapides au survol */}
+              {/* Modal Analyse IA — déplacé hors boucle */}
               <div className="absolute right-10 top-1/2 -translate-y-1/2 hidden group-hover:flex gap-2 z-10">
+                {/* Bouton Analyse IA */}
+                <button
+                  onClick={() => setIntAnalyseIA(i)}
+                  title="Analyser avec l'IA BlancBleu"
+                  className="flex items-center gap-1 px-3 h-8 rounded-lg bg-primary text-white shadow-sm transition-all hover:bg-blue-700 text-xs font-bold"
+                >
+                  <span className="material-symbols-outlined text-sm">
+                    psychology
+                  </span>
+                  IA
+                </button>
                 <button
                   onClick={() =>
                     navigate(`/carte?unitId=${i.raw?.unitAssignee?._id || ""}`)

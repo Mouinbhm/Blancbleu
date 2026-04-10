@@ -115,12 +115,14 @@ export const equipementService = {
   getAll: (params = {}) => api.get("/equipements", { params }),
   getOne: (id) => api.get(`/equipements/${id}`),
   getStats: () => api.get("/equipements/stats"),
-  getAlertes: () => api.get("/equipements/alertes"),
+  getExpiring: () => api.get("/equipements/alerts/expiring"),
+  getCheckRequired: () => api.get("/equipements/alerts/check-required"),
   create: (data) => api.post("/equipements", data),
-  update: (id, data) => api.patch(`/equipements/${id}`, data),
-  updateEtat: (id, etat) => api.patch(`/equipements/${id}/etat`, { etat }),
-  enregistrerControle: (id, data) =>
-    api.patch(`/equipements/${id}/controle`, data),
+  update: (id, data) => api.put(`/equipements/${id}`, data),
+  updateEtat: (id, etat, notes) =>
+    api.patch(`/equipements/${id}/status`, { etat, notes }),
+  assign: (id, uniteId) => api.patch(`/equipements/${id}/assign`, { uniteId }),
+  unassign: (id) => api.patch(`/equipements/${id}/unassign`),
   delete: (id) => api.delete(`/equipements/${id}`),
 };
 
