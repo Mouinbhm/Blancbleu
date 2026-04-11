@@ -1,3 +1,10 @@
+/**
+ * BlancBleu — Client HTTP centralisé
+ *
+ * Source de vérité unique pour toutes les requêtes API.
+ * Tous les composants et hooks importent depuis ce fichier.
+ * Ne pas créer d'autres instances axios dans le projet.
+ */
 import axios from "axios";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
@@ -5,27 +12,83 @@ const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 const api = axios.create({
   baseURL: API_URL,
   headers: { "Content-Type": "application/json" },
+  withCredentials: true, // nécessaire pour envoyer le cookie refresh token
 });
 
-// ── Injecter le JWT automatiquement ──────────────────────────────────────────
+// ─── Intercepteur requête — injecte le JWT ────────────────────────────────────
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// ── Gérer les 401 (token expiré → déconnexion) ───────────────────────────────
+// ─── Intercepteur réponse — gère les 401 et le refresh automatique ────────────
+let isRefreshing = false;
+let pendingQueue = []; // requêtes en attente pendant le refresh
+
+const processQueue = (error, token = null) => {
+  pendingQueue.forEach(({ resolve, reject }) => {
+    if (error) reject(error);
+    else resolve(token);
+  });
+  pendingQueue = [];
+};
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/login";
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Eviter la boucle infinie sur /auth/refresh lui-même
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes("/auth/refresh") &&
+      !originalRequest.url?.includes("/auth/login")
+    ) {
+      if (isRefreshing) {
+        // Mettre la requête en file d'attente pendant le refresh en cours
+        return new Promise((resolve, reject) => {
+          pendingQueue.push({ resolve, reject });
+        }).then((token) => {
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+          return api(originalRequest);
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        // Tenter de renouveler le token via le cookie httpOnly
+        const { data } = await api.post("/auth/refresh");
+        const newToken = data.token;
+
+        localStorage.setItem("token", newToken);
+        if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
+
+        api.defaults.headers.common.Authorization = `Bearer ${newToken}`;
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+
+        processQueue(null, newToken);
+        return api(originalRequest);
+      } catch (refreshError) {
+        // Refresh échoué — session définitivement expirée
+        processQueue(refreshError, null);
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
     }
+
     return Promise.reject(error);
   },
 );
+
+export default api;
 
 // ════════════════════════════════════════════════════════════════════════════
 // AUTH
@@ -34,6 +97,9 @@ export const authService = {
   login: (data) => api.post("/auth/login", data),
   register: (data) => api.post("/auth/register", data),
   me: () => api.get("/auth/me"),
+  refresh: () => api.post("/auth/refresh"),
+  logout: () => api.post("/auth/logout"),
+  logoutAll: () => api.post("/auth/logout-all"),
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -80,95 +146,18 @@ export const aiService = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// EXPORTS INDIVIDUELS (compatibilité avec l'ancien api.js)
-// ════════════════════════════════════════════════════════════════════════════
-export const getInterventions = (params) => interventionService.getAll(params);
-export const createIntervention = (data) => interventionService.create(data);
-export const updateInterventionStatus = (id, s) =>
-  interventionService.updateStatus(id, s);
-export const getUnits = (params) => unitService.getAll(params);
-export const updateUnitStatus = (id, s) => unitService.updateStatus(id, s);
-export const analyzeIncident = (data) => aiService.analyze(data);
-
-export default api;
-
-// ════════════════════════════════════════════════════════════════════════════
-// PERSONNEL
-// ════════════════════════════════════════════════════════════════════════════
-export const personnelService = {
-  getAll: (params = {}) => api.get("/personnel", { params }),
-  getOne: (id) => api.get(`/personnel/${id}`),
-  getStats: () => api.get("/personnel/stats"),
-  create: (data) => api.post("/personnel", data),
-  update: (id, data) => api.patch(`/personnel/${id}`, data),
-  updateStatut: (id, statut) =>
-    api.patch(`/personnel/${id}/status`, { statut }),
-  assignerUnite: (id, uniteId) =>
-    api.patch(`/personnel/${id}/assign`, { uniteId }),
-  delete: (id) => api.delete(`/personnel/${id}`),
-};
-
-// ════════════════════════════════════════════════════════════════════════════
-// ÉQUIPEMENTS
-// ════════════════════════════════════════════════════════════════════════════
-export const equipementService = {
-  getAll: (params = {}) => api.get("/equipements", { params }),
-  getOne: (id) => api.get(`/equipements/${id}`),
-  getStats: () => api.get("/equipements/stats"),
-  getExpiring: () => api.get("/equipements/alerts/expiring"),
-  getCheckRequired: () => api.get("/equipements/alerts/check-required"),
-  create: (data) => api.post("/equipements", data),
-  update: (id, data) => api.put(`/equipements/${id}`, data),
-  updateEtat: (id, etat, notes) =>
-    api.patch(`/equipements/${id}/status`, { etat, notes }),
-  assign: (id, uniteId) => api.patch(`/equipements/${id}/assign`, { uniteId }),
-  unassign: (id) => api.patch(`/equipements/${id}/unassign`),
-  delete: (id) => api.delete(`/equipements/${id}`),
-};
-
-// ════════════════════════════════════════════════════════════════════════════
-// MAINTENANCES
-// ════════════════════════════════════════════════════════════════════════════
-export const maintenanceService = {
-  getAll: (params = {}) => api.get("/maintenances", { params }),
-  getOne: (id) => api.get(`/maintenances/${id}`),
-  getStats: () => api.get("/maintenances/stats"),
-  create: (data) => api.post("/maintenances", data),
-  update: (id, data) => api.patch(`/maintenances/${id}`, data),
-  updateStatut: (id, statut) =>
-    api.patch(`/maintenances/${id}/status`, { statut }),
-  delete: (id) => api.delete(`/maintenances/${id}`),
-};
-
-// ════════════════════════════════════════════════════════════════════════════
 // GÉODÉCISION
 // ════════════════════════════════════════════════════════════════════════════
 export const geoService = {
-  // Unités disponibles triées par proximité depuis un incident
   unitsNearby: (lat, lng, priorite = "P2", limit = 5) =>
     api.get("/geo/units/nearby", { params: { lat, lng, priorite, limit } }),
-
-  // ETA entre une unité et un incident
   calculerETA: (unitId, incidentLat, incidentLng, priorite = "P2") =>
     api.get("/geo/eta", {
       params: { unitId, incidentLat, incidentLng, priorite },
     }),
-
-  // Distance entre 2 points GPS
   distance: (lat1, lng1, lat2, lng2) =>
     api.get("/geo/distance", { params: { lat1, lng1, lat2, lng2 } }),
-
-  // Vérifier zone Nice
   checkZone: (lat, lng) => api.get("/geo/zone/check", { params: { lat, lng } }),
-};
-export const factureService = {
-  getAll: (params = {}) => api.get("/factures", { params }),
-  getOne: (id) => api.get(`/factures/${id}`),
-  getStats: () => api.get("/factures/stats"),
-  create: (data) => api.post("/factures", data),
-  update: (id, data) => api.patch(`/factures/${id}`, data),
-  updateStatut: (id, statut) => api.patch(`/factures/${id}/statut`, { statut }),
-  delete: (id) => api.delete(`/factures/${id}`),
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -221,7 +210,9 @@ export const unitLifecycleService = {
     api.patch(`/units/${unitId}/statut`, { statut }),
 };
 
-// Fin de mission semi-automatique
+// ════════════════════════════════════════════════════════════════════════════
+// FIN DE MISSION SEMI-AUTOMATIQUE
+// ════════════════════════════════════════════════════════════════════════════
 export const missionCompletionService = {
   evaluate: (id) => api.post(`/interventions/${id}/evaluate-completion`),
   suggest: (id) => api.post(`/interventions/${id}/suggest-completion`),
@@ -233,12 +224,82 @@ export const missionCompletionService = {
   scan: () => api.get("/interventions/scan-completions"),
 };
 
-// Alias sur interventionService
+// ════════════════════════════════════════════════════════════════════════════
+// PERSONNEL
+// ════════════════════════════════════════════════════════════════════════════
+export const personnelService = {
+  getAll: (params = {}) => api.get("/personnel", { params }),
+  getOne: (id) => api.get(`/personnel/${id}`),
+  getStats: () => api.get("/personnel/stats"),
+  create: (data) => api.post("/personnel", data),
+  update: (id, data) => api.patch(`/personnel/${id}`, data),
+  updateStatut: (id, statut) =>
+    api.patch(`/personnel/${id}/status`, { statut }),
+  assignerUnite: (id, uniteId) =>
+    api.patch(`/personnel/${id}/assign`, { uniteId }),
+  delete: (id) => api.delete(`/personnel/${id}`),
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// ÉQUIPEMENTS
+// ════════════════════════════════════════════════════════════════════════════
+export const equipementService = {
+  getAll: (params = {}) => api.get("/equipements", { params }),
+  getOne: (id) => api.get(`/equipements/${id}`),
+  getStats: () => api.get("/equipements/stats"),
+  getExpiring: () => api.get("/equipements/alerts/expiring"),
+  getCheckRequired: () => api.get("/equipements/alerts/check-required"),
+  create: (data) => api.post("/equipements", data),
+  update: (id, data) => api.put(`/equipements/${id}`, data),
+  updateEtat: (id, etat, notes) =>
+    api.patch(`/equipements/${id}/status`, { etat, notes }),
+  assign: (id, uniteId) => api.patch(`/equipements/${id}/assign`, { uniteId }),
+  unassign: (id) => api.patch(`/equipements/${id}/unassign`),
+  delete: (id) => api.delete(`/equipements/${id}`),
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// MAINTENANCES
+// ════════════════════════════════════════════════════════════════════════════
+export const maintenanceService = {
+  getAll: (params = {}) => api.get("/maintenances", { params }),
+  getOne: (id) => api.get(`/maintenances/${id}`),
+  getStats: () => api.get("/maintenances/stats"),
+  create: (data) => api.post("/maintenances", data),
+  update: (id, data) => api.patch(`/maintenances/${id}`, data),
+  updateStatut: (id, statut) =>
+    api.patch(`/maintenances/${id}/status`, { statut }),
+  delete: (id) => api.delete(`/maintenances/${id}`),
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// FACTURES
+// ════════════════════════════════════════════════════════════════════════════
+export const factureService = {
+  getAll: (params = {}) => api.get("/factures", { params }),
+  getOne: (id) => api.get(`/factures/${id}`),
+  getStats: () => api.get("/factures/stats"),
+  create: (data) => api.post("/factures", data),
+  update: (id, data) => api.patch(`/factures/${id}`, data),
+  updateStatut: (id, statut) => api.patch(`/factures/${id}/statut`, { statut }),
+  delete: (id) => api.delete(`/factures/${id}`),
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// EXPORTS INDIVIDUELS — rétrocompatibilité avec les anciens imports directs
+// ════════════════════════════════════════════════════════════════════════════
+export const getInterventions = (params) => interventionService.getAll(params);
+export const createIntervention = (data) => interventionService.create(data);
+export const updateInterventionStatus = (id, s) =>
+  interventionService.updateStatus(id, s);
+export const getUnits = (params) => unitService.getAll(params);
+export const updateUnitStatus = (id, s) => unitService.updateStatus(id, s);
+export const analyzeIncident = (data) => aiService.analyze(data);
+
+// Alias pour interventionCompletionExtension (rétrocompatibilité)
 export const interventionCompletionExtension = {
-  evaluateCompletion: (id) =>
-    api.post(`/interventions/${id}/evaluate-completion`),
-  confirmCompletion: (id) =>
-    api.post(`/interventions/${id}/confirm-completion`),
+  evaluateCompletion: (id) => missionCompletionService.evaluate(id),
+  confirmCompletion: (id) => missionCompletionService.confirm(id),
   markDestinationReached: (id, c) =>
-    api.post(`/interventions/${id}/mark-destination-reached`, c || {}),
+    missionCompletionService.markDestination(id, c),
 };
