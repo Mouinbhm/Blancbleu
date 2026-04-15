@@ -16,6 +16,7 @@
   "jest": {
     "testEnvironment": "node",
     "testTimeout": 30000,
+    "testPathIgnorePatterns": ["/node_modules/", "/_deprecated/"],
     "coverageDirectory": "coverage",
     "collectCoverageFrom": [
       "services/**/*.js",

@@ -1,5 +1,8 @@
 /**
- * BlancBleu — Tests Intégration Workflow (State Machine via API)
+ * BlancBleu — Tests Intégration Workflow Transport (via API REST)
+ *
+ * Teste les transitions de statut des transports sanitaires non urgents
+ * en appelant les endpoints réels de l'API (supertest + MongoMemoryServer).
  */
 
 const request = require("supertest");
@@ -17,12 +20,10 @@ beforeAll(async () => {
   process.env.MONGO_URI = uri;
   process.env.JWT_SECRET = "test-secret-blancbleu-jest";
   process.env.NODE_ENV = "test";
-  process.env.AI_API_URL = "http://localhost:5001";
+  process.env.AI_API_URL = "http://localhost:5002";
 
-  // Connexion directe — les modèles Mongoose sont immédiatement disponibles
   await mongoose.connect(uri);
 
-  // Créer un dispatcher de test réutilisé dans toutes les suites
   const User = require("../../models/User");
   const salt = await bcrypt.genSalt(10);
   const hashed = await bcrypt.hash("pass1234", salt);
@@ -35,7 +36,6 @@ beforeAll(async () => {
     actif: true,
   });
 
-  // Récupérer le token une seule fois
   const app = require("../../Server");
   const res = await request(app)
     .post("/api/auth/login")
@@ -50,10 +50,10 @@ afterAll(async () => {
 }, 30000);
 
 beforeEach(async () => {
-  const Intervention = require("../../models/Intervention");
-  const Unit = require("../../models/Unit");
-  await Intervention.deleteMany({});
-  await Unit.deleteMany({});
+  const Transport = require("../../models/Transport");
+  const Vehicle = require("../../models/Vehicle");
+  await Transport.deleteMany({});
+  await Vehicle.deleteMany({});
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -61,50 +61,179 @@ function getApp() {
   return require("../../Server");
 }
 
-async function creerIntervention(overrides = {}) {
-  const Intervention = require("../../models/Intervention");
-  return Intervention.create({
-    typeIncident: "Malaise",
-    adresse: "59 Bd Madeleine, Nice",
-    priorite: "P2",
-    statut: "CREATED",
+const baseTransport = {
+  patient: {
+    nom: "Martin",
+    prenom: "Jean",
+    dateNaissance: "1950-01-15",
+    mobilite: "ASSIS",
+  },
+  typeTransport: "VSL",
+  motif: "Consultation", // motif sans PMT obligatoire (pas Dialyse/Chimio/Radio)
+  dateTransport: new Date(Date.now() + 86400000).toISOString(), // demain
+  heureRDV: "09:00",
+  adresseDepart: {
+    rue: "59 Bd Madeleine",
+    ville: "Nice",
+    codePostal: "06000",
     coordonnees: { lat: 43.71, lng: 7.26 },
-    patient: { etat: "conscient", nbVictimes: 1 },
-    ...overrides,
-  });
+  },
+  adresseDestination: {
+    rue: "30 Av Pasteur",
+    ville: "Nice",
+    codePostal: "06000",
+    coordonnees: { lat: 43.72, lng: 7.27 },
+  },
+};
+
+async function creerTransport(overrides = {}) {
+  const Transport = require("../../models/Transport");
+  return Transport.create({ ...baseTransport, ...overrides });
 }
 
-async function creerUnite(overrides = {}) {
-  const Unit = require("../../models/Unit");
-  return Unit.create({
-    nom: "VSAV-01",
-    type: "VSAV",
+async function creerVehicle(overrides = {}) {
+  const Vehicle = require("../../models/Vehicle");
+  return Vehicle.create({
+    nom: "VSL-01",
+    type: "VSL",
     immatriculation: "AA-000-AA",
     statut: "disponible",
     position: { lat: 43.72, lng: 7.25 },
-    carburant: 80,
-    kilometrage: 10000,
     ...overrides,
   });
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SUITE 1 — GET status
+// SUITE 1 — Création transport
 // ══════════════════════════════════════════════════════════════════════════════
-describe("GET /api/workflow/:id/status", () => {
-  test("retourne statut complet avec transitions possibles", async () => {
+describe("POST /api/transports", () => {
+  test("crée un transport en statut REQUESTED", async () => {
     const app = getApp();
-    const i = await creerIntervention();
 
     const res = await request(app)
-      .get(`/api/workflow/${i._id}/status`)
+      .post("/api/transports")
+      .set("Authorization", `Bearer ${global.__token__}`)
+      .send(baseTransport);
+
+    expect(res.status).toBe(201);
+    expect(res.body.transport.statut).toBe("REQUESTED");
+    expect(res.body.transport.patient.nom).toBe("Martin");
+  });
+
+  test("400 si champs obligatoires manquants", async () => {
+    const app = getApp();
+
+    const res = await request(app)
+      .post("/api/transports")
+      .set("Authorization", `Bearer ${global.__token__}`)
+      .send({ motif: "Dialyse" }); // incomplet
+
+    expect(res.status).toBe(400);
+  });
+
+  test("401 sans token", async () => {
+    const app = getApp();
+
+    const res = await request(app)
+      .post("/api/transports")
+      .send(baseTransport);
+
+    expect(res.status).toBe(401);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SUITE 2 — Transitions lifecycle valides
+// ══════════════════════════════════════════════════════════════════════════════
+describe("Transitions lifecycle — cas valides", () => {
+  test("REQUESTED → CONFIRMED via PATCH /:id/confirm", async () => {
+    const app = getApp();
+    const t = await creerTransport({ statut: "REQUESTED" });
+
+    const res = await request(app)
+      .patch(`/api/transports/${t._id}/confirm`)
       .set("Authorization", `Bearer ${global.__token__}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.statut).toBe("CREATED");
-    expect(res.body.transitions).toBeInstanceOf(Array);
-    expect(res.body.transitions.length).toBeGreaterThan(0);
-    expect(res.body.progression).toBeDefined();
+    expect(res.body.transport.statut).toBe("CONFIRMED");
+  });
+
+  test("CONFIRMED → SCHEDULED via PATCH /:id/schedule", async () => {
+    const app = getApp();
+    // motif "Consultation" → pas de PMT requis → transition libre
+    const t = await creerTransport({ statut: "CONFIRMED", motif: "Consultation" });
+
+    const res = await request(app)
+      .patch(`/api/transports/${t._id}/schedule`)
+      .set("Authorization", `Bearer ${global.__token__}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.transport.statut).toBe("SCHEDULED");
+  });
+
+  test("REQUESTED → CANCELLED via PATCH /:id/cancel", async () => {
+    const app = getApp();
+    const t = await creerTransport({ statut: "REQUESTED" });
+
+    const res = await request(app)
+      .patch(`/api/transports/${t._id}/cancel`)
+      .set("Authorization", `Bearer ${global.__token__}`)
+      .send({ raison: "Annulation patient" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.transport.statut).toBe("CANCELLED");
+  });
+
+  test("SCHEDULED → ASSIGNED via PATCH /:id/assign (avec véhicule + chauffeur)", async () => {
+    const app = getApp();
+    const vehicle = await creerVehicle();
+    // Récupérer l'ID du dispatcher créé dans beforeAll
+    const User = require("../../models/User");
+    const dispatcher = await User.findOne({ email: "disp@test.fr" });
+    const t = await creerTransport({ statut: "SCHEDULED" });
+
+    const res = await request(app)
+      .patch(`/api/transports/${t._id}/assign`)
+      .set("Authorization", `Bearer ${global.__token__}`)
+      .send({
+        vehiculeId: vehicle._id.toString(),
+        chauffeurId: dispatcher._id.toString(),
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.transport.statut).toBe("ASSIGNED");
+    expect(res.body.transport.vehicule).toBeTruthy();
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SUITE 3 — Récupération et liste
+// ══════════════════════════════════════════════════════════════════════════════
+describe("GET /api/transports", () => {
+  test("retourne la liste des transports", async () => {
+    const app = getApp();
+    await creerTransport();
+    await creerTransport({ motif: "Radiothérapie" });
+
+    const res = await request(app)
+      .get("/api/transports")
+      .set("Authorization", `Bearer ${global.__token__}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.transports || res.body).toBeInstanceOf(Array);
+  });
+
+  test("GET /:id retourne le transport par ID", async () => {
+    const app = getApp();
+    const t = await creerTransport();
+
+    const res = await request(app)
+      .get(`/api/transports/${t._id}`)
+      .set("Authorization", `Bearer ${global.__token__}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body._id).toBe(t._id.toString());
+    expect(res.body.patient.nom).toBe("Martin");
   });
 
   test("404 pour ID inexistant", async () => {
@@ -112,7 +241,7 @@ describe("GET /api/workflow/:id/status", () => {
     const fakeId = new mongoose.Types.ObjectId();
 
     const res = await request(app)
-      .get(`/api/workflow/${fakeId}/status`)
+      .get(`/api/transports/${fakeId}`)
       .set("Authorization", `Bearer ${global.__token__}`);
 
     expect(res.status).toBe(404);
@@ -120,154 +249,43 @@ describe("GET /api/workflow/:id/status", () => {
 
   test("401 sans token", async () => {
     const app = getApp();
-    const i = await creerIntervention();
+    const t = await creerTransport();
 
-    const res = await request(app).get(`/api/workflow/${i._id}/status`);
+    const res = await request(app).get(`/api/transports/${t._id}`);
     expect(res.status).toBe(401);
   });
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SUITE 2 — Transitions valides
+// SUITE 4 — Annulation et NO_SHOW
 // ══════════════════════════════════════════════════════════════════════════════
-describe("PATCH /api/workflow/:id/transition — transitions valides", () => {
-  test("CREATED → VALIDATED", async () => {
+describe("Cas terminaux — CANCELLED et NO_SHOW", () => {
+  test("ARRIVED_AT_PICKUP → NO_SHOW via PATCH /:id/no-show", async () => {
     const app = getApp();
-    const i = await creerIntervention({ statut: "CREATED" });
-
-    const res = await request(app)
-      .patch(`/api/workflow/${i._id}/transition`)
-      .set("Authorization", `Bearer ${global.__token__}`)
-      .send({ statut: "VALIDATED" });
-
-    expect(res.status).toBe(200);
-    expect(res.body.intervention.statut).toBe("VALIDATED");
-  });
-
-  test("VALIDATED → ASSIGNED avec unité assignée", async () => {
-    const app = getApp();
-    const unit = await creerUnite();
-    const i = await creerIntervention({
-      statut: "VALIDATED",
-      unitAssignee: unit._id,
+    const vehicle = await creerVehicle();
+    // NO_SHOW n'est accessible que depuis ARRIVED_AT_PICKUP (chauffeur arrivé mais patient absent)
+    const t = await creerTransport({
+      statut: "ARRIVED_AT_PICKUP",
+      vehicule: vehicle._id,
     });
 
     const res = await request(app)
-      .patch(`/api/workflow/${i._id}/transition`)
+      .patch(`/api/transports/${t._id}/no-show`)
       .set("Authorization", `Bearer ${global.__token__}`)
-      .send({ statut: "ASSIGNED" });
+      .send({ raison: "Patient absent au domicile" });
 
     expect(res.status).toBe(200);
-    expect(res.body.intervention.statut).toBe("ASSIGNED");
+    expect(res.body.transport.statut).toBe("NO_SHOW");
   });
 
-  test("CREATED → CANCELLED avec raison", async () => {
+  test("transport COMPLETED ne peut plus être modifié", async () => {
     const app = getApp();
-    const i = await creerIntervention({ statut: "CREATED" });
+    const t = await creerTransport({ statut: "COMPLETED" });
 
     const res = await request(app)
-      .patch(`/api/workflow/${i._id}/transition`)
-      .set("Authorization", `Bearer ${global.__token__}`)
-      .send({ statut: "CANCELLED", notes: "Fausse alerte confirmée" });
-
-    expect(res.status).toBe(200);
-    expect(res.body.intervention.statut).toBe("CANCELLED");
-  });
-
-  test("journal enregistre la transition avec utilisateur", async () => {
-    const app = getApp();
-    const Intervention = require("../../models/Intervention");
-    const i = await creerIntervention({ statut: "CREATED" });
-
-    await request(app)
-      .patch(`/api/workflow/${i._id}/transition`)
-      .set("Authorization", `Bearer ${global.__token__}`)
-      .send({ statut: "VALIDATED" });
-
-    const updated = await Intervention.findById(i._id);
-    const derniere = updated.journal[updated.journal.length - 1];
-
-    expect(derniere.de).toBe("CREATED");
-    expect(derniere.vers).toBe("VALIDATED");
-    expect(derniere.utilisateur).toBe("disp@test.fr");
-  });
-});
-
-// ══════════════════════════════════════════════════════════════════════════════
-// SUITE 3 — Transitions invalides
-// ══════════════════════════════════════════════════════════════════════════════
-describe("PATCH /api/workflow/:id/transition — transitions invalides", () => {
-  test("422 pour transition non autorisée (CREATED → COMPLETED)", async () => {
-    const app = getApp();
-    const i = await creerIntervention({ statut: "CREATED" });
-
-    const res = await request(app)
-      .patch(`/api/workflow/${i._id}/transition`)
-      .set("Authorization", `Bearer ${global.__token__}`)
-      .send({ statut: "COMPLETED" });
-
-    expect(res.status).toBe(422);
-    expect(res.body.message).toMatch(/Transition invalide/i);
-  });
-
-  test("422 si conditions non remplies (VALIDATED → ASSIGNED sans unité)", async () => {
-    const app = getApp();
-    const i = await creerIntervention({
-      statut: "VALIDATED",
-      unitAssignee: null,
-    });
-
-    const res = await request(app)
-      .patch(`/api/workflow/${i._id}/transition`)
-      .set("Authorization", `Bearer ${global.__token__}`)
-      .send({ statut: "ASSIGNED" });
-
-    expect(res.status).toBe(422);
-    expect(res.body.message).toMatch(/Conditions non remplies/i);
-  });
-
-  test("400 si statut manquant dans le body", async () => {
-    const app = getApp();
-    const i = await creerIntervention({ statut: "CREATED" });
-
-    const res = await request(app)
-      .patch(`/api/workflow/${i._id}/transition`)
-      .set("Authorization", `Bearer ${global.__token__}`)
-      .send({});
-
-    expect(res.status).toBe(400);
-  });
-
-  test("422 pour état terminal COMPLETED → VALIDATED", async () => {
-    const app = getApp();
-    const i = await creerIntervention({ statut: "COMPLETED" });
-
-    const res = await request(app)
-      .patch(`/api/workflow/${i._id}/transition`)
-      .set("Authorization", `Bearer ${global.__token__}`)
-      .send({ statut: "VALIDATED" });
-
-    expect(res.status).toBe(422);
-  });
-});
-
-// ══════════════════════════════════════════════════════════════════════════════
-// SUITE 4 — Documentation
-// ══════════════════════════════════════════════════════════════════════════════
-describe("GET /api/workflow/transitions", () => {
-  test("retourne la carte complète des transitions", async () => {
-    const app = getApp();
-
-    const res = await request(app)
-      .get("/api/workflow/transitions")
+      .patch(`/api/transports/${t._id}/confirm`)
       .set("Authorization", `Bearer ${global.__token__}`);
 
-    expect(res.status).toBe(200);
-    expect(res.body).toBeInstanceOf(Array);
-    expect(res.body.length).toBeGreaterThan(0);
-
-    const created = res.body.find((t) => t.de === "CREATED");
-    expect(created).toBeDefined();
-    expect(created.vers).toBeInstanceOf(Array);
+    expect(res.status).toBeGreaterThanOrEqual(400);
   });
 });

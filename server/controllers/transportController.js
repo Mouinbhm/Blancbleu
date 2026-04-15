@@ -153,15 +153,7 @@ const createTransport = async (req, res) => {
       createdBy: req.user._id,
     });
 
-    await audit.interventionCreee(
-      {
-        _id: transport._id,
-        numero: transport.numero,
-        priorite: transport.motif,
-        typeIncident: transport.motif,
-      },
-      req.user,
-    );
+    await audit.transportCree(transport, req.user);
 
     res.status(201).json({ message: "Transport créé", transport });
   } catch (err) {

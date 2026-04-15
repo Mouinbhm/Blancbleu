@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l c:/Users/MSI/OneDrive/Bureau/PFE/blancbleu/server/controllers/*.js)",
+      "Bash(npm install:*)",
+      "Bash(node -e \"require\\('./routes/ai.js'\\); console.log\\('OK'\\)\")",
+      "Bash(npx jest:*)",
+      "Bash(grep -v \"^$\")"
+    ]
+  }
+}

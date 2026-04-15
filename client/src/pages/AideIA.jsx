@@ -8,8 +8,7 @@
  *   3. Optimisation    — tournée journalière OR-Tools
  */
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { aiService, transportService, vehicleService } from "../services/api";
+import { aiService, transportService } from "../services/api";
 
 // ── Constantes métier ─────────────────────────────────────────────────────────
 const MOTIFS = [
@@ -86,7 +85,7 @@ function ConfidenceBadge({ value }) {
 // ════════════════════════════════════════════════════════════════════════════
 // MODULE 1 — DISPATCH IA
 // ════════════════════════════════════════════════════════════════════════════
-function ModuleDispatch({ aiStatus }) {
+function ModuleDispatch() {
   const [transports, setTransports] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [form, setForm] = useState({
@@ -533,8 +532,6 @@ function ModulePMT({ aiStatus }) {
       setValidating(false);
     }
   };
-
-  const confPct = result ? Math.round(result.confiance * 100) : 0;
 
   return (
     <div className="grid grid-cols-2 gap-6 items-start">

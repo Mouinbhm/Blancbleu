@@ -252,10 +252,11 @@ describe("GET /api/auth/me", () => {
 // SUITE 4 — Health check
 // ══════════════════════════════════════════════════════════════════════════════
 describe("GET /api/health", () => {
-  test("200 retourne statut OK", async () => {
+  test("200 retourne statut healthy ou degraded (IA optionnelle en test)", async () => {
     const app = getApp();
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe("OK");
+    expect(["healthy", "degraded"]).toContain(res.body.status);
+    expect(res.body.services.mongodb.status).toBe("healthy");
   });
 });
