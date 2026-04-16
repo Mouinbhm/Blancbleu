@@ -52,10 +52,10 @@ async def lifespan(app: FastAPI):
         import spacy
         app.state.nlp = spacy.load("fr_core_news_sm")
         logger.info("Modèle spaCy fr_core_news_sm chargé")
-    except OSError:
+    except (ImportError, OSError):
         logger.warning(
-            "Modèle spaCy fr_core_news_sm non trouvé. "
-            "Installez-le avec : python -m spacy download fr_core_news_sm"
+            "Modèle spaCy non disponible (module absent ou modèle fr_core_news_sm non trouvé). "
+            "Installez-le avec : pip install spacy && python -m spacy download fr_core_news_sm"
         )
         app.state.nlp = None
 

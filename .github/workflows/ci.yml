@@ -51,10 +51,10 @@ jobs:
           path: server/coverage/
 
   # ──────────────────────────────────────────────────────────────────────────
-  # JOB 2 — Tests IA Python
+  # JOB 2 — Tests IA (Python / FastAPI)
   # ──────────────────────────────────────────────────────────────────────────
   test-ia:
-    name: Tests IA (Python / Flask)
+    name: Tests IA (Python / FastAPI)
     runs-on: ubuntu-latest
 
     steps:
@@ -66,23 +66,14 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
+          cache-dependency-path: ai-service/requirements-ci.txt
 
-      - name: Install Python dependencies
-        working-directory: ai-Model
-        run: pip install -r requirements.txt pytest pytest-flask
-
-      - name: Train model (required for tests)
-        working-directory: ai-Model
-        run: |
-          if [ -f "data_clean.csv" ]; then
-            python train_model.py data_clean.csv
-          else
-            echo "data_clean.csv absent — tests IA skippés"
-            exit 0
-          fi
+      - name: Install Python dependencies (CI — sans binaires système)
+        working-directory: ai-service
+        run: pip install -r requirements-ci.txt
 
       - name: Run IA tests
-        working-directory: ai-Model
+        working-directory: ai-service
         run: pytest tests/test_ia.py -v --tb=short
 
   # ──────────────────────────────────────────────────────────────────────────
@@ -128,6 +119,10 @@ jobs:
         run: |
           if [[ "${{ needs.test-server.result }}" != "success" ]]; then
             echo "Tests server échoués"
+            exit 1
+          fi
+          if [[ "${{ needs.test-ia.result }}" != "success" ]]; then
+            echo "Tests IA échoués"
             exit 1
           fi
           if [[ "${{ needs.lint-client.result }}" != "success" ]]; then

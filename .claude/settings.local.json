@@ -33,7 +33,13 @@
       "Bash(curl -s -X POST http://localhost:5002/dispatch/recommend -H 'Content-Type: application/json' -d '{\"transport\":{\"_id\":null,\"motif\":\"Non pr\\\\u00e9cis\\\\u00e9\",\"mobilite\":\"ASSIS\",\"oxygene\":false,\"brancardage\":false},\"vehicules\":[{\"_id\":\"507f1f77bcf86cd799439012\",\"immatriculation\":\"AB-123-CD\",\"type\":\"VSL\",\"statut\":\"disponible\",\"capacites\":{\"fauteuil\":false,\"oxygene\":false,\"brancard\":false}}],\"chauffeurs\":[]}')",
       "Bash(curl -s -X POST http://localhost:5002/dispatch/recommend -H 'Content-Type: application/json' -d '{\"transport\":{\"_id\":null,\"motif\":\"Non pr\\\\u00e9cis\\\\u00e9\",\"mobilite\":\"ASSIS\",\"oxygene\":false,\"brancardage\":false},\"vehicules\":[{\"_id\":\"507f1f77bcf86cd799439012\",\"immatriculation\":\"AB-123-CD\",\"type\":\"VSL\",\"statut\":\"disponible\",\"position\":{\"lat\":43.71,\"lng\":7.26},\"capacites\":{\"fauteuil\":false,\"oxygene\":false,\"brancard\":false},\"ponctualite\":92}],\"chauffeurs\":[]}')",
       "Bash(curl -s -X POST http://localhost:5002/dispatch/recommend -H 'Content-Type: application/json' -d '{\"transport\":{\"motif\":\"Dialyse\",\"mobilite\":\"FAUTEUIL_ROULANT\",\"oxygene\":false,\"brancardage\":false},\"vehicules\":[{\"_id\":\"v2\",\"immatriculation\":\"CD-456-EF\",\"type\":\"TPMR\",\"statut\":\"disponible\",\"position\":{\"lat\":43.72,\"lng\":7.27},\"capacites\":{\"fauteuil\":true,\"oxygene\":false,\"brancard\":false},\"ponctualite\":88},{\"_id\":\"v3\",\"immatriculation\":\"GH-789-IJ\",\"type\":\"AMBULANCE\",\"statut\":\"disponible\",\"position\":{\"lat\":43.73,\"lng\":7.28},\"capacites\":{\"fauteuil\":false,\"oxygene\":true,\"brancard\":true},\"ponctualite\":97}],\"chauffeurs\":[]}')",
-      "Bash(powershell -Command \"Stop-Process -Id 8808 -Force\")"
+      "Bash(powershell -Command \"Stop-Process -Id 8808 -Force\")",
+      "Read(//c/Users/MSI/.claude/projects/c--Users-MSI-OneDrive-Bureau-PFE-blancbleu/memory/**)",
+      "Bash(findstr \":5000\")",
+      "Bash(tasklist /FI \"PID eq 21160\")",
+      "Bash(powershell -Command \"Get-Process -Id 21160 | Select-Object Id, ProcessName, Path\")",
+      "Bash(powershell -Command \"Stop-Process -Id 21160 -Force\")",
+      "Bash(findstr \":5000 \")"
     ]
   }
 }

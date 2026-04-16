@@ -13,7 +13,7 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 
-const { protect, authorize } = require("../middleware/Auth");
+const { protect, authorize } = require("../middleware/auth");
 const {
   extrairePMT,
   validerPMT,
