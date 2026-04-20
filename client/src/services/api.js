@@ -152,6 +152,8 @@ export const analyticsService = {
   flotte: () => api.get("/analytics/flotte"),
   historique: (jours) =>
     api.get("/analytics/historique", { params: { jours } }),
+  predictionFlotte: (jours = 7) =>
+    api.get("/analytics/prediction-flotte", { params: { jours } }),
 };
 
 // ════════════════════════════════════════════════════════════════════════════

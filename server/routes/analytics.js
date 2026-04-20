@@ -4,10 +4,11 @@
  */
 const express = require("express");
 const router = express.Router();
-const { protect } = require("../middleware/auth");
+const { protect, authorize } = require("../middleware/auth");
 const Transport = require("../models/Transport");
 const Vehicle = require("../models/Vehicle");
 const AuditLog = require("../models/AuditLog");
+const predictionService = require("../services/predictionService");
 
 function plage(jours = 30) {
   return new Date(Date.now() - jours * 24 * 60 * 60 * 1000);
@@ -277,5 +278,21 @@ router.get("/historique", protect, async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+// ── GET /api/analytics/prediction-flotte ─────────────────────────────────────
+router.get(
+  "/prediction-flotte",
+  protect,
+  authorize("superviseur", "admin"),
+  async (req, res) => {
+    try {
+      const nbJours = Math.min(parseInt(req.query.jours) || 7, 14);
+      const result = await predictionService.predireBesoinsFlotte(nbJours);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
 
 module.exports = router;

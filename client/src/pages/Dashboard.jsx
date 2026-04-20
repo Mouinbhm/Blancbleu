@@ -1,10 +1,17 @@
 // Fichier : client/src/pages/Dashboard.jsx
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import KpiCard from "../components/ui/KpiCard";
 import TransportCard from "../components/transport/TransportCard";
 import { analyticsService, vehicleService, transportService } from "../services/api";
 import useSocket from "../hooks/useSocket";
+
+const HeatmapFlotte = lazy(() =>
+  import("../components/dashboard/HeatmapFlotte"),
+);
+const AlertesFlotte = lazy(() =>
+  import("../components/dashboard/AlertesFlotte"),
+);
 
 const Spinner = () => (
   <div className="flex items-center justify-center py-12 text-slate-400 gap-3">
@@ -29,6 +36,7 @@ export default function Dashboard() {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erreur, setErreur] = useState(null);
+  const [prediction, setPrediction] = useState(null);
 
   const { connected, subscribe } = useSocket();
 
@@ -63,13 +71,28 @@ export default function Dashboard() {
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  const loadPrediction = useCallback(async () => {
+    try {
+      const res = await analyticsService.predictionFlotte(7);
+      setPrediction(res.data);
+    } catch {
+      // Prédiction non critique — silence si indisponible (ex: rôle insuffisant)
+    }
+  }, []);
 
-  // Refresh auto 60s
+  useEffect(() => { loadData(); loadPrediction(); }, [loadData, loadPrediction]);
+
+  // Refresh général 60s
   useEffect(() => {
     const iv = setInterval(loadData, 60000);
     return () => clearInterval(iv);
   }, [loadData]);
+
+  // Refresh prédiction 5 min (données moins volatiles)
+  useEffect(() => {
+    const iv = setInterval(loadPrediction, 5 * 60 * 1000);
+    return () => clearInterval(iv);
+  }, [loadPrediction]);
 
   // Temps réel : statut mis à jour
   useEffect(() => {
@@ -167,6 +190,44 @@ export default function Dashboard() {
               Voir le planning
             </button>
           </p>
+        </div>
+      )}
+
+      {/* Prévision flotte 7 jours */}
+      {prediction && (
+        <div className="mb-7 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-base">
+                insights
+              </span>
+              <h2 className="font-brand font-bold text-navy text-base uppercase tracking-tight">
+                Prévision flotte — 7 jours
+              </h2>
+            </div>
+            <button
+              onClick={() => navigate("/planning")}
+              className="text-xs text-primary font-semibold hover:underline flex items-center gap-1"
+            >
+              Voir le planning →
+            </button>
+          </div>
+
+          <Suspense
+            fallback={
+              <div className="h-32 flex items-center justify-center text-slate-400 text-sm">
+                Chargement…
+              </div>
+            }
+          >
+            <div className="mb-5">
+              <AlertesFlotte
+                predictions={prediction.predictions}
+                onVoirPlanning={() => navigate("/planning")}
+              />
+            </div>
+            <HeatmapFlotte predictions={prediction.predictions} />
+          </Suspense>
         </div>
       )}
 
