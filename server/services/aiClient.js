@@ -58,24 +58,36 @@ client.interceptors.response.use(
  * const result = await aiClient.extrairePMT(fileBuffer, 'application/pdf');
  * // result.extraction.patient.nom, result.confiance, result.validationRequise
  */
-async function extrairePMT(fichier, mimeType = "application/pdf") {
+async function extrairePMT(fichier, mimeType = "application/pdf", nomFichier = "pmt") {
   try {
     const FormData = require("form-data");
     const form = new FormData();
 
+    // Extension correcte selon le MIME pour que Tesseract identifie bien le format
+    const EXTENSIONS = {
+      "application/pdf": ".pdf",
+      "image/jpeg": ".jpg",
+      "image/jpg": ".jpg",
+      "image/png": ".png",
+      "image/tiff": ".tiff",
+    };
+    const ext = EXTENSIONS[mimeType] || ".bin";
+    const filename = nomFichier.includes(".") ? nomFichier : `pmt${ext}`;
+
     if (Buffer.isBuffer(fichier)) {
-      form.append("fichier", fichier, {
-        filename: "pmt.pdf",
+      // Le champ doit s'appeler "pmt" — c'est le nom attendu par FastAPI
+      form.append("pmt", fichier, {
+        filename,
         contentType: mimeType,
       });
     } else {
       const fs = require("fs");
-      form.append("fichier", fs.createReadStream(fichier));
+      form.append("pmt", fs.createReadStream(fichier));
     }
 
     const { data } = await client.post("/pmt/extract", form, {
       headers: form.getHeaders(),
-      timeout: 30000, // OCR peut prendre jusqu'à 30s
+      timeout: 60000, // Tesseract + PDF : jusqu'à 60s sur des documents complexes
     });
 
     return data;
@@ -83,7 +95,12 @@ async function extrairePMT(fichier, mimeType = "application/pdf") {
     if (err.code === "ECONNREFUSED" || err.code === "ENOTFOUND") {
       throw new Error("Service IA indisponible (PMT extraction)");
     }
-    throw new Error(err.response?.data?.detail || err.message);
+    // Préserver err.response pour que aiController puisse propager le bon code HTTP
+    const erreur = new Error(
+      err.response?.data?.detail || err.response?.data?.message || err.message
+    );
+    erreur.response = err.response;
+    throw erreur;
   }
 }
 

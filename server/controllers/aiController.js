@@ -38,12 +38,16 @@ const extrairePMT = async (req, res) => {
       return res.status(400).json({ message: "Fichier PMT requis (champ 'pmt')" });
     }
 
-    const result = await aiClient.extrairePMT(req.file.buffer, req.file.mimetype);
+    const result = await aiClient.extrairePMT(
+      req.file.buffer,
+      req.file.mimetype,
+      req.file.originalname || "pmt",
+    );
 
     // Journaliser l'extraction (données de santé — audit RGPD)
     if (req.body.transportId) {
       const Transport = require("../models/Transport");
-      const transport = await Transport.findById(req.body.transportId);
+      const transport = await Transport.findById(String(req.body.transportId));
       if (transport) {
         await audit.pmtExtraite(transport, result.extraction, result.confiance);
 
@@ -60,8 +64,8 @@ const extrairePMT = async (req, res) => {
 
     return res.json(result);
   } catch (err) {
-    // Fallback : renvoyer une structure vide avec indication de validation manuelle
-    if (err.message.includes("indisponible")) {
+    // Microservice non démarré → 503 avec structure de fallback
+    if (err.message?.includes("indisponible")) {
       return res.status(503).json({
         message: "Service OCR temporairement indisponible",
         fallback: true,
@@ -69,7 +73,13 @@ const extrairePMT = async (req, res) => {
         validationRequise: true,
       });
     }
-    return res.status(500).json({ message: err.message });
+    // Propager le code HTTP retourné par FastAPI (422, 400, 500…)
+    const status = err.response?.status || 500;
+    const message =
+      err.response?.data?.detail ||
+      err.response?.data?.message ||
+      err.message;
+    return res.status(status).json({ message: `Erreur microservice IA : ${message}` });
   }
 };
 

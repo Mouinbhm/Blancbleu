@@ -45,7 +45,10 @@
       "Bash(node --check services/transportLifecycle.js)",
       "Bash(node --check routes/vehicles.js)",
       "Bash(node --check controllers/transportController.js)",
-      "Bash(node --check routes/transports.js)"
+      "Bash(node --check routes/transports.js)",
+      "Bash(node --check \"c:\\\\Users\\\\MSI\\\\OneDrive\\\\Bureau\\\\PFE\\\\blancbleu\\\\server\\\\scripts\\\\fix-vehicles.js\")",
+      "Bash(node --check \"c:\\\\Users\\\\MSI\\\\OneDrive\\\\Bureau\\\\PFE\\\\blancbleu\\\\server\\\\services\\\\aiClient.js\")",
+      "Bash(node --check \"c:\\\\Users\\\\MSI\\\\OneDrive\\\\Bureau\\\\PFE\\\\blancbleu\\\\server\\\\controllers\\\\aiController.js\")"
     ]
   }
 }

@@ -103,8 +103,11 @@ function ModuleDispatch() {
 
   useEffect(() => {
     transportService
-      .getAll({ statut: "CONFIRMED,SCHEDULED", limit: 50 })
-      .then(({ data }) => setTransports(data.transports || data || []))
+      .getAll({ statut: "REQUESTED,CONFIRMED,SCHEDULED,ASSIGNED", limit: 50 })
+      .then(({ data }) => {
+        const liste = data?.transports || data?.data || data || [];
+        setTransports(Array.isArray(liste) ? liste : []);
+      })
       .catch(() => {});
   }, []);
 
@@ -134,7 +137,7 @@ function ModuleDispatch() {
     }
   };
 
-  const selectedTransport = transports.find((t) => t._id === selectedId);
+  const selectedTransport = transports.find((t) => String(t._id || t.id) === selectedId);
 
   return (
     <div className="grid grid-cols-2 gap-6 items-start">
@@ -172,15 +175,14 @@ function ModuleDispatch() {
 
             {!useManual ? (
               <select
-                value={selectedId}
+                value={String(selectedId || "")}
                 onChange={(e) => setSelectedId(e.target.value)}
                 className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-navy outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 bg-surface transition-all"
               >
                 <option value="">Sélectionner un transport...</option>
                 {transports.map((t) => (
-                  <option key={t._id} value={t._id}>
-                    {t.numero} — {t.patient?.nom} {t.patient?.prenom} —{" "}
-                    {t.motif} ({t.statut})
+                  <option key={String(t._id || t.id)} value={String(t._id || t.id)}>
+                    {t.numero} — {t.patient?.nom} {t.patient?.prenom} — {t.motif} ({t.statut})
                   </option>
                 ))}
               </select>
@@ -481,8 +483,11 @@ function ModulePMT({ aiStatus }) {
 
   useEffect(() => {
     transportService
-      .getAll({ statut: "REQUESTED,CONFIRMED", limit: 50 })
-      .then(({ data }) => setTransports(data.transports || data || []))
+      .getAll({ statut: "REQUESTED,CONFIRMED,SCHEDULED,ASSIGNED", limit: 50 })
+      .then(({ data }) => {
+        const liste = data?.transports || data?.data || data || [];
+        setTransports(Array.isArray(liste) ? liste : []);
+      })
       .catch(() => {});
   }, []);
 
@@ -504,7 +509,7 @@ function ModulePMT({ aiStatus }) {
     try {
       const formData = new FormData();
       formData.append("pmt", file);
-      if (transportId) formData.append("transportId", transportId);
+      if (transportId) formData.append("transportId", String(transportId));
       const { data } = await aiService.extrairePMT(formData);
       setResult(data);
     } catch (err) {
@@ -557,14 +562,14 @@ function ModulePMT({ aiStatus }) {
               Transport associé (optionnel)
             </label>
             <select
-              value={transportId}
+              value={String(transportId || "")}
               onChange={(e) => setTransportId(e.target.value)}
               className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-navy outline-none focus:border-primary bg-surface"
             >
               <option value="">Lier à un transport...</option>
               {transports.map((t) => (
-                <option key={t._id} value={t._id}>
-                  {t.numero} — {t.patient?.nom} {t.patient?.prenom}
+                <option key={String(t._id || t.id)} value={String(t._id || t.id)}>
+                  {t.numero} — {t.patient?.nom} {t.patient?.prenom} | {t.motif} | {t.dateTransport ? new Date(t.dateTransport).toLocaleDateString("fr-FR") : "—"}
                 </option>
               ))}
             </select>
