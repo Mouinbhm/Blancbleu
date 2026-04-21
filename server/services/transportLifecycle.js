@@ -349,6 +349,81 @@ async function completerTransport(transportId, utilisateur) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// 8b. ATTENTE À DESTINATION (dialyse, chimio, rééducation…)
+//     Statut optionnel — le véhicule reste en mission pendant toute l'attente.
+// ══════════════════════════════════════════════════════════════════════════════
+async function demarrerAttenteDestination(
+  transportId,
+  dureeAttenteMinutes,
+  utilisateur,
+) {
+  // Persister la durée estimée avant la transition (best-effort)
+  if (dureeAttenteMinutes != null) {
+    await Transport.findByIdAndUpdate(transportId, { dureeAttenteMinutes });
+  }
+
+  const transport = await _transition(transportId, "WAITING_AT_DESTINATION", {
+    utilisateur: utilisateur.email,
+    notes: dureeAttenteMinutes
+      ? `Attente estimée : ${dureeAttenteMinutes} min`
+      : "Attente à destination démarrée",
+    dureeAttenteMinutes,
+  });
+
+  // Le véhicule reste en statut "en_mission" — pas de modification ici.
+  logger.info("Attente à destination démarrée", {
+    numero: transport.numero,
+    dureeEstimeeMin: dureeAttenteMinutes ?? "non renseignée",
+  });
+  return { transport };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 8c. RETOUR BASE — trajet chauffeur après dépôt du patient
+//     Met à jour vehicle.kilometrage via Haversine (destination → départ).
+//     Le véhicule reste en mission jusqu'à la complétion.
+// ══════════════════════════════════════════════════════════════════════════════
+async function demarrerRetourBase(transportId, positionActuelle, utilisateur) {
+  const transport = await Transport.findById(transportId).populate(
+    "vehicule",
+    "kilometrage statut",
+  );
+  if (!transport) throw new Error("Transport introuvable");
+
+  // Calculer la distance de retour : position actuelle (ou destination) → départ
+  const posRef = positionActuelle?.lat
+    ? positionActuelle
+    : transport.adresseDestination?.coordonnees;
+  const posBase = transport.adresseDepart?.coordonnees;
+
+  if (posRef?.lat && posBase?.lat && transport.vehicule) {
+    const distRetourKm = haversine(
+      posRef.lat,
+      posRef.lng,
+      posBase.lat,
+      posBase.lng,
+    );
+    await Vehicle.findByIdAndUpdate(transport.vehicule._id, {
+      kilometrage:
+        Math.round(((transport.vehicule.kilometrage || 0) + distRetourKm) * 10) /
+        10,
+    });
+    logger.info("Kilométrage retour mis à jour", {
+      numero: transport.numero,
+      distRetourKm: Math.round(distRetourKm * 10) / 10,
+    });
+  }
+
+  const updated = await _transition(transportId, "RETURN_TO_BASE", {
+    utilisateur: utilisateur.email,
+    notes: "Retour base en cours",
+  });
+
+  logger.info("Retour base démarré", { numero: transport.numero });
+  return { transport: updated };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // 9. NO-SHOW (patient absent)
 // ══════════════════════════════════════════════════════════════════════════════
 async function marquerNoShow(transportId, raison, utilisateur) {
@@ -444,6 +519,51 @@ async function reprogrammerTransport(
   return { transport: updated };
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// 12. CLÔTURE FINANCIÈRE — BILLED (superviseur/admin uniquement)
+//     Le contrôleur doit vérifier le rôle avant d'appeler cette fonction.
+// ══════════════════════════════════════════════════════════════════════════════
+async function cloturerFacturation(transportId, factureId, utilisateur) {
+  const transport = await Transport.findById(transportId);
+  if (!transport) throw new Error("Transport introuvable");
+
+  // Associer la facture sur le document avant la transition
+  // (le validateur COMPLETED_BILLED inspecte transport.facture)
+  if (factureId) {
+    transport.facture = factureId;
+    transport._factureIdTemp = factureId; // flag pour le validateur in-memory
+    await transport.save();
+  }
+
+  const updated = await _transition(transportId, "BILLED", {
+    utilisateur: utilisateur.email,
+    notes: `Clôture CPAM — facture ${factureId || transport.facture}`,
+    factureId: factureId || transport.facture,
+  });
+
+  await log({
+    action: "STATUT_CHANGED",
+    origine: "HUMAIN",
+    utilisateur,
+    ressource: {
+      type: "Transport",
+      id: transport._id,
+      reference: transport.numero,
+    },
+    details: {
+      avant: { statut: "COMPLETED" },
+      apres: { statut: "BILLED" },
+      message: `Transport ${transport.numero} facturé (CPAM)`,
+    },
+  });
+
+  logger.info("Transport facturé (BILLED)", {
+    numero: transport.numero,
+    factureId: factureId || transport.facture,
+  });
+  return { transport: updated };
+}
+
 module.exports = {
   confirmerTransport,
   planifierTransport,
@@ -452,7 +572,10 @@ module.exports = {
   marquerArriveePatient,
   marquerPatientABord,
   marquerArriveeDestination,
+  demarrerAttenteDestination,
+  demarrerRetourBase,
   completerTransport,
+  cloturerFacturation,
   marquerNoShow,
   annulerTransport,
   reprogrammerTransport,

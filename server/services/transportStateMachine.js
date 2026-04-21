@@ -7,12 +7,18 @@
  * FLUX NOMINAL :
  *  REQUESTED → CONFIRMED → SCHEDULED → ASSIGNED
  *    → EN_ROUTE_TO_PICKUP → ARRIVED_AT_PICKUP
- *    → PATIENT_ON_BOARD → ARRIVED_AT_DESTINATION → COMPLETED
+ *    → PATIENT_ON_BOARD → ARRIVED_AT_DESTINATION
+ *    → [WAITING_AT_DESTINATION →] RETURN_TO_BASE → COMPLETED → BILLED
  *
  * STATUTS ALTERNATIFS :
  *  → CANCELLED   (depuis tout statut non terminal)
  *  → NO_SHOW     (depuis ARRIVED_AT_PICKUP uniquement)
  *  → RESCHEDULED (depuis CONFIRMED, SCHEDULED, NO_SHOW)
+ *
+ * NOUVEAUX STATUTS (v1.1) :
+ *  WAITING_AT_DESTINATION — attente sur place (dialyse, chimio…) — OPTIONNEL
+ *  RETURN_TO_BASE         — trajet retour chauffeur vers la base
+ *  BILLED                 — clôture financière CPAM (superviseur/admin uniquement)
  */
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -27,7 +33,12 @@ const STATUTS = {
   ARRIVED_AT_PICKUP: "ARRIVED_AT_PICKUP",
   PATIENT_ON_BOARD: "PATIENT_ON_BOARD",
   ARRIVED_AT_DESTINATION: "ARRIVED_AT_DESTINATION",
+  // ── Nouveaux statuts v1.1 ─────────────────────────────────────────────────
+  WAITING_AT_DESTINATION: "WAITING_AT_DESTINATION", // attente sur place (optionnel)
+  RETURN_TO_BASE: "RETURN_TO_BASE",                  // trajet retour chauffeur
   COMPLETED: "COMPLETED",
+  BILLED: "BILLED",                                  // clôture CPAM (terminal)
+  // ── Statuts alternatifs ───────────────────────────────────────────────────
   CANCELLED: "CANCELLED",
   NO_SHOW: "NO_SHOW",
   RESCHEDULED: "RESCHEDULED",
@@ -44,8 +55,14 @@ const TRANSITIONS = {
   EN_ROUTE_TO_PICKUP: ["ARRIVED_AT_PICKUP", "CANCELLED"],
   ARRIVED_AT_PICKUP: ["PATIENT_ON_BOARD", "NO_SHOW"],
   PATIENT_ON_BOARD: ["ARRIVED_AT_DESTINATION"],
-  ARRIVED_AT_DESTINATION: ["COMPLETED"],
-  COMPLETED: [], // terminal
+  // WAITING_AT_DESTINATION est optionnel : transition directe vers RETURN_TO_BASE
+  // ou COMPLETED toujours possible (rétrocompatibilité avec l'existant)
+  ARRIVED_AT_DESTINATION: ["WAITING_AT_DESTINATION", "RETURN_TO_BASE", "COMPLETED", "CANCELLED"],
+  WAITING_AT_DESTINATION: ["RETURN_TO_BASE", "CANCELLED"],
+  RETURN_TO_BASE: ["COMPLETED", "CANCELLED"],
+  // COMPLETED peut progresser vers BILLED (clôture financière superviseur)
+  COMPLETED: ["BILLED"],
+  BILLED: [],    // terminal — clôture CPAM définitive
   CANCELLED: [], // terminal
   NO_SHOW: ["RESCHEDULED"],
   RESCHEDULED: ["CONFIRMED"],
@@ -75,7 +92,18 @@ const LABELS = {
     color: "teal",
     icon: "local_hospital",
   },
+  WAITING_AT_DESTINATION: {
+    fr: "Attente à destination",
+    color: "cyan",
+    icon: "hourglass_top",
+  },
+  RETURN_TO_BASE: {
+    fr: "Retour base",
+    color: "indigo",
+    icon: "home_work",
+  },
   COMPLETED: { fr: "Transport terminé", color: "green", icon: "done_all" },
+  BILLED: { fr: "Facturé CPAM", color: "emerald", icon: "receipt_long" },
   CANCELLED: { fr: "Annulé", color: "red", icon: "cancel" },
   NO_SHOW: { fr: "Patient absent", color: "pink", icon: "person_off" },
   RESCHEDULED: { fr: "Reprogrammé", color: "amber", icon: "event_repeat" },
@@ -92,7 +120,10 @@ const TIMESTAMPS = {
   ARRIVED_AT_PICKUP: "heurePriseEnCharge",
   PATIENT_ON_BOARD: "heurePriseEnCharge",
   ARRIVED_AT_DESTINATION: "heureArriveeDestination",
+  WAITING_AT_DESTINATION: "heureDebutAttente",  // début de l'attente sur place
+  RETURN_TO_BASE: "heureDepartRetour",           // départ retour vers la base
   COMPLETED: "heureTerminee",
+  BILLED: "heureFacturation",                    // clôture financière
   CANCELLED: "heureAnnulation",
   NO_SHOW: "heureAnnulation",
   RESCHEDULED: "heureReprogrammation",
@@ -137,12 +168,21 @@ const VALIDATEURS = {
     return errors;
   },
 
-  // Complétion : heure d'arrivée requise
+  // Complétion directe depuis ARRIVED_AT_DESTINATION : heure d'arrivée requise
   ARRIVED_AT_DESTINATION_COMPLETED: (transport) => {
     const errors = [];
     if (!transport.heureArriveeDestination)
       errors.push("Heure d'arrivée à destination non renseignée");
     return errors;
+  },
+
+  // Clôture financière : facture associée obligatoire
+  // (le contrôleur vérifie en amont que l'utilisateur est superviseur/admin)
+  COMPLETED_BILLED: (transport) => {
+    if (!transport.facture && !transport._factureIdTemp) {
+      return ["Facture associée obligatoire pour la clôture CPAM"];
+    }
+    return [];
   },
 
   // Reprogrammation : raison obligatoire
@@ -185,6 +225,8 @@ class TransportStateMachine {
       raisonNoShow,
       raisonReprogrammation,
       nouvelleDate,
+      dureeAttenteMinutes, // durée estimée de l'attente à destination (minutes)
+      factureId,           // référence facture pour la clôture BILLED
     } = metadata;
 
     // 1. Vérifier autorisation
@@ -195,8 +237,9 @@ class TransportStateMachine {
       );
     }
 
-    // 2. Injecter raison pour validation
+    // 2. Injecter les champs temporaires pour les validateurs
     if (raisonReprogrammation) transport._raisonTemp = raisonReprogrammation;
+    if (factureId) transport._factureIdTemp = factureId;
 
     // 3. Valider conditions métier
     const erreurs = this.validerTransition(transport, nouveauStatut);
@@ -213,6 +256,13 @@ class TransportStateMachine {
 
     // 5. Champs spécifiques selon transition
     switch (nouveauStatut) {
+      // Durée estimée d'attente saisie par le chauffeur (optionnelle)
+      case "WAITING_AT_DESTINATION":
+        if (dureeAttenteMinutes != null) {
+          update.dureeAttenteMinutes = dureeAttenteMinutes;
+        }
+        break;
+
       case "COMPLETED":
         if (transport.heureEnRoute) {
           update.dureeReelleMinutes = Math.round(
@@ -220,6 +270,12 @@ class TransportStateMachine {
           );
         }
         break;
+
+      // Associer la facture lors de la clôture financière
+      case "BILLED":
+        if (factureId) update.facture = factureId;
+        break;
+
       case "CANCELLED":
         update.raisonAnnulation =
           raisonAnnulation || notes || "Annulé par l'opérateur";
@@ -256,25 +312,32 @@ class TransportStateMachine {
   }
 
   static progression(statut) {
+    // Flux nominal complet incluant les nouveaux statuts v1.1.
+    // WAITING_AT_DESTINATION est optionnel dans le flux réel, mais inclus
+    // dans l'échelle de progression pour cohérence visuelle.
     const ordre = [
-      "REQUESTED",
-      "CONFIRMED",
-      "SCHEDULED",
-      "ASSIGNED",
-      "EN_ROUTE_TO_PICKUP",
-      "ARRIVED_AT_PICKUP",
-      "PATIENT_ON_BOARD",
-      "ARRIVED_AT_DESTINATION",
-      "COMPLETED",
+      "REQUESTED",              // 0%
+      "CONFIRMED",              // 9%
+      "SCHEDULED",              // 18%
+      "ASSIGNED",               // 27%
+      "EN_ROUTE_TO_PICKUP",     // 36%
+      "ARRIVED_AT_PICKUP",      // 45%
+      "PATIENT_ON_BOARD",       // 55%
+      "ARRIVED_AT_DESTINATION", // 64%
+      "WAITING_AT_DESTINATION", // 73%
+      "RETURN_TO_BASE",         // 82%
+      "COMPLETED",              // 91%
+      "BILLED",                 // 100%
     ];
     const idx = ordre.indexOf(statut);
-    if (idx === -1 || ["CANCELLED", "NO_SHOW", "RESCHEDULED"].includes(statut))
-      return null;
+    if (idx === -1) return null; // CANCELLED, NO_SHOW, RESCHEDULED → null
     return Math.round((idx / (ordre.length - 1)) * 100);
   }
 
   static estTerminal(statut) {
-    return ["COMPLETED", "CANCELLED", "NO_SHOW"].includes(statut);
+    // COMPLETED n'est plus terminal : il peut progresser vers BILLED.
+    // BILLED est le seul terminal du flux nominal (clôture CPAM définitive).
+    return ["BILLED", "CANCELLED", "NO_SHOW"].includes(statut);
   }
 }
 

@@ -152,11 +152,18 @@ const transportSchema = new mongoose.Schema(
     heureEnRoute: { type: Date },
     heurePriseEnCharge: { type: Date },
     heureArriveeDestination: { type: Date },
+    // ── Nouveaux horodatages v1.1 ─────────────────────────────────────────
+    heureDebutAttente: { type: Date },    // WAITING_AT_DESTINATION
+    heureDepartRetour: { type: Date },    // RETURN_TO_BASE
+    heureFacturation: { type: Date },     // BILLED
+    // ─────────────────────────────────────────────────────────────────────
     heureTerminee: { type: Date },
     heureAnnulation: { type: Date },
     heureReprogrammation: { type: Date },
 
     dureeReelleMinutes: { type: Number, default: null },
+    // Durée estimée de l'attente sur place (saisie chauffeur, en minutes)
+    dureeAttenteMinutes: { type: Number, default: null },
 
     // ── Aller-retour ──────────────────────────────────────────────────────────
     transportRetour: {
@@ -233,22 +240,19 @@ transportSchema.virtual("label").get(function () {
   return LABELS[this.statut]?.fr || this.statut;
 });
 transportSchema.virtual("progression").get(function () {
+  // Miroir exact de TransportStateMachine.progression() — mis à jour en v1.1
   const ordre = [
-    "REQUESTED",
-    "CONFIRMED",
-    "SCHEDULED",
-    "ASSIGNED",
-    "EN_ROUTE_TO_PICKUP",
-    "ARRIVED_AT_PICKUP",
-    "PATIENT_ON_BOARD",
-    "ARRIVED_AT_DESTINATION",
-    "COMPLETED",
+    "REQUESTED", "CONFIRMED", "SCHEDULED", "ASSIGNED",
+    "EN_ROUTE_TO_PICKUP", "ARRIVED_AT_PICKUP", "PATIENT_ON_BOARD",
+    "ARRIVED_AT_DESTINATION", "WAITING_AT_DESTINATION", "RETURN_TO_BASE",
+    "COMPLETED", "BILLED",
   ];
   const idx = ordre.indexOf(this.statut);
   return idx === -1 ? null : Math.round((idx / (ordre.length - 1)) * 100);
 });
 transportSchema.virtual("estTermine").get(function () {
-  return ["COMPLETED", "CANCELLED", "NO_SHOW"].includes(this.statut);
+  // Inclut COMPLETED (opérationnellement terminé) et BILLED (financièrement clos)
+  return ["COMPLETED", "BILLED", "CANCELLED", "NO_SHOW"].includes(this.statut);
 });
 transportSchema.set("toJSON", { virtuals: true });
 transportSchema.set("toObject", { virtuals: true });
