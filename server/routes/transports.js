@@ -30,6 +30,9 @@ router.patch("/:id/arrived", protect, ctrl.arriveePatient); // arrivé chez pati
 router.patch("/:id/on-board", protect, ctrl.patientABord);
 router.patch("/:id/destination", protect, ctrl.arriveeDestination);
 router.patch("/:id/complete", protect, ctrl.completer);
+router.patch("/:id/wait", protect, ctrl.demarrerAttente); // body: { dureeAttenteMinutes? }
+router.patch("/:id/return-base", protect, ctrl.demarrerRetour); // body: { position? }
+router.patch("/:id/bill", protect, ctrl.facturer); // body: { factureId } — superviseur/admin only
 router.patch("/:id/no-show", protect, ctrl.noShow); // body: { raison }
 router.patch("/:id/cancel", protect, ctrl.annuler); // body: { raison }
 router.patch("/:id/reschedule", protect, ctrl.reprogrammer); // body: { nouvelleDate, raison }

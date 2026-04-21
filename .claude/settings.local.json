@@ -39,7 +39,13 @@
       "Bash(tasklist /FI \"PID eq 21160\")",
       "Bash(powershell -Command \"Get-Process -Id 21160 | Select-Object Id, ProcessName, Path\")",
       "Bash(powershell -Command \"Stop-Process -Id 21160 -Force\")",
-      "Bash(findstr \":5000 \")"
+      "Bash(findstr \":5000 \")",
+      "Bash(node --check scripts/fix-vehicles.js)",
+      "Bash(node --check Server.js)",
+      "Bash(node --check services/transportLifecycle.js)",
+      "Bash(node --check routes/vehicles.js)",
+      "Bash(node --check controllers/transportController.js)",
+      "Bash(node --check routes/transports.js)"
     ]
   }
 }

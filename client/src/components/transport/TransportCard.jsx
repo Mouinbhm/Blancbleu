@@ -74,7 +74,7 @@ export default function TransportCard({ transport, onRefresh }) {
 
   return (
     <div
-      onClick={() => navigate(`/transports/${transport._id}`)}
+      onClick={() => navigate(`/transports/${String(transport._id || transport.id)}`)}
       className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-all cursor-pointer group"
     >
       {/* En-tête */}

@@ -6,8 +6,12 @@ const express = require("express");
 const router = express.Router();
 const { protect, authorize } = require("../middleware/auth");
 const Vehicle = require("../models/Vehicle");
+const Transport = require("../models/Transport");
 const socketService = require("../services/socketService");
 const { audit } = require("../services/auditService");
+
+// Statuts indiquant qu'un transport est terminé (véhicule devrait être libre)
+const STATUTS_TERMINES = ["COMPLETED", "CANCELLED", "NO_SHOW", "BILLED"];
 
 // ── GET /api/vehicles ─────────────────────────────────────────────────────────
 router.get("/", protect, async (req, res) => {
@@ -57,6 +61,64 @@ router.get("/stats", protect, async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+// ── GET /api/vehicles/diagnostic ─────────────────────────────────────────────
+// Rapport d'incohérence entre le statut des véhicules et l'état de leurs transports.
+// Lecture seule — ne modifie rien en base.
+router.get(
+  "/diagnostic",
+  protect,
+  authorize("admin", "superviseur"),
+  async (req, res) => {
+    try {
+      const vehiculesEnMission = await Vehicle.find({
+        statut: "en_mission",
+        deletedAt: null,
+      })
+        .populate("transportEnCours", "numero statut dateTransport")
+        .lean();
+
+      const vehiculesBloqués = [];
+
+      for (const v of vehiculesEnMission) {
+        let probleme = null;
+
+        if (!v.transportEnCours) {
+          probleme = "Aucun transport lié";
+        } else if (STATUTS_TERMINES.includes(v.transportEnCours.statut)) {
+          probleme = "Transport terminé mais véhicule non libéré";
+        }
+
+        if (probleme) {
+          vehiculesBloqués.push({
+            vehiculeId: v._id,
+            immatriculation: v.immatriculation,
+            nom: v.nom,
+            type: v.type,
+            statutVehicule: v.statut,
+            transportEnCours: v.transportEnCours
+              ? {
+                  numero: v.transportEnCours.numero,
+                  statut: v.transportEnCours.statut,
+                  dateTransport: v.transportEnCours.dateTransport,
+                }
+              : null,
+            probleme,
+          });
+        }
+      }
+
+      res.json({
+        vehiculesBloqués,
+        totalEnMission: vehiculesEnMission.length,
+        totalBloqués: vehiculesBloqués.length,
+        totalSains: vehiculesEnMission.length - vehiculesBloqués.length,
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+);
 
 // ── GET /api/vehicles/:id ─────────────────────────────────────────────────────
 router.get("/:id", protect, async (req, res) => {

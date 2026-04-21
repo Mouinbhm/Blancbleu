@@ -220,7 +220,7 @@ export default function Planning() {
                   return (
                     <div
                       key={t._id}
-                      onClick={() => navigate(`/transports/${t._id}`)}
+                      onClick={() => navigate(`/transports/${String(t._id || t.id)}`)}
                       className={`flex items-center gap-4 px-5 py-4 hover:bg-surface cursor-pointer transition-colors ${
                         sansVehicule ? "border-l-4 border-l-amber-400" : ""
                       }`}
@@ -329,7 +329,7 @@ export default function Planning() {
                 {nonAssignes.map((t) => (
                   <div
                     key={t._id}
-                    onClick={() => navigate(`/transports/${t._id}`)}
+                    onClick={() => navigate(`/transports/${String(t._id || t.id)}`)}
                     className="px-4 py-3 hover:bg-surface cursor-pointer transition-colors"
                   >
                     <p className="text-sm font-semibold text-navy">

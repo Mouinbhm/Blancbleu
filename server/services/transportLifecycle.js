@@ -47,6 +47,34 @@ async function _transition(transportId, nouveauStatut, metadata = {}) {
   transport.journal.push(entreeJournal);
   await transport.save();
 
+  // ── Garde-fou : libération automatique du véhicule ────────────────────────
+  // Garantit que le véhicule est libéré dès que la transition est persistée,
+  // même si la fonction appelante (completerTransport, annulerTransport…) échoue
+  // après ce point. Idempotent : re-libérer un véhicule déjà disponible est sans effet.
+  if (["COMPLETED", "CANCELLED", "NO_SHOW"].includes(nouveauStatut)) {
+    const vehiculeId = transport.vehicule?._id ?? transport.vehicule;
+    if (vehiculeId) {
+      try {
+        await Vehicle.findByIdAndUpdate(vehiculeId, {
+          statut: "disponible",
+          transportEnCours: null,
+        });
+        logger.info("Véhicule libéré (garde-fou lifecycle)", {
+          vehiculeId,
+          transport: transport.numero,
+          nouveauStatut,
+        });
+      } catch (errLiberation) {
+        // Non bloquant — la transition est déjà sauvegardée
+        logger.warn("Garde-fou : échec libération véhicule", {
+          vehiculeId,
+          transport: transport.numero,
+          err: errLiberation.message,
+        });
+      }
+    }
+  }
+
   // Émettre événement Socket.IO
   socketService.emitStatusUpdated?.({
     intervention: {

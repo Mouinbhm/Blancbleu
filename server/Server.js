@@ -89,12 +89,88 @@ app.use((err, req, res, next) => {
 // ─── Export pour tests ────────────────────────────────────────────────────────
 module.exports = app;
 
+// ── Nettoyage des véhicules bloqués ──────────────────────────────────────────
+// Libère les véhicules restés en statut "en_mission" après la fin de leur
+// transport. Conçu pour être idempotent et non-bloquant.
+async function nettoyerVehiculesBloqués() {
+  // Import local pour éviter les dépendances circulaires au chargement
+  const Vehicle = require("./models/Vehicle");
+  const Transport = require("./models/Transport");
+
+  const STATUTS_TERMINES = ["COMPLETED", "CANCELLED", "NO_SHOW", "BILLED"];
+  const vehiculesEnMission = await Vehicle.find({
+    statut: "en_mission",
+    deletedAt: null,
+  });
+
+  let liberes = 0;
+
+  for (const vehicule of vehiculesEnMission) {
+    let doitLiberer = false;
+    let raison = "";
+
+    if (!vehicule.transportEnCours) {
+      doitLiberer = true;
+      raison = "aucun transport associé";
+    } else {
+      const transport = await Transport.findById(
+        vehicule.transportEnCours,
+      ).select("numero statut");
+
+      if (!transport) {
+        doitLiberer = true;
+        raison = "transport introuvable en base";
+      } else if (STATUTS_TERMINES.includes(transport.statut)) {
+        doitLiberer = true;
+        raison = `transport ${transport.numero} terminé (${transport.statut})`;
+      }
+    }
+
+    if (doitLiberer) {
+      await Vehicle.findByIdAndUpdate(vehicule._id, {
+        statut: "disponible",
+        transportEnCours: null,
+      });
+      logger.info("Véhicule débloqué automatiquement", {
+        vehicule: vehicule.nom,
+        immatriculation: vehicule.immatriculation,
+        raison,
+      });
+      liberes++;
+    }
+  }
+
+  if (liberes > 0 || vehiculesEnMission.length > 0) {
+    logger.info("Nettoyage véhicules terminé", {
+      verifies: vehiculesEnMission.length,
+      liberes,
+    });
+  }
+}
+
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   mongoose
     .connect(process.env.MONGO_URI)
     .then(() => {
       logger.info("MongoDB connecté");
+
+      // Nettoyage immédiat au démarrage (non bloquant)
+      nettoyerVehiculesBloqués().catch((err) =>
+        logger.warn("Nettoyage initial des véhicules échoué", {
+          err: err.message,
+        }),
+      );
+
+      // Nettoyage périodique toutes les heures
+      setInterval(() => {
+        nettoyerVehiculesBloqués().catch((err) =>
+          logger.warn("Nettoyage périodique des véhicules échoué", {
+            err: err.message,
+          }),
+        );
+      }, 60 * 60 * 1000);
+
       server.listen(PORT, () => {
         logger.info(`BlancBleu Transport démarré`, { port: PORT });
         if (process.env.NODE_ENV !== "production") {

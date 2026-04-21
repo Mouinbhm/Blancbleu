@@ -499,6 +499,48 @@ const reprogrammer = async (req, res) => {
   }
 };
 
+const demarrerAttente = async (req, res) => {
+  try {
+    const r = await lifecycle.demarrerAttenteDestination(
+      req.params.id,
+      req.body.dureeAttenteMinutes != null ? parseInt(req.body.dureeAttenteMinutes) : null,
+      req.user,
+    );
+    res.json(r);
+  } catch (e) {
+    _handleErr(res, e);
+  }
+};
+
+const demarrerRetour = async (req, res) => {
+  try {
+    const r = await lifecycle.demarrerRetourBase(
+      req.params.id,
+      req.body.position || null,
+      req.user,
+    );
+    res.json(r);
+  } catch (e) {
+    _handleErr(res, e);
+  }
+};
+
+const facturer = async (req, res) => {
+  if (!["superviseur", "admin"].includes(req.user?.role)) {
+    return res.status(403).json({ message: "Clôture CPAM réservée aux superviseurs et administrateurs" });
+  }
+  try {
+    const r = await lifecycle.cloturerFacturation(
+      req.params.id,
+      req.body.factureId,
+      req.user,
+    );
+    res.json(r);
+  } catch (e) {
+    _handleErr(res, e);
+  }
+};
+
 function _handleErr(res, e) {
   if (e.message?.includes("introuvable"))
     return res.status(404).json({ message: e.message });
@@ -532,4 +574,7 @@ module.exports = {
   noShow,
   annuler,
   reprogrammer,
+  demarrerAttente,
+  demarrerRetour,
+  facturer,
 };
