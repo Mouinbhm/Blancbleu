@@ -14,6 +14,8 @@ import TransportDetail from "./pages/TransportDetail";
 import Flotte from "./pages/Flotte";
 import Planning from "./pages/Planning";
 import Patients from "./pages/Patients";
+import Prescriptions from "./pages/Prescriptions";
+import Missions from "./pages/Missions";
 import Personnel from "./pages/Personnel";
 import Equipements from "./pages/Equipements";
 import Maintenances from "./pages/Maintenances";
@@ -42,9 +44,11 @@ function App() {
             <Route path="/transports" element={<Transports />} />
             <Route path="/transports/new" element={<NouveauTransport />} />
             <Route path="/transports/:id" element={<TransportDetail />} />
+            <Route path="/missions" element={<Missions />} />
             <Route path="/flotte" element={<Flotte />} />
             <Route path="/planning" element={<Planning />} />
             <Route path="/patients" element={<Patients />} />
+            <Route path="/prescriptions" element={<Prescriptions />} />
             <Route path="/personnel" element={<Personnel />} />
             <Route path="/equipements" element={<Equipements />} />
             <Route path="/maintenances" element={<Maintenances />} />
