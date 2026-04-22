@@ -269,6 +269,45 @@ export const factureService = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
+// PATIENTS
+// ════════════════════════════════════════════════════════════════════════════
+export const patientService = {
+  getAll: (params = {}) => api.get("/patients", { params }),
+  getOne: (id) => api.get(`/patients/${id}`),
+  getStats: () => api.get("/patients/stats"),
+  create: (data) => api.post("/patients", data),
+  update: (id, data) => api.patch(`/patients/${id}`, data),
+  delete: (id) => api.delete(`/patients/${id}`),
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// PRESCRIPTIONS (PMT)
+// ════════════════════════════════════════════════════════════════════════════
+export const prescriptionService = {
+  getAll: (params = {}) => api.get("/prescriptions", { params }),
+  getOne: (id) => api.get(`/prescriptions/${id}`),
+  getStats: () => api.get("/prescriptions/stats"),
+  getByPatient: (patientId) => api.get("/prescriptions", { params: { patientId } }),
+  create: (data) => api.post("/prescriptions", data),
+  update: (id, data) => api.patch(`/prescriptions/${id}`, data),
+  valider: (id, contenuExtrait) => api.patch(`/prescriptions/${id}/valider`, { contenuExtrait }),
+  delete: (id) => api.delete(`/prescriptions/${id}`),
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// MISSIONS
+// ════════════════════════════════════════════════════════════════════════════
+export const missionService = {
+  getAll: (params = {}) => api.get("/missions", { params }),
+  getOne: (id) => api.get(`/missions/${id}`),
+  getStats: () => api.get("/missions/stats"),
+  create: (data) => api.post("/missions", data),
+  update: (id, data) => api.patch(`/missions/${id}`, data),
+  updateStatut: (id, statut, extra = {}) => api.patch(`/missions/${id}/statut`, { statut, ...extra }),
+  terminer: (id, data) => api.post(`/missions/${id}/terminer`, data),
+};
+
+// ════════════════════════════════════════════════════════════════════════════
 // ALIASES rétrocompatibilité (anciens imports directs)
 // ════════════════════════════════════════════════════════════════════════════
 export const unitService = vehicleService;
