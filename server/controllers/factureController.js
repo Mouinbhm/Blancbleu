@@ -1,29 +1,29 @@
 /**
- * BlancBleu — Contrôleur Factures
- * Adapté transport sanitaire — ref Transport au lieu de Intervention
+ * BlancBleu — Contrôleur Factures v2.0
+ * Compatible avec le nouveau modèle Facture (transportId, missionId, patientId, montantTotal…)
  */
 const Facture = require("../models/Facture");
 
+const STATUTS_VALIDES = ["brouillon", "emise", "en_attente", "payee", "annulee"];
+
 const getFactures = async (req, res) => {
   try {
-    const { statut, limit = 50, page = 1 } = req.query;
+    const { statut, patientId, limit = 50, page = 1 } = req.query;
     const filter = {};
     if (statut) filter.statut = statut;
+    if (patientId) filter.patientId = patientId;
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const [factures, total] = await Promise.all([
       Facture.find(filter)
-        .populate("transport", "numero motif dateTransport")
-        .sort({ date: -1 })
+        .populate("transportId", "numero motif dateTransport typeTransport")
+        .populate("missionId", "statut dureeReelleMinutes distanceReelleKm")
+        .populate("patientId", "nom prenom numeroPatient")
+        .sort({ dateEmission: -1 })
         .skip(skip)
         .limit(parseInt(limit)),
       Facture.countDocuments(filter),
     ]);
-    res.json({
-      factures,
-      total,
-      page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit)),
-    });
+    res.json({ factures, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -31,10 +31,10 @@ const getFactures = async (req, res) => {
 
 const getFacture = async (req, res) => {
   try {
-    const f = await Facture.findById(req.params.id).populate(
-      "transport",
-      "numero motif dateTransport adresseDestination patient",
-    );
+    const f = await Facture.findById(req.params.id)
+      .populate("transportId", "numero motif dateTransport adresseDestination patient typeTransport allerRetour")
+      .populate("missionId", "statut dureeReelleMinutes distanceReelleKm vehicleId chauffeurId")
+      .populate("patientId", "nom prenom telephone numeroSecu caisse");
     if (!f) return res.status(404).json({ message: "Facture introuvable" });
     res.json(f);
   } catch (err) {
@@ -44,6 +44,18 @@ const getFacture = async (req, res) => {
 
 const createFacture = async (req, res) => {
   try {
+    // Vérifier qu'il n'y a pas déjà une facture non-annulée pour ce transport
+    if (req.body.transportId) {
+      const existante = await Facture.findOne({
+        transportId: req.body.transportId,
+        statut: { $ne: "annulee" },
+      });
+      if (existante) {
+        return res.status(400).json({
+          message: `Une facture (${existante.numero}) existe déjà pour ce transport`,
+        });
+      }
+    }
     const f = await Facture.create(req.body);
     res.status(201).json({ message: "Facture créée", facture: f });
   } catch (err) {
@@ -53,7 +65,8 @@ const createFacture = async (req, res) => {
 
 const updateFacture = async (req, res) => {
   try {
-    const f = await Facture.findByIdAndUpdate(req.params.id, req.body, {
+    const { numero, ...updates } = req.body; // numero immuable
+    const f = await Facture.findByIdAndUpdate(req.params.id, updates, {
       new: true,
       runValidators: true,
     });
@@ -67,14 +80,11 @@ const updateFacture = async (req, res) => {
 const updateStatut = async (req, res) => {
   try {
     const { statut } = req.body;
-    const valides = ["payée", "en-attente", "annulée"];
-    if (!valides.includes(statut))
-      return res.status(400).json({ message: "Statut invalide" });
-    const f = await Facture.findByIdAndUpdate(
-      req.params.id,
-      { statut },
-      { new: true },
-    );
+    if (!STATUTS_VALIDES.includes(statut))
+      return res.status(400).json({ message: `Statut invalide. Valides : ${STATUTS_VALIDES.join(", ")}` });
+    const updates = { statut };
+    if (statut === "payee") updates.datePaiement = new Date();
+    const f = await Facture.findByIdAndUpdate(req.params.id, updates, { new: true });
     if (!f) return res.status(404).json({ message: "Facture introuvable" });
     res.json({ message: "Statut mis à jour", facture: f });
   } catch (err) {
@@ -84,9 +94,10 @@ const updateStatut = async (req, res) => {
 
 const deleteFacture = async (req, res) => {
   try {
-    const f = await Facture.findByIdAndDelete(req.params.id);
+    // Soft delete : passer à "annulee" plutôt que supprimer physiquement
+    const f = await Facture.findByIdAndUpdate(req.params.id, { statut: "annulee" }, { new: true });
     if (!f) return res.status(404).json({ message: "Facture introuvable" });
-    res.json({ message: "Facture supprimée" });
+    res.json({ message: "Facture annulée" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -94,19 +105,20 @@ const deleteFacture = async (req, res) => {
 
 const getStats = async (req, res) => {
   try {
-    const [total, payees, enAttente, annulees, chiffre] = await Promise.all([
+    const [total, payees, enAttente, brouillons, annulees, chiffre] = await Promise.all([
       Facture.countDocuments(),
-      Facture.countDocuments({ statut: "payée" }),
-      Facture.countDocuments({ statut: "en-attente" }),
-      Facture.countDocuments({ statut: "annulée" }),
+      Facture.countDocuments({ statut: "payee" }),
+      Facture.countDocuments({ statut: { $in: ["en_attente", "emise"] } }),
+      Facture.countDocuments({ statut: "brouillon" }),
+      Facture.countDocuments({ statut: "annulee" }),
       Facture.aggregate([
-        { $match: { statut: "payée" } },
-        { $group: { _id: null, total: { $sum: "$montant" } } },
+        { $match: { statut: "payee" } },
+        { $group: { _id: null, total: { $sum: "$montantTotal" } } },
       ]),
     ]);
     res.json({
       total,
-      parStatut: { payees, enAttente, annulees },
+      parStatut: { payees, enAttente, brouillons, annulees },
       chiffreAffaires: chiffre[0]?.total || 0,
     });
   } catch (err) {
@@ -114,12 +126,4 @@ const getStats = async (req, res) => {
   }
 };
 
-module.exports = {
-  getFactures,
-  getFacture,
-  createFacture,
-  updateFacture,
-  updateStatut,
-  deleteFacture,
-  getStats,
-};
+module.exports = { getFactures, getFacture, createFacture, updateFacture, updateStatut, deleteFacture, getStats };
