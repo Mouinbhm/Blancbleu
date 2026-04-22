@@ -8,12 +8,14 @@ import useSocket from "../../hooks/useSocket";
 const NAV_OPERATIONS = [
   { path: "/dashboard", icon: "dashboard", label: "Tableau de bord" },
   { path: "/transports", icon: "directions_car", label: "Transports" },
+  { path: "/missions", icon: "local_shipping", label: "Missions" },
   { path: "/planning", icon: "calendar_month", label: "Planning" },
-  { path: "/flotte", icon: "airport_shuttle", label: "Flotte" },
   { path: "/patients", icon: "personal_injury", label: "Patients" },
+  { path: "/prescriptions", icon: "description", label: "Prescriptions" },
 ];
 
 const NAV_GESTION = [
+  { path: "/flotte", icon: "airport_shuttle", label: "Flotte" },
   { path: "/personnel", icon: "badge", label: "Personnel" },
   { path: "/equipements", icon: "medical_services", label: "Équipements" },
   { path: "/maintenances", icon: "build", label: "Maintenances" },
@@ -25,13 +27,15 @@ const pageTitles = {
   "/dashboard": "Tableau de bord — Vue opérationnelle",
   "/transports": "Transports — Gestion des transports",
   "/transports/new": "Nouveau transport",
+  "/missions": "Missions — Dispatch & exécution terrain",
   "/planning": "Planning — Organisation journalière",
   "/flotte": "Flotte — Véhicules sanitaires",
-  "/patients": "Patients — Historique et récurrences",
+  "/patients": "Patients — Dossiers patients",
+  "/prescriptions": "Prescriptions — PMT & ordonnances",
   "/personnel": "Personnel — Équipes",
   "/equipements": "Équipements — Matériel médical",
   "/maintenances": "Maintenances — Suivi véhicules",
-  "/factures": "Factures — Facturation",
+  "/factures": "Factures — Facturation CPAM",
   "/aide-ia": "Aide IA — Optimisation",
 };
 
@@ -51,10 +55,10 @@ export default function Layout() {
   useEffect(() => {
     const unsub = subscribe("transport:created", (data) => {
       const notif = {
-        id: data._id + "_socket",
+        id: String(data._id) + "_socket",
         title: `Nouveau transport — ${data.motif}`,
         sub: `${data.patient?.nom || "Patient"} · ${data.typeTransport}`,
-        path: `/transports/${data._id}`,
+        path: `/transports/${String(data._id)}`,
         time: new Date(),
       };
       setNotifs((prev) => [notif, ...prev].slice(0, 8));
@@ -76,7 +80,7 @@ export default function Layout() {
           id: t._id,
           title: `${t.motif} — ${t.patient?.nom || "Patient"}`,
           sub: `En attente de confirmation · ${t.typeTransport}`,
-          path: `/transports/${t._id}`,
+          path: `/transports/${String(t._id)}`,
           time: new Date(t.createdAt),
         }));
         setNotifs(list.slice(0, 8));
