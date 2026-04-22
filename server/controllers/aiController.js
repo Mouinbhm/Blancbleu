@@ -98,17 +98,19 @@ const validerPMT = async (req, res) => {
       return res.status(400).json({ message: "extraction requise" });
     }
 
-    // Mise à jour limitée à la prescription uniquement.
-    // patient.mobilite, patient.nom, patient.prenom et typeTransport
-    // ne sont JAMAIS écrasés par les données OCR.
+    // $set explicite : SEULS les champs prescription.* sont modifiés.
+    // patient.mobilite, patient.nom, patient.prenom, typeTransport
+    // ne sont JAMAIS touchés par cette mise à jour.
     const transport = await Transport.findByIdAndUpdate(
       req.params.transportId,
       {
-        "prescription.validee": true,
-        "prescription.extraitPar": "IA+HUMAIN",
-        "prescription.contenu": extraction,
-        "prescription.validePar": req.user._id,
-        "prescription.valideAt": new Date(),
+        $set: {
+          "prescription.validee": true,
+          "prescription.extraitPar": "IA+HUMAIN",
+          "prescription.contenu": extraction,
+          "prescription.validePar": req.user._id,
+          "prescription.valideAt": new Date(),
+        },
       },
       { new: true }
     );

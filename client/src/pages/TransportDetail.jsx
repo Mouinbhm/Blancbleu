@@ -420,18 +420,21 @@ export default function TransportDetail() {
   const vehicleId = String(transport.vehicule?._id || transport.vehicule?.id || "");
 
   // Filtrage des véhicules compatibles avec la mobilité réelle du patient
+  // Le type d'origine du transport (typeTransport) est toujours proposé en premier.
   const COMPAT_VEHICULE = {
     ASSIS:            ["VSL", "TPMR", "AMBULANCE"],
-    FAUTEUIL_ROULANT: ["TPMR"],
+    FAUTEUIL_ROULANT: ["TPMR", "AMBULANCE"],
     ALLONGE:          ["AMBULANCE"],
     CIVIERE:          ["AMBULANCE"],
   };
   const mobilitePatient = transport.patient?.mobilite || "ASSIS";
   const typesCompatibles = COMPAT_VEHICULE[mobilitePatient] || ["VSL"];
+  const typeOriginal = transport?.typeTransport;
+  const typesTries = [typeOriginal, ...typesCompatibles.filter((t) => t !== typeOriginal)].filter(Boolean);
   const vehiculesFiltres = vehicles
     .filter((v) => v.statut === "disponible")
-    .filter((v) => typesCompatibles.includes(v.type))
-    .sort((a, b) => typesCompatibles.indexOf(a.type) - typesCompatibles.indexOf(b.type));
+    .filter((v) => typesTries.includes(v.type))
+    .sort((a, b) => typesTries.indexOf(a.type) - typesTries.indexOf(b.type));
 
   return (
     <div className="pb-24 fade-in">
