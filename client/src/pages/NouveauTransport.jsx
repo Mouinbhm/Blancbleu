@@ -1,7 +1,7 @@
 // Fichier : client/src/pages/NouveauTransport.jsx
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { transportService } from "../services/api";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { transportService, patientService } from "../services/api";
 import AdresseAutocomplete from "../components/forms/AdresseAutocomplete";
 
 // Jours fériés français 2025–2026 (miroir de recurrenceService.js côté backend)
@@ -31,13 +31,6 @@ function calculerOccurrences(dateDebut, dateFin, joursSemaine) {
   }
   return { nb, nbExclus };
 }
-
-const MOBILITE_TYPE = {
-  ASSIS: "VSL",
-  FAUTEUIL_ROULANT: "TPMR",
-  ALLONGE: "AMBULANCE",
-  CIVIERE: "AMBULANCE",
-};
 
 const MOTIFS = [
   "Dialyse","Chimiothérapie","Radiothérapie","Consultation",
@@ -90,11 +83,151 @@ const ADRESSE_DEST_INIT = {
   lat: null, lng: null,
 };
 
+// ── Sélecteur de patient existant ─────────────────────────────────────────────
+function PatientSelector({ value, onChange }) {
+  const [recherche, setRecherche] = useState("");
+  const [resultats, setResultats] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!recherche.trim()) { setResultats([]); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await patientService.getAll({ recherche, limit: 10 });
+        setResultats(data.patients || []);
+        setShowDropdown(true);
+      } catch { /* silencieux */ }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [recherche]);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setShowDropdown(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleSelect = (p) => {
+    onChange(p);
+    setRecherche(`${p.nom} ${p.prenom}`);
+    setShowDropdown(false);
+  };
+
+  const handleClear = () => {
+    onChange(null);
+    setRecherche("");
+    setResultats([]);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="Rechercher un patient existant…"
+          value={value ? `${value.nom} ${value.prenom}` : recherche}
+          onChange={(e) => { if (!value) setRecherche(e.target.value); }}
+          readOnly={!!value}
+          className={`flex-1 border rounded-lg px-3 py-2.5 text-sm outline-none transition-colors ${value ? "border-green-400 bg-green-50 text-green-800" : "border-slate-200 focus:border-primary focus:ring-1 focus:ring-primary/20"}`}
+        />
+        {value && (
+          <button type="button" onClick={handleClear} className="px-3 py-2.5 border border-slate-200 rounded-lg text-slate-400 hover:text-red-400 hover:border-red-200 transition-colors text-sm">
+            <span className="material-symbols-outlined text-base">close</span>
+          </button>
+        )}
+      </div>
+      {value && (
+        <div className="mt-2 p-2 bg-green-50 rounded-lg border border-green-200 text-xs text-green-800 flex items-center gap-2">
+          <span className="material-symbols-outlined text-sm">check_circle</span>
+          Patient lié : {value.nom} {value.prenom}
+          {value.mobilite && <span className="ml-1 font-semibold">· {value.mobilite}</span>}
+          {value.telephone && <span>· {value.telephone}</span>}
+        </div>
+      )}
+      {showDropdown && resultats.length > 0 && (
+        <div className="absolute top-full left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-xl z-50 mt-1 max-h-48 overflow-y-auto">
+          {resultats.map((p) => (
+            <div key={p._id} onClick={() => handleSelect(p)}
+              className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface cursor-pointer transition-colors border-b border-slate-50 last:border-0">
+              <div className="w-8 h-8 rounded-full bg-navy flex items-center justify-center text-white text-xs font-bold">
+                {p.nom?.[0]}{p.prenom?.[0]}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-navy">{p.nom} {p.prenom}</p>
+                <p className="text-xs text-slate-400">{p.numeroPatient} · {p.mobilite} {p.telephone ? `· ${p.telephone}` : ""}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {showDropdown && recherche.trim() && resultats.length === 0 && (
+        <div className="absolute top-full left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-xl z-50 mt-1 px-4 py-3 text-sm text-slate-400">
+          Aucun patient trouvé — remplissez le formulaire ci-dessous
+        </div>
+      )}
+    </div>
+  );
+}
+
+const MOBILITE_TYPE = {
+  ASSIS: "VSL",
+  FAUTEUIL_ROULANT: "TPMR",
+  ALLONGE: "AMBULANCE",
+  CIVIERE: "AMBULANCE",
+};
+
 export default function NouveauTransport() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const patientIdParam = searchParams.get("patientId");
+
   const [loading, setLoading] = useState(false);
   const [erreur, setErreur] = useState(null);
   const [errors, setErrors] = useState({});
+  const [patientLie, setPatientLie] = useState(null); // Patient entity sélectionné
+
+  // Charger le patient depuis l'URL si fourni (depuis la fiche patient)
+  useEffect(() => {
+    if (patientIdParam) {
+      patientService.getOne(patientIdParam)
+        .then(({ data }) => {
+          setPatientLie(data);
+          // Pré-remplir le formulaire avec les données du patient
+          setForm((f) => ({
+            ...f,
+            patientNom: data.nom || "",
+            patientPrenom: data.prenom || "",
+            patientTelephone: data.telephone || "",
+            patientMobilite: data.mobilite || "ASSIS",
+            patientOxygene: data.oxygene || false,
+            patientBrancardage: data.brancardage || false,
+            patientAccompagnateur: data.accompagnateur || false,
+            typeTransport: MOBILITE_TYPE[data.mobilite] || "VSL",
+          }));
+        })
+        .catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientIdParam]);
+
+  // Quand un patient est sélectionné via la recherche, pré-remplir le formulaire
+  const handlePatientSelect = (p) => {
+    setPatientLie(p);
+    if (p) {
+      setForm((f) => ({
+        ...f,
+        patientNom: p.nom || "",
+        patientPrenom: p.prenom || "",
+        patientTelephone: p.telephone || "",
+        patientMobilite: p.mobilite || "ASSIS",
+        patientOxygene: p.oxygene || false,
+        patientBrancardage: p.brancardage || false,
+        patientAccompagnateur: p.accompagnateur || false,
+        typeTransport: MOBILITE_TYPE[p.mobilite] || "VSL",
+      }));
+    }
+  };
 
   const [form, setForm] = useState({
     // Patient
@@ -240,6 +373,8 @@ export default function NouveauTransport() {
     setErreur(null);
     try {
       const basePayload = {
+        // Lien vers l'entité Patient si elle a été sélectionnée
+        ...(patientLie && { patientId: patientLie._id }),
         patient: {
           nom: form.patientNom.trim(),
           prenom: form.patientPrenom.trim(),
@@ -291,7 +426,7 @@ export default function NouveauTransport() {
           ...basePayload,
           recurrence: { active: false, frequence: "", joursSemaine: [] },
         });
-        navigate(`/transports/${data.transport?._id || data._id}`);
+        navigate(`/transports/${String(data.transport?._id || data._id || "")}`);
       }
     } catch (err) {
       setErreur(
@@ -335,6 +470,13 @@ export default function NouveauTransport() {
 
         {/* ── Patient ── */}
         <Section title="Patient" icon="personal_injury">
+          {/* Sélecteur patient existant */}
+          <div className="mb-4 pb-4 border-b border-slate-100">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">
+              Lier à un patient existant (optionnel)
+            </p>
+            <PatientSelector value={patientLie} onChange={handlePatientSelect} />
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Nom" required error={errors.patientNom}>
               <input
