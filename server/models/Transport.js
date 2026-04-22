@@ -185,11 +185,28 @@ const transportSchema = new mongoose.Schema(
     },
     indexSerie: { type: Number, default: null },
 
+    // ── Patient ref (entité propre) ───────────────────────────────────────────
+    // Si le patient est enregistré en base, on stocke son ID ici.
+    // Le sous-document patient reste pour la rétrocompatibilité et l'archivage.
+    patientId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Patient",
+      default: null,
+      index: true,
+    },
+
+    // ── Prescription ref (entité propre) ──────────────────────────────────────
+    prescriptionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Prescription",
+      default: null,
+    },
+
     // ── Facturation ───────────────────────────────────────────────────────────
     tauxPriseEnCharge: { type: Number, default: 65 },
     facture: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Invoice",
+      ref: "Facture", // corrigé : était "Invoice" (bug)
       default: null,
     },
 
@@ -214,19 +231,18 @@ transportSchema.index({ "patient.nom": 1 });
 transportSchema.index({ vehicule: 1, dateTransport: 1 });
 transportSchema.index({ createdAt: -1 });
 
-// ── Règle métier : mobilité → type véhicule ───────────────────────────────────
+// ── Règle métier : mobilité patient → type véhicule ──────────────────────────
+// Bug corrigé : la mobilité est portée par patient.mobilite, pas this.mobilite
 transportSchema.pre("validate", function (next) {
-  const { mobilite, typeTransport } = this;
+  const mobilite = this.patient?.mobilite;
+  const typeTransport = this.typeTransport;
   if (!mobilite || !typeTransport) return next();
-  if (mobilite === "ASSIS" && typeTransport !== "VSL")
-    return next(new Error("Patient ASSIS → VSL requis"));
-  if (mobilite === "FAUTEUIL_ROULANT" && typeTransport !== "TPMR")
-    return next(new Error("Fauteuil roulant → TPMR requis"));
-  if (
-    ["ALLONGE", "CIVIERE"].includes(mobilite) &&
-    typeTransport !== "AMBULANCE"
-  )
-    return next(new Error("Patient allongé → AMBULANCE requise"));
+  if (mobilite === "ASSIS" && typeTransport === "AMBULANCE")
+    return next(new Error("Patient ASSIS → VSL ou TPMR requis, pas AMBULANCE"));
+  if (mobilite === "FAUTEUIL_ROULANT" && typeTransport === "AMBULANCE")
+    return next(new Error("Fauteuil roulant → TPMR requis, pas AMBULANCE"));
+  if (["ALLONGE", "CIVIERE"].includes(mobilite) && typeTransport !== "AMBULANCE")
+    return next(new Error("Patient allongé/civière → AMBULANCE requise"));
   next();
 });
 
