@@ -9,6 +9,8 @@ const bcrypt = require("bcryptjs");
 const User = require("./models/User");
 const Vehicle = require("./models/Vehicle");
 const Transport = require("./models/Transport");
+const Patient = require("./models/Patient");
+const Prescription = require("./models/Prescription");
 
 const NICE_BASE = {
   lat: 43.7102,
@@ -69,6 +71,8 @@ const seed = async () => {
       User.deleteMany(),
       Vehicle.deleteMany(),
       Transport.deleteMany(),
+      Patient.deleteMany(),
+      Prescription.deleteMany(),
     ]);
     console.log("🗑️  Collections nettoyées");
 
@@ -206,6 +210,131 @@ const seed = async () => {
     ]);
     console.log(`🚐 ${vehicles.length} véhicules créés`);
 
+    // ── PATIENTS ──────────────────────────────────────────────────────────────
+    const patients = await Patient.insertMany([
+      {
+        nom: "Dubois", prenom: "Marcel",
+        dateNaissance: new Date("1945-03-12"),
+        telephone: "06 11 22 33 44",
+        mobilite: "FAUTEUIL_ROULANT",
+        brancardage: false,
+        oxygene: false,
+        exoneration: true,
+        caisse: "CPAM Nice",
+        numeroSecu: "1 45 03 06 001 001 00",
+        contactUrgence: { nom: "Dubois Sylvie", telephone: "06 12 34 56 78", lien: "Épouse" },
+        notes: "Dialysé 3x/semaine depuis 2019 — fauteuil motorisé",
+        actif: true,
+      },
+      {
+        nom: "Ferrero", prenom: "Anna",
+        dateNaissance: new Date("1958-07-22"),
+        telephone: "06 22 33 44 55",
+        mobilite: "ASSIS",
+        accompagnateur: true,
+        exoneration: true,
+        caisse: "CPAM Nice",
+        numeroSecu: "2 58 07 06 002 002 00",
+        contactUrgence: { nom: "Ferrero Jean", telephone: "06 23 45 67 89", lien: "Époux" },
+        notes: "Accompagnateur autorisé — séance chimio toutes les 3 semaines",
+        actif: true,
+      },
+      {
+        nom: "Rosso", prenom: "Pierre",
+        dateNaissance: new Date("1952-11-05"),
+        telephone: "06 33 44 55 66",
+        mobilite: "ASSIS",
+        caisse: "CPAM Nice",
+        numeroSecu: "1 52 11 06 003 003 00",
+        actif: true,
+      },
+      {
+        nom: "Garcia", prenom: "Luis",
+        dateNaissance: new Date("1938-04-18"),
+        telephone: "06 44 55 66 77",
+        mobilite: "ALLONGE",
+        brancardage: true,
+        oxygene: false,
+        exoneration: true,
+        caisse: "CPAM Nice",
+        numeroSecu: "1 38 04 06 004 004 00",
+        notes: "Brancardage requis — patient ne peut pas marcher",
+        actif: true,
+      },
+      {
+        nom: "Martin", prenom: "Sophie",
+        dateNaissance: new Date("1965-09-30"),
+        mobilite: "ASSIS",
+        telephone: "06 55 66 77 88",
+        exoneration: true,
+        caisse: "CPAM Nice",
+        actif: true,
+      },
+      {
+        nom: "Blanc", prenom: "Thomas",
+        dateNaissance: new Date("1970-02-14"),
+        mobilite: "ASSIS",
+        telephone: "06 66 77 88 99",
+        exoneration: true,
+        caisse: "CPAM Nice",
+        notes: "Radiothérapie — 25 séances protocole en cours (n°12)",
+        actif: true,
+      },
+    ]);
+    console.log(`👤 ${patients.length} patients créés`);
+
+    // ── PRESCRIPTIONS ─────────────────────────────────────────────────────────
+    const prescriptions = await Prescription.insertMany([
+      {
+        patientId: patients[0]._id,
+        motif: "Dialyse",
+        dateEmission: new Date("2025-01-10"),
+        dateExpiration: new Date("2026-12-31"),
+        medecin: { nom: "Martin", prenom: "Jean-Pierre", specialite: "Néphrologie", etablissement: "CHU Pasteur Nice" },
+        statut: "active",
+        validee: true,
+        contenuExtrait: { diagnostic: "Insuffisance rénale chronique stade 5", frequence: "3x/semaine" },
+      },
+      {
+        patientId: patients[1]._id,
+        motif: "Chimiothérapie",
+        dateEmission: new Date("2025-09-01"),
+        dateExpiration: new Date("2026-06-30"),
+        medecin: { nom: "Rossi", prenom: "Marco", specialite: "Oncologie", etablissement: "Hôpital de l'Archet" },
+        statut: "active",
+        validee: true,
+        contenuExtrait: { diagnostic: "Cancer du sein — protocole AC", frequence: "Toutes les 3 semaines" },
+      },
+      {
+        patientId: patients[2]._id,
+        motif: "Consultation",
+        dateEmission: new Date("2026-03-15"),
+        dateExpiration: new Date("2026-09-15"),
+        medecin: { nom: "Bernard", prenom: "Claire", specialite: "Cardiologie", etablissement: "Clinique du Parc Impérial" },
+        statut: "active",
+        validee: true,
+      },
+      {
+        patientId: patients[3]._id,
+        motif: "Hospitalisation",
+        dateEmission: new Date("2026-04-20"),
+        medecin: { nom: "Moreau", prenom: "Paul", specialite: "Cardiologie", etablissement: "CHU Pasteur Nice" },
+        statut: "en_attente_validation",
+        validee: false,
+      },
+      {
+        patientId: patients[5]._id,
+        motif: "Radiothérapie",
+        dateEmission: new Date("2025-11-01"),
+        dateExpiration: new Date("2026-07-31"),
+        medecin: { nom: "Dupuis", prenom: "Henri", specialite: "Radiothérapie", etablissement: "Hôpital de l'Archet" },
+        statut: "active",
+        validee: true,
+        contenuExtrait: { diagnostic: "Cancer de la prostate", nbSeances: 25, seanceActuelle: 12 },
+      },
+    ]);
+    console.log(`📋 ${prescriptions.length} prescriptions créées`);
+
     // ── TRANSPORTS ────────────────────────────────────────────────────────────
     const aujourd_hui = new Date();
     const demain = new Date();
@@ -216,6 +345,8 @@ const seed = async () => {
     const transports = await Transport.insertMany([
       // 1. Dialyse récurrente — patient en fauteuil
       {
+        patientId: patients[0]._id,
+        prescriptionId: prescriptions[0]._id,
         patient: {
           nom: "Dubois",
           prenom: "Marcel",
@@ -266,6 +397,8 @@ const seed = async () => {
 
       // 2. Chimiothérapie — patient assis
       {
+        patientId: patients[1]._id,
+        prescriptionId: prescriptions[1]._id,
         patient: {
           nom: "Ferrero",
           prenom: "Anna",
@@ -312,6 +445,8 @@ const seed = async () => {
 
       // 3. Consultation — patient assis
       {
+        patientId: patients[2]._id,
+        prescriptionId: prescriptions[2]._id,
         patient: {
           nom: "Rosso",
           prenom: "Pierre",
@@ -352,6 +487,8 @@ const seed = async () => {
 
       // 4. Hospitalisation — patient allongé
       {
+        patientId: patients[3]._id,
+        prescriptionId: prescriptions[3]._id,
         patient: {
           nom: "Garcia",
           prenom: "Luis",
@@ -393,6 +530,7 @@ const seed = async () => {
 
       // 5. Transport complété
       {
+        patientId: patients[4]._id,
         patient: {
           nom: "Martin",
           prenom: "Sophie",
@@ -440,6 +578,8 @@ const seed = async () => {
 
       // 6. Radiothérapie planifiée demain
       {
+        patientId: patients[5]._id,
+        prescriptionId: prescriptions[4]._id,
         patient: {
           nom: "Blanc",
           prenom: "Thomas",
@@ -479,8 +619,17 @@ const seed = async () => {
       },
     ]);
 
-    console.log(`🚐 ${transports.length} transports créés`);
-    console.log("✅ Seed terminé");
+    console.log(`🚑 ${transports.length} transports créés`);
+    console.log("\n✅ Seed BlancBleu terminé avec succès !");
+    console.log("─────────────────────────────────────────");
+    console.log(`   👤 Utilisateurs   : ${users.length}`);
+    console.log(`   🚐 Véhicules      : ${vehicles.length}`);
+    console.log(`   🧑‍⚕️  Patients       : ${patients.length}`);
+    console.log(`   📋 Prescriptions  : ${prescriptions.length}`);
+    console.log(`   🚑 Transports     : ${transports.length}`);
+    console.log("─────────────────────────────────────────");
+    console.log("   Admin  : belhajmouin@gmail.com / admin123");
+    console.log("   Disp.  : dispatcher@blancbleu.fr / dispatcher123");
     process.exit(0);
   } catch (err) {
     console.error("❌ Erreur seed :", err.message);
