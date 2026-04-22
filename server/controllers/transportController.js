@@ -119,6 +119,8 @@ const getTransports = async (req, res) => {
         .populate("vehicule", "nom type statut immatriculation")
         .populate("chauffeur", "nom prenom")
         .populate("createdBy", "nom prenom")
+        .populate("patientId", "nom prenom telephone mobilite numeroPatient")
+        .populate("prescriptionId", "numero statut motif dateExpiration")
         .sort({ dateTransport: 1, heureRDV: 1 })
         .skip(skip)
         .limit(parseInt(limit)),
@@ -200,12 +202,11 @@ const getStats = async (req, res) => {
 const getTransport = async (req, res) => {
   try {
     const transport = await Transport.findById(req.params.id)
-      .populate(
-        "vehicule",
-        "nom type statut immatriculation position carburant kilometrage",
-      )
+      .populate("vehicule", "nom type statut immatriculation position carburant kilometrage")
       .populate("chauffeur", "nom prenom email telephone")
-      .populate("createdBy", "nom prenom");
+      .populate("createdBy", "nom prenom")
+      .populate("patientId", "nom prenom telephone mobilite numeroPatient oxygene brancardage accompagnateur contactUrgence")
+      .populate("prescriptionId", "numero statut motif dateEmission dateExpiration medecin validee");
 
     if (!transport)
       return res.status(404).json({ message: "Transport introuvable" });
