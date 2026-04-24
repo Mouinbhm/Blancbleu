@@ -102,7 +102,10 @@ const getTransports = async (req, res) => {
     } = req.query;
     const filter = { deletedAt: null };
 
-    if (statut) filter.statut = statut;
+    if (statut) {
+      const statuts = String(statut).split(",").map((s) => s.trim()).filter(Boolean);
+      filter.statut = statuts.length === 1 ? statuts[0] : { $in: statuts };
+    }
     if (typeTransport) filter.typeTransport = typeTransport;
     if (motif) filter.motif = motif;
     if (date) {
