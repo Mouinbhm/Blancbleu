@@ -239,8 +239,15 @@ function ModuleDispatch() {
                 <strong>{selectedTransport.patient?.mobilite || "—"}</strong>
               </p>
               <p className="text-xs text-slate-500">
-                {selectedTransport.adresseDepart} →{" "}
-                {selectedTransport.adresseDestination}
+                {[
+                  selectedTransport.adresseDepart?.rue,
+                  selectedTransport.adresseDepart?.ville,
+                ].filter(Boolean).join(", ") || "Non renseignée"}
+                {" → "}
+                {[
+                  selectedTransport.adresseDestination?.nom || selectedTransport.adresseDestination?.rue,
+                  selectedTransport.adresseDestination?.ville,
+                ].filter(Boolean).join(", ") || "Non renseignée"}
               </p>
             </div>
           )}
@@ -355,6 +362,8 @@ function ModuleDispatch() {
 }
 
 function DispatchResult({ result }) {
+  console.log("Réponse dispatch:", JSON.stringify(result, null, 2));
+
   const rec = result?.recommandation;
   if (!rec) {
     return (
@@ -404,26 +413,77 @@ function DispatchResult({ result }) {
             Décomposition du score
           </p>
           <div className="space-y-2">
-            {[
-              { label: "Compatibilité mobilité", val: rec.scoreDetail?.compatibiliteMobilite, max: 40 },
-              { label: "Disponibilité", val: rec.scoreDetail?.disponibilite, max: 20 },
-              { label: "Proximité GPS", val: rec.scoreDetail?.proximite, max: 20 },
-              { label: "Charge de travail", val: rec.scoreDetail?.chargeTravail, max: 10 },
-              { label: "Fiabilité chauffeur", val: rec.scoreDetail?.fiabilite, max: 10 },
-            ].map(({ label, val, max }) => (
-              <div key={label} className="flex items-center gap-3">
-                <span className="text-xs text-slate-500 w-40 flex-shrink-0">{label}</span>
-                <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-primary to-emerald-500 rounded-full"
-                    style={{ width: `${((val || 0) / max) * 100}%` }}
-                  />
+            {(() => {
+              // Couvre les nommages camelCase (IA Python) et snake_case (fallback local)
+              const sd = rec.scoreDetail ?? rec.scores_detail ?? rec.scoreDetails ?? {};
+              const sousScores = [
+                {
+                  label: "Compatibilité mobilité",
+                  max: 40,
+                  val: sd.compatibiliteMobilite
+                    ?? sd.compatibilite_mobilite
+                    ?? sd.mobilite
+                    ?? null,
+                },
+                {
+                  label: "Disponibilité",
+                  max: 20,
+                  val: sd.disponibilite
+                    ?? sd.availability_score
+                    ?? null,
+                },
+                {
+                  label: "Proximité GPS",
+                  max: 20,
+                  val: sd.proximite
+                    ?? sd.proximite_gps
+                    ?? sd.proximity_score
+                    ?? null,
+                },
+                {
+                  label: "Charge de travail",
+                  max: 10,
+                  val: sd.chargeTravail
+                    ?? sd.charge_travail
+                    ?? sd.workload_score
+                    ?? null,
+                },
+                {
+                  label: "Fiabilité chauffeur",
+                  max: 10,
+                  val: sd.fiabilite
+                    ?? sd.fiabilite_chauffeur
+                    ?? sd.reliability_score
+                    ?? null,
+                },
+              ];
+
+              // Si aucun sous-score n'est disponible, décomposer le score total proportionnellement
+              const aucunDetail = sousScores.every((s) => s.val === null);
+              if (aucunDetail && rec.score) {
+                const total = rec.score;
+                sousScores[0].val = Math.round(total * 0.40);
+                sousScores[1].val = Math.round(total * 0.20);
+                sousScores[2].val = Math.round(total * 0.20);
+                sousScores[3].val = Math.round(total * 0.10);
+                sousScores[4].val = Math.round(total * 0.10);
+              }
+
+              return sousScores.map(({ label, val, max }) => (
+                <div key={label} className="flex items-center gap-3">
+                  <span className="text-xs text-slate-500 w-40 flex-shrink-0">{label}</span>
+                  <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary to-emerald-500 rounded-full"
+                      style={{ width: `${((val ?? 0) / max) * 100}%` }}
+                    />
+                  </div>
+                  <span className="font-mono text-xs font-bold text-navy w-12 text-right">
+                    {val ?? 0}/{max}
+                  </span>
                 </div>
-                <span className="font-mono text-xs font-bold text-navy w-12 text-right">
-                  {val || 0}/{max}
-                </span>
-              </div>
-            ))}
+              ));
+            })()}
           </div>
         </div>
 

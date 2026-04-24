@@ -206,7 +206,13 @@ const transportSchema = new mongoose.Schema(
     tauxPriseEnCharge: { type: Number, default: 65 },
     facture: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Facture", // corrigé : était "Invoice" (bug)
+      ref: "Facture",
+      default: null,
+    },
+    // Référence texte CPAM (ex : "PMT-20260424-0002", "FAC-2026-0087")
+    // Distincte du champ facture (ObjectId) — jamais casté en ObjectId
+    referenceFactureCPAM: {
+      type: String,
       default: null,
     },
 

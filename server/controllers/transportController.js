@@ -3,8 +3,10 @@
  * Remplace interventionController.js
  */
 
+const mongoose = require("mongoose");
 const Transport = require("../models/Transport");
 const Vehicle = require("../models/Vehicle");
+const Patient = require("../models/Patient");
 const lifecycle = require("../services/transportLifecycle");
 const { audit } = require("../services/auditService");
 const { TransportStateMachine } = require("../services/transportStateMachine");
@@ -288,6 +290,58 @@ const createTransport = async (req, res) => {
       createdBy: req.user._id,
     });
 
+    // ── Auto-création du patient dans la collection Patient (best-effort) ─────
+    const patientData = body.patient;
+    if (patientData?.nom) {
+      try {
+        const conditions = [];
+        if (patientData.numeroSecu?.trim()) {
+          conditions.push({ numeroSecu: patientData.numeroSecu.trim() });
+        }
+        const nomEsc    = patientData.nom.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const prenomEsc = (patientData.prenom || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        conditions.push({
+          nom:    { $regex: new RegExp(`^${nomEsc}$`, "i") },
+          prenom: { $regex: new RegExp(`^${prenomEsc}$`, "i") },
+        });
+
+        const existant = await Patient.findOne({ $or: conditions });
+
+        if (existant) {
+          // Lier silencieusement si la référence était absente
+          if (!transport.patientId) {
+            await Transport.findByIdAndUpdate(transport._id, { patientId: existant._id });
+          }
+        } else {
+          const nouveauPatient = await Patient.create({
+            nom:            patientData.nom,
+            prenom:         patientData.prenom         || "",
+            dateNaissance:  patientData.dateNaissance  || null,
+            telephone:      patientData.telephone      || "",
+            numeroSecu:     patientData.numeroSecu?.trim() || "",
+            mobilite:       patientData.mobilite       || "ASSIS",
+            oxygene:        patientData.oxygene        || false,
+            brancardage:    patientData.brancardage    || false,
+            accompagnateur: patientData.accompagnateur || false,
+            antecedents:    patientData.antecedents    || "",
+            notes:          patientData.notes          || "",
+            actif:          true,
+          });
+          await Transport.findByIdAndUpdate(transport._id, { patientId: nouveauPatient._id });
+          logger.info(`[Patient] Auto-créé : ${patientData.nom} ${patientData.prenom || ""}`, {
+            patientId: nouveauPatient._id,
+            transportId: transport._id,
+          });
+        }
+      } catch (patientErr) {
+        // Non bloquant — le transport est déjà créé
+        logger.warn("[Patient] Auto-création échouée", {
+          err: patientErr.message,
+          transportId: transport._id,
+        });
+      }
+    }
+
     await audit.transportCree(transport, req.user);
 
     res.status(201).json({ message: "Transport créé", transport });
@@ -534,11 +588,108 @@ const facturer = async (req, res) => {
     return res.status(403).json({ message: "Clôture CPAM réservée aux superviseurs et administrateurs" });
   }
   try {
-    const r = await lifecycle.cloturerFacturation(
-      req.params.id,
-      req.body.factureId,
-      req.user,
-    );
+    const { referenceFacture, factureId: factureIdBody } = req.body;
+    const Facture = require("../models/Facture");
+
+    const transport = await Transport.findById(req.params.id);
+    if (!transport) return res.status(404).json({ message: "Transport introuvable" });
+
+    // ── Calcul tarifaire CPAM 2024 (OSRM + barème) ───────────────────────────
+    let tarif;
+    try {
+      tarif = await tarifService.calculerTarif(transport);
+    } catch (tarifErr) {
+      logger.warn("calculerTarif échoué, fallback 10 km", { err: tarifErr.message });
+      tarif = await tarifService.calculerTarif({
+        ...transport.toObject(),
+        adresseDepart:      { coordonnees: null },
+        adresseDestination: { coordonnees: null },
+      });
+    }
+
+    // montantBase = forfait + (prix/km × distance facturée)
+    const montantBase = Math.round(
+      (tarif.bareme.forfait + tarif.bareme.prixKm * tarif.distanceFacturee) * 100,
+    ) / 100;
+
+    // ── Résoudre l'ObjectId facture ───────────────────────────────────────────
+    let factureIdValide = transport.facture || null;
+    if (factureIdBody && mongoose.Types.ObjectId.isValid(factureIdBody)) {
+      factureIdValide = factureIdBody;
+    }
+
+    if (!factureIdValide) {
+      // Créer la facture avec les vrais montants calculés
+      const nouvelleFacture = await Facture.create({
+        transportId:       transport._id,
+        patientId:         transport.patientId || null,
+        patientNom:        transport.patient?.nom   || "",
+        patientPrenom:     transport.patient?.prenom || "",
+        motif:             transport.motif    || "",
+        typeVehicule:      transport.typeTransport || "VSL",
+        allerRetour:       transport.allerRetour   || false,
+        distanceKm:        tarif.distanceFacturee,
+        montantBase,
+        majoration:        tarif.supplements,
+        tauxPriseEnCharge: tarif.tauxPriseEnCharge,
+        // montantTotal, montantCPAM, montantPatient calculés par le hook pre-save
+        statut:            "emise",
+        dateEmission:      new Date(),
+        referenceExterne:  referenceFacture || null,
+        detailsCalcul:     {
+          sourceDistance: tarif.sourceDistance,
+          bareme:         tarif.bareme,
+          lignes:         tarif.details,
+        },
+        notes: referenceFacture ? `Réf. CPAM : ${referenceFacture}` : "",
+      });
+
+      factureIdValide = nouvelleFacture._id;
+      await Transport.findByIdAndUpdate(transport._id, { facture: factureIdValide });
+
+      logger.info("Facture créée — clôture BILLED", {
+        transport:     transport.numero,
+        facture:       nouvelleFacture.numero,
+        montantTotal:  nouvelleFacture.montantTotal,
+        distanceKm:    tarif.distanceFacturee,
+        source:        tarif.sourceDistance,
+      });
+    } else {
+      // Mettre à jour les montants de la facture existante
+      // findByIdAndUpdate ne déclenche pas le hook pre-save → setter tous les champs
+      await Facture.findByIdAndUpdate(factureIdValide, {
+        distanceKm:        tarif.distanceFacturee,
+        montantBase,
+        majoration:        tarif.supplements,
+        tauxPriseEnCharge: tarif.tauxPriseEnCharge,
+        montantTotal:      tarif.montantTotal,
+        montantCPAM:       tarif.montantCPAM,
+        montantPatient:    tarif.montantPatient,
+        referenceExterne:  referenceFacture || undefined,
+        detailsCalcul:     {
+          sourceDistance: tarif.sourceDistance,
+          bareme:         tarif.bareme,
+          lignes:         tarif.details,
+        },
+      });
+
+      logger.info("Facture existante mise à jour — clôture BILLED", {
+        transport:    transport.numero,
+        factureId:    factureIdValide,
+        montantTotal: tarif.montantTotal,
+      });
+    }
+
+    // ── Transition COMPLETED → BILLED ─────────────────────────────────────────
+    const r = await lifecycle.cloturerFacturation(req.params.id, factureIdValide, req.user);
+
+    // Stocker la référence texte CPAM (champ séparé, jamais casté en ObjectId)
+    if (referenceFacture) {
+      await Transport.findByIdAndUpdate(req.params.id, {
+        referenceFactureCPAM: String(referenceFacture).trim(),
+      });
+    }
+
     res.json(r);
   } catch (e) {
     _handleErr(res, e);

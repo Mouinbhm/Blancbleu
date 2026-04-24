@@ -73,6 +73,12 @@ const factureSchema = new mongoose.Schema(
     lieuDestination: { type: String, default: "" },
 
     notes: { type: String, default: "" },
+
+    // ── Détails du calcul tarifaire (barème CPAM 2024) ────────────────────────
+    detailsCalcul: { type: mongoose.Schema.Types.Mixed, default: null },
+
+    // ── Référence externe CPAM (numéro texte, ex : "PMT-20260424-0002") ───────
+    referenceExterne: { type: String, default: null },
   },
   { timestamps: true },
 );
