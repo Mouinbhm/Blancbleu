@@ -5,6 +5,7 @@ import StatutBadge from "../components/transport/StatutBadge";
 import TransportMap from "../components/map/TransportMap";
 import { transportService, vehicleService, missionService, factureService } from "../services/api";
 import useSocket from "../hooks/useSocket";
+import { getSocket, getOrCreateSocket } from "../services/socketService";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -41,11 +42,23 @@ const LABEL_TIMELINE = {
   RESCHEDULED: "Reprogrammé",
 };
 
+const MOBILITE_LABELS = {
+  ASSIS:            "🪑 Assis",
+  FAUTEUIL_ROULANT: "♿ Fauteuil roulant",
+  ALLONGE:          "🛏️ Allongé",
+  CIVIERE:          "🚑 Civière",
+};
+
 const MOBILITE_BADGE = {
-  assis: "bg-emerald-100 text-emerald-700",
-  "semi-allongé": "bg-amber-100 text-amber-700",
-  allongé: "bg-red-100 text-red-700",
-  bariatrique: "bg-purple-100 text-purple-700",
+  ASSIS:            "bg-emerald-100 text-emerald-700",
+  FAUTEUIL_ROULANT: "bg-amber-100 text-amber-700",
+  ALLONGE:          "bg-red-100 text-red-700",
+  CIVIERE:          "bg-red-200 text-red-800",
+};
+
+const PHASE_LABELS = {
+  DEPOT_TO_PATIENT: "En route vers le patient",
+  PATIENT_TO_HOPITAL: "Transport du patient en cours",
 };
 
 const BTN = {
@@ -64,7 +77,7 @@ const BTN = {
 const ACTIONS_PAR_STATUT = {
   REQUESTED: [{ label: "Confirmer la demande", fn: "confirmer", color: "blue", icon: "check_circle" }],
   CONFIRMED: [{ label: "Planifier", fn: "planifier", color: "indigo", icon: "calendar_month" }],
-  SCHEDULED: [],
+  SCHEDULED: [{ label: "Reprogrammer", color: "indigo", icon: "event_repeat", modal: "reprogrammer" }],
   ASSIGNED: [{ label: "En route", fn: "enRoute", color: "orange", icon: "directions_car" }],
   EN_ROUTE_TO_PICKUP: [{ label: "Arrivé chez le patient", fn: "arriveePatient", color: "yellow", icon: "location_on" }],
   ARRIVED_AT_PICKUP: [{ label: "Patient à bord", fn: "patientABord", color: "cyan", icon: "personal_injury" }],
@@ -130,8 +143,11 @@ function SectionCard({ title, icon, children, className = "" }) {
 
 function Modal({ title, onClose, children }) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-[500] p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl z-[501]">
+    <div
+      className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
         <div className="flex items-center justify-between mb-5">
           <h3 className="font-brand font-bold text-navy text-base">{title}</h3>
           <button
@@ -217,7 +233,7 @@ function Timeline({ transport }) {
       {steps.map((s, i) => {
         const entry = journalMap[s];
         const isCurrent = s === transport.statut;
-        const isPast = !!entry && !isCurrent;
+        const isPast = i < currentIdx && !isCurrent;
         const isBad = ["CANCELLED", "NO_SHOW"].includes(s);
 
         return (
@@ -233,6 +249,7 @@ function Timeline({ transport }) {
                     ? "bg-emerald-500 ring-emerald-100"
                     : "bg-slate-200 ring-slate-100"
                 }`}
+                style={isCurrent && !isBad ? { animation: "pulse-dot 1.5s ease infinite" } : undefined}
               />
               {i < steps.length - 1 && (
                 <div
@@ -289,6 +306,7 @@ export default function TransportDetail() {
   const [erreur, setErreur] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [vehiclePosition, setVehiclePosition] = useState(null);
+  const [posLive, setPosLive] = useState(null);
   const [vehicles, setVehicles] = useState([]);
   const [isLive, setIsLive] = useState(false);
 
@@ -296,11 +314,13 @@ export default function TransportDetail() {
   const [linkedMission, setLinkedMission] = useState(null);
   const [linkedFacture, setLinkedFacture] = useState(null);
 
-  // Modal: null | 'assigner' | 'attente' | 'retour' | 'facturer'
+  // Modal: null | 'assigner' | 'attente' | 'retour' | 'facturer' | 'reprogrammer'
   const [activeModal, setActiveModal] = useState(null);
   const [modalVehicle, setModalVehicle] = useState("");
   const [modalDuree, setModalDuree] = useState("");
   const [modalFactureId, setModalFactureId] = useState("");
+  const [modalReprogDate, setModalReprogDate] = useState("");
+  const [modalReprogHeure, setModalReprogHeure] = useState("");
   const closeModal = () => setActiveModal(null);
 
   const loadTransport = useCallback(async () => {
@@ -337,19 +357,34 @@ export default function TransportDetail() {
   }, [transport]);
 
   useEffect(() => {
-    vehicleService.getAll({ disponible: "true" }).then(({ data }) => {
-      setVehicles(Array.isArray(data) ? data : []);
+    vehicleService.getAll().then(({ data }) => {
+      setVehicles(Array.isArray(data) ? data : data?.vehicles || []);
     }).catch(() => {});
   }, []);
 
   // ── Section 8: Socket.IO ────────────────────────────────────────────────────
 
+  // Mise à jour timeline sur changement de statut
+  // Écoute "transport:statut"        (émis par emitTransportStatut dans lifecycle)
+  //   et  "transport:statut_change"  (émis par emitTransportStatutChange dans lifecycle)
   useEffect(() => {
-    const unsub = subscribe("status:updated", (d) => {
-      if (String(d.transportId) === id || String(d._id) === id) loadTransport();
-    });
-    return unsub;
-  }, [subscribe, id, loadTransport]);
+    const socket = getSocket() || getOrCreateSocket();
+    if (!socket) return;
+
+    const onStatutChange = (d) => {
+      if (String(d.transportId) !== id) return;
+      console.log(`🔄 Statut changé : ${d.ancienStatut} → ${d.nouveauStatut}`);
+      loadTransport();
+    };
+
+    socket.on("transport:statut",        onStatutChange);
+    socket.on("transport:statut_change", onStatutChange);
+
+    return () => {
+      socket.off("transport:statut",        onStatutChange);
+      socket.off("transport:statut_change", onStatutChange);
+    };
+  }, [id, loadTransport]);
 
   useEffect(() => {
     const unsub = subscribe("unit:location_updated", (d) => {
@@ -365,6 +400,17 @@ export default function TransportDetail() {
     });
     return unsub;
   }, [subscribe, transport?.vehicule]);
+
+  // Simulation GPS temps réel
+  useEffect(() => {
+    const unsub = subscribe("vehicule:position", (d) => {
+      if (String(d.transportId) !== id) return;
+      const pos = { lat: d.lat, lng: d.lng, phase: d.phase, vitesse: d.vitesse, progression: d.progression };
+      setVehiclePosition(pos);
+      setPosLive(pos);
+    });
+    return unsub;
+  }, [subscribe, id]);
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
@@ -405,6 +451,23 @@ export default function TransportDetail() {
     doAction("facturer", modalFactureId.trim());
   };
 
+  const handleReprogrammer = async () => {
+    if (!modalReprogDate) return;
+    setActionLoading(true);
+    try {
+      await transportService.reprogrammer(id, {
+        dateTransport: modalReprogDate,
+        heureRDV: modalReprogHeure || undefined,
+      });
+      await loadTransport();
+      closeModal();
+    } catch (err) {
+      alert(err.response?.data?.message || "Erreur lors de la reprogrammation");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // ── Loading / error states ──────────────────────────────────────────────────
 
   if (loading) {
@@ -429,7 +492,7 @@ export default function TransportDetail() {
   }
 
   const peutAnnuler = !["BILLED", "CANCELLED", "NO_SHOW"].includes(transport.statut);
-  const peutAssigner = ["CONFIRMED", "SCHEDULED"].includes(transport.statut) && !transport.vehicule;
+  const peutAssigner = ["CONFIRMED", "SCHEDULED"].includes(transport.statut);
   const actionsStatut = ACTIONS_PAR_STATUT[transport.statut] || [];
   const hasActions = actionsStatut.length > 0 || peutAnnuler || peutAssigner;
 
@@ -438,7 +501,6 @@ export default function TransportDetail() {
   const vehicleId = String(transport.vehicule?._id || transport.vehicule?.id || "");
 
   // Filtrage des véhicules compatibles avec la mobilité réelle du patient
-  // Le type d'origine du transport (typeTransport) est toujours proposé en premier.
   const COMPAT_VEHICULE = {
     ASSIS:            ["VSL", "TPMR", "AMBULANCE"],
     FAUTEUIL_ROULANT: ["TPMR", "AMBULANCE"],
@@ -449,10 +511,15 @@ export default function TransportDetail() {
   const typesCompatibles = COMPAT_VEHICULE[mobilitePatient] || ["VSL"];
   const typeOriginal = transport?.typeTransport;
   const typesTries = [typeOriginal, ...typesCompatibles.filter((t) => t !== typeOriginal)].filter(Boolean);
-  const vehiculesFiltres = vehicles
-    .filter((v) => v.statut === "disponible")
+
+  // Tous les véhicules compatibles par type, disponibles en tête
+  const vehiculesCompatibles = vehicles
     .filter((v) => typesTries.includes(v.type))
-    .sort((a, b) => typesTries.indexOf(a.type) - typesTries.indexOf(b.type));
+    .sort((a, b) => {
+      if (a.statut === "disponible" && b.statut !== "disponible") return -1;
+      if (b.statut === "disponible" && a.statut !== "disponible") return 1;
+      return typesTries.indexOf(a.type) - typesTries.indexOf(b.type);
+    });
 
   return (
     <div className="pb-24 fade-in">
@@ -496,6 +563,36 @@ export default function TransportDetail() {
         <ProgressBar statut={transport.statut} />
       </div>
 
+      {/* ── Bannière GPS temps réel ─────────────────────────────────────────── */}
+      {posLive && !["BILLED", "CANCELLED", "NO_SHOW", "COMPLETED"].includes(transport.statut) && (
+        <div className="bg-gradient-to-r from-blue-600 to-cyan-500 px-6 py-3">
+          <div className="max-w-5xl mx-auto flex items-center gap-4">
+            <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0 text-lg">
+              🚑
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-sm font-bold text-white truncate">
+                  {PHASE_LABELS[posLive.phase] || "Véhicule en mouvement"}
+                </span>
+                <span className="text-xs font-mono bg-white/25 text-white px-2 py-0.5 rounded-full flex-shrink-0 ml-2">
+                  {posLive.vitesse} km/h
+                </span>
+              </div>
+              <div className="w-full bg-white/25 rounded-full h-1.5">
+                <div
+                  className="bg-white rounded-full h-1.5 transition-all duration-1000"
+                  style={{ width: `${posLive.progression ?? 0}%` }}
+                />
+              </div>
+            </div>
+            <span className="text-xs font-bold text-white/80 flex-shrink-0 w-8 text-right">
+              {posLive.progression ?? 0}%
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* ── Main layout ────────────────────────────────────────────────────────── */}
       <div className="p-6 grid gap-5 lg:grid-cols-3">
 
@@ -520,8 +617,7 @@ export default function TransportDetail() {
               </div>
               {transport.patient?.mobilite && (
                 <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${MOBILITE_BADGE[transport.patient.mobilite] || "bg-slate-100 text-slate-600"}`}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 12 }}>accessibility</span>
-                  {transport.patient.mobilite}
+                  {MOBILITE_LABELS[transport.patient.mobilite] || transport.patient.mobilite}
                 </span>
               )}
             </div>
@@ -614,14 +710,17 @@ export default function TransportDetail() {
                 )}
               </div>
               {/* Carte */}
-              <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 220 }}>
+              <div
+                className="rounded-xl overflow-hidden border border-slate-200 relative"
+                style={{ height: 220, zIndex: 1 }}
+              >
                 <TransportMap transport={transport} vehiclePosition={vehiclePos} />
               </div>
             </div>
           </SectionCard>
 
           {/* ── SECTION 5: Véhicule & Chauffeur ─────────────────────────────────── */}
-          {transport.vehicule && (
+          {transport.vehicule && !["REQUESTED", "CONFIRMED", "SCHEDULED"].includes(transport.statut) && (
             <SectionCard title="Véhicule assigné" icon="airport_shuttle">
               <div className="flex items-start gap-4">
                 <div className="grid grid-cols-2 gap-0 flex-1 divide-y divide-slate-50">
@@ -886,7 +985,7 @@ export default function TransportDetail() {
 
       {/* ── SECTION 7: Sticky action panel ──────────────────────────────────────── */}
       {hasActions && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-slate-200 px-6 py-3 z-10 shadow-lg">
+        <div className="fixed bottom-0 left-60 right-0 bg-white/95 backdrop-blur border-t border-slate-200 px-6 py-3 z-10 shadow-lg">
           <div className="flex items-center gap-2 max-w-5xl mx-auto flex-wrap">
             {peutAssigner && (
               <button
@@ -895,7 +994,7 @@ export default function TransportDetail() {
                 className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-sm transition-colors disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-base">airport_shuttle</span>
-                Assigner un véhicule
+                {transport.vehicule ? "Réassigner un véhicule" : "Assigner un véhicule"}
               </button>
             )}
             {actionsStatut.map((a, i) =>
@@ -940,39 +1039,55 @@ export default function TransportDetail() {
       {activeModal === "assigner" && (
         <Modal title="Assigner un véhicule" onClose={closeModal}>
           <p className="text-xs text-slate-500 mb-3">
-            Mobilité patient : <strong className="text-navy">{mobilitePatient}</strong>
+            Mobilité patient : <strong className="text-navy">{MOBILITE_LABELS[mobilitePatient] || mobilitePatient}</strong>
             {" — "}types compatibles : <strong className="text-primary">{typesCompatibles.join(", ")}</strong>
           </p>
           <select
             value={modalVehicle}
             onChange={(e) => setModalVehicle(e.target.value)}
-            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm mb-4 outline-none focus:border-primary bg-white"
+            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm mb-3 outline-none focus:border-primary bg-white"
           >
             <option value="">Choisir un véhicule compatible…</option>
-            {vehiculesFiltres.map((v) => (
-              <option key={v._id} value={v._id}>
+            {vehiculesCompatibles.map((v) => (
+              <option
+                key={String(v._id || v.id)}
+                value={String(v._id || v.id)}
+                disabled={v.statut !== "disponible"}
+                style={{ color: v.statut === "disponible" ? "#059669" : "#94a3b8" }}
+              >
+                {v.statut === "disponible" ? "✅" : "🔴"}{" "}
                 {v.nom} — {v.immatriculation} ({v.type})
+                {v.statut !== "disponible" ? ` — ${v.statut}` : " — Disponible"}
               </option>
             ))}
           </select>
-          {vehiculesFiltres.length === 0 && (
-            <p className="text-sm text-amber-600 mb-4">
-              Aucun véhicule compatible ({typesCompatibles.join(", ")}) disponible actuellement.
+          {vehiculesCompatibles.length === 0 && (
+            <p className="text-sm text-red-500 mb-3">
+              ❌ Aucun véhicule compatible ({typesCompatibles.join(", ")}) enregistré dans la flotte.
             </p>
           )}
-          <div className="flex gap-3 mt-4">
+          {vehiculesCompatibles.length > 0 && vehiculesCompatibles.every((v) => v.statut !== "disponible") && (
+            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+              ⚠️ Tous les véhicules compatibles sont actuellement en mission. Vous pouvez quand même forcer l'assignation.
+            </p>
+          )}
+          <div className="flex gap-3 mt-3">
             <button
               onClick={closeModal}
-              className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+              className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-semibold"
             >
               Fermer
             </button>
             <button
               onClick={handleAssigner}
               disabled={!modalVehicle || actionLoading}
-              className="flex-1 px-4 py-2 bg-primary text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`flex-1 px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
+                !modalVehicle || actionLoading
+                  ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  : "bg-primary text-white hover:bg-blue-700"
+              }`}
             >
-              {actionLoading ? "..." : "✅ Confirmer l'assignation"}
+              {actionLoading ? "⏳ Assignation…" : "✅ Confirmer l'assignation"}
             </button>
           </div>
         </Modal>
@@ -1025,6 +1140,46 @@ export default function TransportDetail() {
               className="flex-1 py-2.5 rounded-xl bg-slate-700 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-50"
             >
               {actionLoading ? "…" : "Confirmer le retour"}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {activeModal === "reprogrammer" && (
+        <Modal title="Reprogrammer le transport" onClose={closeModal}>
+          <p className="text-sm text-slate-500 mb-4">
+            Modifiez la date et/ou l'heure du transport. Le statut restera SCHEDULED.
+          </p>
+          <div className="space-y-3 mb-5">
+            <div>
+              <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest block mb-1">Nouvelle date</label>
+              <input
+                type="date"
+                value={modalReprogDate}
+                onChange={(e) => setModalReprogDate(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest block mb-1">Nouvelle heure</label>
+              <input
+                type="time"
+                value={modalReprogHeure}
+                onChange={(e) => setModalReprogHeure(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary"
+              />
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={closeModal} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50">
+              Annuler
+            </button>
+            <button
+              onClick={handleReprogrammer}
+              disabled={!modalReprogDate || actionLoading}
+              className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {actionLoading ? "…" : "Reprogrammer"}
             </button>
           </div>
         </Modal>

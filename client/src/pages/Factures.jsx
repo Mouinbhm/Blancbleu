@@ -198,19 +198,23 @@ export default function Factures() {
   const [factureImprimer, setFactureImprimer] = useState(null);
   const [actionId, setActionId] = useState(null);
 
-  const loadData = () => {
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
     const params = { limit: 100 };
     if (filterStatut) params.statut = filterStatut;
+
     Promise.all([factureService.getAll(params), factureService.getStats()])
       .then(([f, s]) => {
+        if (cancelled) return;
         setFactures(f.data.factures || []);
         setStats(s.data);
       })
       .catch(() => {})
-      .finally(() => setLoading(false));
-  };
+      .finally(() => { if (!cancelled) setLoading(false); });
 
-  useEffect(() => { setLoading(true); loadData(); }, [filterStatut]); // eslint-disable-line
+    return () => { cancelled = true; };
+  }, [filterStatut]);
 
   const filtered = factures.filter((f) => {
     const q = search.toLowerCase();
@@ -341,7 +345,7 @@ export default function Factures() {
         <table className="w-full">
           <thead>
             <tr className="bg-navy">
-              {["N° Facture", "Date", "Transport", "Patient", "Montant total", "CPAM", "Patient", "Statut", "Actions"].map((h) => (
+              {["N° Facture", "Date", "Transport", "Patient", "Montant total", "Part CPAM", "Part patient", "Statut", "Actions"].map((h) => (
                 <th key={h} className="px-4 py-4 text-left font-mono text-xs text-white/70 uppercase tracking-widest">{h}</th>
               ))}
             </tr>

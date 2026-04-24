@@ -160,14 +160,22 @@ exports.createMission = async (req, res) => {
       await verifierCompatibilite(transport, vehicleId);
     }
 
-    // Validation chauffeur
+    // Validation chauffeur — doit exister dans Personnel (pas User)
     if (chauffeurId) {
       const chauffeur = await Personnel.findById(chauffeurId);
-      if (!chauffeur) return res.status(404).json({ message: "Chauffeur introuvable" });
-      if (chauffeur.statut === "inactif")
-        return res.status(400).json({ message: "Ce chauffeur est inactif" });
-      if (["maladie", "conge"].includes(chauffeur.statut))
-        return res.status(400).json({ message: `Ce chauffeur est en ${chauffeur.statut}` });
+      if (!chauffeur) {
+        return res.status(404).json({ message: "Chauffeur introuvable dans le référentiel Personnel" });
+      }
+      if (!["Chauffeur", "Ambulancier"].includes(chauffeur.role)) {
+        return res.status(400).json({
+          message: `Le personnel sélectionné (rôle : ${chauffeur.role}) ne peut pas conduire. Rôle requis : Chauffeur ou Ambulancier`,
+        });
+      }
+      if (chauffeur.statut !== "en-service") {
+        return res.status(400).json({
+          message: `Ce chauffeur n'est pas en service (statut actuel : ${chauffeur.statut})`,
+        });
+      }
     }
 
     const mission = await Mission.create({

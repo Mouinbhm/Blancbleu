@@ -66,3 +66,15 @@ body {
     opacity: 1;
   }
 }
+
+/* Contain Leaflet z-index within its wrapper — prevents bleeding above modals */
+.leaflet-container {
+  isolation: isolate;
+  z-index: 1 !important;
+}
+.leaflet-pane {
+  z-index: auto !important;
+}
+.leaflet-control-container .leaflet-control {
+  z-index: auto !important;
+}

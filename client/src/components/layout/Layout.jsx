@@ -69,15 +69,18 @@ export default function Layout() {
 
   // ── Chargement notifications initiales ───────────────────────────────────
   useEffect(() => {
+    let cancelled = false;
+
     const loadNotifs = async () => {
       try {
         const { data } = await transportService.getAll({
           statut: "REQUESTED",
           limit: 10,
         });
+        if (cancelled) return;
         const enAttente = data.transports || data.data || [];
         const list = enAttente.map((t) => ({
-          id: t._id,
+          id: String(t._id),
           title: `${t.motif} — ${t.patient?.nom || "Patient"}`,
           sub: `En attente de confirmation · ${t.typeTransport}`,
           path: `/transports/${String(t._id)}`,
@@ -89,9 +92,13 @@ export default function Layout() {
         /* silencieux */
       }
     };
+
     loadNotifs();
     const iv = setInterval(loadNotifs, 60000);
-    return () => clearInterval(iv);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
   }, []);
 
   // ── Fermer notifs si clic en dehors ──────────────────────────────────────

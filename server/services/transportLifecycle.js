@@ -11,6 +11,7 @@
 
 const Transport = require("../models/Transport");
 const Vehicle = require("../models/Vehicle");
+const Personnel = require("../models/Personnel");
 const Facture = require("../models/Facture");
 const { TransportStateMachine } = require("./transportStateMachine");
 const { smartDispatch } = require("./smartDispatch");
@@ -75,15 +76,21 @@ async function _transition(transportId, nouveauStatut, metadata = {}) {
     }
   }
 
-  // Émettre événement Socket.IO
-  socketService.emitStatusUpdated?.({
-    intervention: {
-      _id: transport._id,
-      numero: transport.numero,
-      priorite: "transport",
-    },
+  // Émettre événements Socket.IO
+  // emitTransportStatut → "transport:statut"        (dashboard / liste)
+  // emitTransportStatutChange → "transport:statut_change" (timeline TransportDetail)
+  socketService.emitTransportStatut?.({
+    transport,
     ancienStatut: entreeJournal.de,
     nouveauStatut,
+    utilisateur: metadata.utilisateur || "système",
+  });
+  socketService.emitTransportStatutChange?.({
+    transportId: transport._id,
+    numero: transport.numero,
+    ancienStatut: entreeJournal.de,
+    nouveauStatut,
+    journal: transport.journal,
     utilisateur: metadata.utilisateur || "système",
   });
   socketService.emitStatsUpdate?.();
@@ -172,6 +179,24 @@ async function assignerVehicule(
     justification = dispatch.justification;
   }
 
+  // Valider le chauffeur dans Personnel (pas dans User)
+  if (chauffeurIdFinal) {
+    const chauffeur = await Personnel.findById(chauffeurIdFinal);
+    if (!chauffeur) {
+      throw new Error("Chauffeur introuvable dans le référentiel Personnel");
+    }
+    if (!["Chauffeur", "Ambulancier"].includes(chauffeur.role)) {
+      throw new Error(
+        `Le personnel sélectionné a le rôle "${chauffeur.role}" — seuls Chauffeur et Ambulancier peuvent être assignés à un transport`,
+      );
+    }
+    if (chauffeur.statut !== "en-service") {
+      throw new Error(
+        `Ce chauffeur n'est pas en service (statut actuel : ${chauffeur.statut})`,
+      );
+    }
+  }
+
   // Mettre à jour avant la transition
   await Transport.findByIdAndUpdate(transportId, {
     vehicule: vehiculeIdFinal,
@@ -205,6 +230,13 @@ async function assignerVehicule(
     auto,
     score: scoreDispatch,
   });
+
+  // Démarrer la simulation GPS 5s après l'assignation (lazy require — évite la dépendance circulaire)
+  setTimeout(() => {
+    require("./simulationGPS")
+      .demarrerSimulation(transportId)
+      .catch((err) => logger.warn("Simulation GPS non démarrée", { err: err.message }));
+  }, 5000);
 
   return { transport: transportUpdated, justification };
 }

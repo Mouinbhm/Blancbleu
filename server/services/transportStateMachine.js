@@ -161,11 +161,10 @@ const VALIDATEURS = {
     return errors;
   },
 
-  // Assignation : véhicule et chauffeur requis
+  // Assignation : véhicule requis, chauffeur optionnel
   SCHEDULED_ASSIGNED: (transport) => {
     const errors = [];
     if (!transport.vehicule) errors.push("Véhicule non assigné");
-    if (!transport.chauffeur) errors.push("Chauffeur non assigné");
     return errors;
   },
 

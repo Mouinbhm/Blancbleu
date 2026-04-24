@@ -11,6 +11,7 @@ const Vehicle = require("./models/Vehicle");
 const Transport = require("./models/Transport");
 const Patient = require("./models/Patient");
 const Prescription = require("./models/Prescription");
+const Personnel = require("./models/Personnel");
 
 const NICE_BASE = {
   lat: 43.7102,
@@ -73,6 +74,7 @@ const seed = async () => {
       Transport.deleteMany(),
       Patient.deleteMany(),
       Prescription.deleteMany(),
+      Personnel.deleteMany(),
     ]);
     console.log("🗑️  Collections nettoyées");
 
@@ -114,6 +116,39 @@ const seed = async () => {
     ]);
     console.log(`👤 ${users.length} utilisateurs créés`);
 
+    // ── PERSONNEL MÉTIER ──────────────────────────────────────────────────────
+    // users[2] = Faure Nicolas (chauffeur1), users[3] = Laurent Eva (chauffeur2)
+    // On crée les fiches Personnel et on les relie aux comptes User via userId.
+    const personnel = await Personnel.insertMany([
+      {
+        nom: "Faure",
+        prenom: "Nicolas",
+        role: "Chauffeur",
+        statut: "en-service",
+        telephone: "06 10 20 30 40",
+        email: "chauffeur1@blancbleu.fr",
+        typeContrat: "CDI",
+        dateEmbauche: new Date("2020-03-01"),
+        userId: users[2]._id,
+        notes: "Chauffeur VSL principal — secteur centre Nice",
+        actif: true,
+      },
+      {
+        nom: "Laurent",
+        prenom: "Eva",
+        role: "Ambulancier",
+        statut: "en-service",
+        telephone: "06 20 30 40 50",
+        email: "chauffeur2@blancbleu.fr",
+        typeContrat: "CDI",
+        dateEmbauche: new Date("2021-06-15"),
+        userId: users[3]._id,
+        notes: "Ambulancière diplômée — spécialiste brancardage",
+        actif: true,
+      },
+    ]);
+    console.log(`🧑‍⚕️  ${personnel.length} personnels créés`);
+
     // ── VÉHICULES ─────────────────────────────────────────────────────────────
     const vehicles = await Vehicle.insertMany([
       {
@@ -133,7 +168,7 @@ const seed = async () => {
         annee: 2022,
         capacitePassagers: 3,
         tauxPonctualite: 97,
-        chauffeurAssigne: users[2]._id,
+        chauffeurAssigne: personnel[0]._id,
         notes: "VSL principal — secteur centre Nice",
       },
       {
@@ -153,7 +188,7 @@ const seed = async () => {
         annee: 2022,
         capacitePassagers: 3,
         tauxPonctualite: 93,
-        chauffeurAssigne: users[3]._id,
+        chauffeurAssigne: personnel[1]._id,
         notes: "Secteur Ouest Nice",
       },
       {
@@ -386,7 +421,7 @@ const seed = async () => {
         },
         statut: "ASSIGNED",
         vehicule: vehicles[2]._id, // TPMR
-        chauffeur: users[2]._id,
+        chauffeur: personnel[0]._id,
         tauxPriseEnCharge: 100,
         createdBy: users[1]._id,
         heureConfirmation: new Date(Date.now() - 86400000),
@@ -433,7 +468,7 @@ const seed = async () => {
         },
         statut: "EN_ROUTE_TO_PICKUP",
         vehicule: vehicles[0]._id, // VSL-01
-        chauffeur: users[2]._id,
+        chauffeur: personnel[0]._id,
         tauxPriseEnCharge: 100,
         createdBy: users[1]._id,
         heureConfirmation: new Date(Date.now() - 86400000),
@@ -563,7 +598,7 @@ const seed = async () => {
         },
         statut: "COMPLETED",
         vehicule: vehicles[1]._id,
-        chauffeur: users[3]._id,
+        chauffeur: personnel[1]._id,
         createdBy: users[1]._id,
         tauxPriseEnCharge: 100,
         heureConfirmation: new Date(Date.now() - 172800000),
@@ -623,6 +658,7 @@ const seed = async () => {
     console.log("\n✅ Seed BlancBleu terminé avec succès !");
     console.log("─────────────────────────────────────────");
     console.log(`   👤 Utilisateurs   : ${users.length}`);
+    console.log(`   🧑‍⚕️  Personnel      : ${personnel.length}`);
     console.log(`   🚐 Véhicules      : ${vehicles.length}`);
     console.log(`   🧑‍⚕️  Patients       : ${patients.length}`);
     console.log(`   📋 Prescriptions  : ${prescriptions.length}`);

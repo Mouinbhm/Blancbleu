@@ -46,6 +46,11 @@ export function getSocket() {
   return socket;
 }
 
+export function getOrCreateSocket(role = "dispatcher") {
+  if (socket?.connected) return socket;
+  return connectSocket(role);
+}
+
 /**
  * Hook React pour écouter un événement Socket.IO
  * Usage : useSocketEvent('intervention:nouvelle', callback)

@@ -51,6 +51,15 @@ const personnelSchema = new mongoose.Schema(
       default: null,
     },
 
+    // ─── Lien compte de connexion (optionnel) ─────────────────────────────────
+    // Permet de relier un employé métier à un compte User (login) si nécessaire.
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+
     // ─── Coordonnées ──────────────────────────────────────────────────────────
     telephone: { type: String, trim: true },
     email:     { type: String, trim: true, lowercase: true },

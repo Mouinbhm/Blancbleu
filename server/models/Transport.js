@@ -145,7 +145,7 @@ const transportSchema = new mongoose.Schema(
     },
     chauffeur: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Personnel",
       default: null,
     },
     scoreDispatch: { type: Number, default: null },

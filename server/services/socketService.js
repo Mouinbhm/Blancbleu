@@ -170,6 +170,23 @@ function emitVehiculeStatut({ vehicule, ancienStatut, nouveauStatut }) {
 }
 
 /**
+ * transport:statut_change
+ * Alias enrichi de transport:statut — utilisé par la timeline React
+ */
+function emitTransportStatutChange({ transportId, numero, ancienStatut, nouveauStatut, journal, utilisateur }) {
+  if (!_io) return;
+  _io.emit("transport:statut_change", {
+    transportId,
+    numero,
+    ancienStatut,
+    nouveauStatut,
+    journal: journal || [],
+    utilisateur: utilisateur || "système",
+    timestamp: new Date(),
+  });
+}
+
+/**
  * vehicule:position
  * Émis lors d'une mise à jour GPS d'un véhicule en mission
  */
@@ -301,6 +318,7 @@ module.exports = {
   ROOMS,
   emitTransportCreated,
   emitTransportStatut,
+  emitTransportStatutChange,
   emitVehiculeAssigne,
   emitVehiculeStatut,
   emitVehiculePosition,
