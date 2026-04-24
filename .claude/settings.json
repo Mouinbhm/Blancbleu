@@ -5,7 +5,10 @@
       "Bash(venv/Scripts/python.exe -m spacy download fr_core_news_sm)",
       "Bash(venv/Scripts/python.exe -m uvicorn main:app --host 0.0.0.0 --port 5002 --reload)",
       "Bash(curl -s http://localhost:5002/health)",
-      "Bash(curl -s http://localhost:5002/pmt/status)"
+      "Bash(curl -s http://localhost:5002/pmt/status)",
+      "Bash(grep -v \"//.*Patient\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory"
