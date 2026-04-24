@@ -176,14 +176,9 @@ const VALIDATEURS = {
     return errors;
   },
 
-  // Clôture financière : facture associée obligatoire
-  // (le contrôleur vérifie en amont que l'utilisateur est superviseur/admin)
-  COMPLETED_BILLED: (transport) => {
-    if (!transport.facture && !transport._factureIdTemp) {
-      return ["Facture associée obligatoire pour la clôture CPAM"];
-    }
-    return [];
-  },
+  // Clôture financière — guard assoupli : la facture est auto-créée par le
+  // contrôleur si absente ; on n'exige plus qu'elle soit déjà liée ici.
+  COMPLETED_BILLED: (_transport) => [],
 
   // Reprogrammation : raison obligatoire
   "*_RESCHEDULED": (transport) => {
