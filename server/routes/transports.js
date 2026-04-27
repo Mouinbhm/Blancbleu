@@ -5,6 +5,8 @@
 const express = require("express");
 const router = express.Router();
 const { protect } = require("../middleware/auth");
+const validate = require("../middleware/validate");
+const { createTransportSchema, updateTransportSchema } = require("../validators/schemas");
 const ctrl = require("../controllers/transportController");
 
 // ── Stats et estimation (avant /:id) ─────────────────────────────────────────
@@ -14,11 +16,11 @@ router.get("/estimation", protect, ctrl.estimerTarif);
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 router.get("/", protect, ctrl.getTransports);
-router.post("/", protect, ctrl.createTransport);
+router.post("/", protect, validate(createTransportSchema), ctrl.createTransport);
 // Route récurrence avant /:id pour éviter la capture par le paramètre générique
 router.post("/recurrents", protect, ctrl.creerTransportsRecurrents);
 router.get("/:id", protect, ctrl.getTransport);
-router.patch("/:id", protect, ctrl.updateTransport);
+router.patch("/:id", protect, validate(updateTransportSchema), ctrl.updateTransport);
 router.delete("/:id", protect, ctrl.deleteTransport);
 
 // ── Transitions lifecycle ─────────────────────────────────────────────────────
