@@ -172,6 +172,118 @@ const updatePasswordSchema = Joi.object({
     }),
 });
 
+// ─── Transport sanitaire ──────────────────────────────────────────────────────
+const TYPES_TRANSPORT = ["VSL", "AMBULANCE", "TPMR"];
+const MOTIFS_TRANSPORT = [
+  "Dialyse", "Chimiothérapie", "Radiothérapie", "Consultation",
+  "Hospitalisation", "Sortie hospitalisation", "Rééducation", "Analyse", "Autre",
+];
+const MOBILITES = ["ASSIS", "FAUTEUIL_ROULANT", "ALLONGE", "CIVIERE"];
+
+const adresseTransportSchema = Joi.object({
+  nom: Joi.string().max(200).allow("").default(""),
+  rue: Joi.string().max(300).allow("").default(""),
+  ville: Joi.string().max(100).allow("").default(""),
+  codePostal: Joi.string().max(10).allow("").default(""),
+  service: Joi.string().max(100).allow("").default(""),
+  coordonnees: Joi.object({
+    lat: Joi.number().min(-90).max(90),
+    lng: Joi.number().min(-180).max(180),
+  }).default({}),
+});
+
+const patientTransportSchema = Joi.object({
+  nom: Joi.string().min(1).max(100).required(),
+  prenom: Joi.string().max(100).allow("").default(""),
+  dateNaissance: Joi.date().allow(null).default(null),
+  telephone: Joi.string().max(20).allow("").default(""),
+  numeroSecu: Joi.string().max(30).allow("").default(""),
+  mobilite: Joi.string().valid(...MOBILITES).default("ASSIS"),
+  oxygene: Joi.boolean().default(false),
+  brancardage: Joi.boolean().default(false),
+  accompagnateur: Joi.boolean().default(false),
+  antecedents: Joi.string().max(1000).allow("").default(""),
+  notes: Joi.string().max(1000).allow("").default(""),
+});
+
+const createTransportSchema = Joi.object({
+  typeTransport: Joi.string().valid(...TYPES_TRANSPORT).required().messages({
+    "any.only": `typeTransport invalide. Valeurs : ${TYPES_TRANSPORT.join(", ")}`,
+  }),
+  motif: Joi.string().valid(...MOTIFS_TRANSPORT).required().messages({
+    "any.only": `motif invalide. Valeurs : ${MOTIFS_TRANSPORT.join(", ")}`,
+  }),
+  dateTransport: Joi.date().required().messages({
+    "date.base": "dateTransport doit être une date valide",
+  }),
+  heureRDV: Joi.string().pattern(/^\d{2}:\d{2}$/).required().messages({
+    "string.pattern.base": "heureRDV doit être au format HH:MM",
+  }),
+  adresseDepart: adresseTransportSchema.required(),
+  adresseDestination: adresseTransportSchema.required(),
+  patient: patientTransportSchema.required(),
+  allerRetour: Joi.boolean().default(false),
+  heureDepart: Joi.string().allow("").default(""),
+  notes: Joi.string().max(2000).allow("").default(""),
+  patientId: Joi.string().hex().length(24).allow(null).default(null),
+  prescriptionId: Joi.string().hex().length(24).allow(null).default(null),
+  vehicule: Joi.string().hex().length(24).allow(null).default(null),
+  chauffeur: Joi.string().hex().length(24).allow(null).default(null),
+  tauxPriseEnCharge: Joi.number().integer().min(0).max(100).default(65),
+});
+
+const updateTransportSchema = Joi.object({
+  typeTransport: Joi.string().valid(...TYPES_TRANSPORT),
+  motif: Joi.string().valid(...MOTIFS_TRANSPORT),
+  dateTransport: Joi.date(),
+  heureRDV: Joi.string().pattern(/^\d{2}:\d{2}$/),
+  adresseDepart: adresseTransportSchema,
+  adresseDestination: adresseTransportSchema,
+  patient: patientTransportSchema,
+  allerRetour: Joi.boolean(),
+  heureDepart: Joi.string().allow(""),
+  notes: Joi.string().max(2000).allow(""),
+  patientId: Joi.string().hex().length(24).allow(null),
+  prescriptionId: Joi.string().hex().length(24).allow(null),
+}).min(1).messages({ "object.min": "Au moins un champ à modifier est requis" });
+
+// ─── Véhicule ─────────────────────────────────────────────────────────────────
+const TYPES_VEHICULE = ["VSL", "AMBULANCE", "TPMR"];
+const STATUTS_VEHICULE = ["disponible", "en_mission", "maintenance", "hors_service"];
+
+const createVehicleSchema = Joi.object({
+  immatriculation: Joi.string().max(20).uppercase().trim().required(),
+  nom: Joi.string().min(2).max(100).trim().required(),
+  type: Joi.string().valid(...TYPES_VEHICULE).required().messages({
+    "any.only": `type invalide. Valeurs : ${TYPES_VEHICULE.join(", ")}`,
+  }),
+  statut: Joi.string().valid(...STATUTS_VEHICULE).default("disponible"),
+  capacitePassagers: Joi.number().integer().min(1).max(10).default(1),
+  equipeFauteuil: Joi.boolean().default(false),
+  equipeOxygene: Joi.boolean().default(false),
+  equipeBrancard: Joi.boolean().default(false),
+  kilometrage: Joi.number().min(0).default(0),
+  carburant: Joi.number().min(0).max(100).default(100),
+  annee: Joi.number().integer().min(2000).max(new Date().getFullYear() + 1).allow(null).default(null),
+  notes: Joi.string().max(1000).allow("").default(""),
+});
+
+const updateVehicleSchema = Joi.object({
+  immatriculation: Joi.string().max(20).uppercase().trim(),
+  nom: Joi.string().min(2).max(100).trim(),
+  type: Joi.string().valid(...TYPES_VEHICULE),
+  statut: Joi.string().valid(...STATUTS_VEHICULE),
+  capacitePassagers: Joi.number().integer().min(1).max(10),
+  equipeFauteuil: Joi.boolean(),
+  equipeOxygene: Joi.boolean(),
+  equipeBrancard: Joi.boolean(),
+  kilometrage: Joi.number().min(0),
+  carburant: Joi.number().min(0).max(100),
+  annee: Joi.number().integer().min(2000).allow(null),
+  notes: Joi.string().max(1000).allow(""),
+  chauffeurAssigne: Joi.string().hex().length(24).allow(null),
+}).min(1).messages({ "object.min": "Au moins un champ à modifier est requis" });
+
 // ─── Analyse IA ───────────────────────────────────────────────────────────────
 const analyzeIASchema = Joi.object({
   typeIncident: Joi.string().required(),
@@ -199,4 +311,8 @@ module.exports = {
   registerSchema,
   updatePasswordSchema,
   analyzeIASchema,
+  createTransportSchema,
+  updateTransportSchema,
+  createVehicleSchema,
+  updateVehicleSchema,
 };
