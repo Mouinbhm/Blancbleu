@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+import os
 
 from routes.pmt import router as pmt_router
 from routes.dispatch import router as dispatch_router
@@ -99,10 +100,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — autoriser le backend Node.js
+# CORS — origines lues depuis ALLOWED_ORIGINS (séparées par virgule)
+# En production, définir ALLOWED_ORIGINS dans le .env ou docker-compose.yml
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5000,http://localhost:3000")
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5000", "http://localhost:3000"],
+    allow_origins=_allowed_origins,
     allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["*"],
 )

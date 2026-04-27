@@ -131,6 +131,10 @@ class TestCompatibiliteMobilite:
         assert COMPATIBILITE_MOBILITE["CIVIERE"]["AMBULANCE"] == 40
         assert COMPATIBILITE_MOBILITE["CIVIERE"]["VSL"] == 0
 
+    def test_ambulance_assis_sous_optimal(self):
+        """Patient ASSIS + AMBULANCE → compatible mais sous-optimal (score 25)."""
+        assert COMPATIBILITE_MOBILITE["ASSIS"]["AMBULANCE"] == 25
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SUITE 2 — Logique de recommandation dispatch
@@ -243,6 +247,31 @@ class TestRecommandationDispatch:
         )
         res = recommander(req)
         assert res.recommandation is None
+
+    def test_aucun_vehicule_compatible_fauteuil(self):
+        """Aucun véhicule compatible (seul VSL pour FAUTEUIL_ROULANT) →
+        liste vide d'alternatives et message explicatif."""
+        req = DispatchRequest(
+            transport=make_transport(MobilitePatient.FAUTEUIL_ROULANT),
+            vehicules=[make_vsl("V1"), make_vsl("V2")],
+        )
+        res = recommander(req)
+        assert res.recommandation is None
+        assert isinstance(res.alternatives, list)
+        assert len(res.alternatives) == 0
+        assert res.message  # message non vide
+        assert isinstance(res.message, str)
+
+    def test_ambulance_assis_recommandation_score_25(self):
+        """AMBULANCE seule disponible pour ASSIS → recommandée avec score compatibilité 25."""
+        req = DispatchRequest(
+            transport=make_transport(MobilitePatient.ASSIS),
+            vehicules=[make_ambulance()],
+        )
+        res = recommander(req)
+        assert res.recommandation is not None
+        assert res.recommandation.type == TypeVehicule.AMBULANCE
+        assert res.recommandation.scoreDetail.compatibilite == 25
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
