@@ -43,6 +43,13 @@ jobs:
           NODE_ENV: test
         run: npm run test:integration
 
+      - name: Coverage check (seuil minimum 40%)
+        working-directory: server
+        env:
+          JWT_SECRET: test-secret-ci-blancbleu
+          NODE_ENV: test
+        run: npm run test:coverage
+
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         if: always()
