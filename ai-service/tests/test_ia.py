@@ -271,7 +271,7 @@ class TestRecommandationDispatch:
         res = recommander(req)
         assert res.recommandation is not None
         assert res.recommandation.type == TypeVehicule.AMBULANCE
-        assert res.recommandation.scoreDetail.compatibilite == 25
+        assert res.recommandation.scoreDetail.compatibiliteMobilite == 25
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
