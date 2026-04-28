@@ -358,7 +358,7 @@ export default function TransportDetail() {
 
   useEffect(() => {
     vehicleService.getAll().then(({ data }) => {
-      setVehicles(Array.isArray(data) ? data : data?.vehicles || []);
+      setVehicles(Array.isArray(data) ? data : data?.data || data?.vehicles || []);
     }).catch(() => {});
   }, []);
 

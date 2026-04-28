@@ -104,7 +104,7 @@ function ModalNouvelleMission({ onClose, onSuccess }) {
           ["CONFIRMED", "SCHEDULED", "ASSIGNED"].includes(tr.statut),
         );
         setTransports(ts);
-        setVehicles(v.data || []);
+        setVehicles(v.data?.data || v.data?.vehicles || []);
         setPersonnel(p.data?.personnel || p.data || []);
       })
       .catch(() => {});

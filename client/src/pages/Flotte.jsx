@@ -1,7 +1,7 @@
 // Fichier : client/src/pages/Flotte.jsx
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import VehicleCard from "../components/vehicle/VehicleCard";
+import VehicleDetailPanel from "../components/vehicle/VehicleDetailPanel";
 import { vehicleService } from "../services/api";
 import useSocket from "../hooks/useSocket";
 
@@ -700,21 +700,22 @@ const Spinner = () => (
 );
 
 export default function Flotte() {
-  const navigate = useNavigate();
-  const [vehicles, setVehicles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filtreStatut, setFiltreStatut] = useState("");
-  const [filtreType, setFiltreType] = useState("");
-  const [showModal, setShowModal] = useState(false);
+  const [vehicles,             setVehicles]             = useState([]);
+  const [loading,              setLoading]              = useState(true);
+  const [filtreStatut,         setFiltreStatut]         = useState("");
+  const [filtreType,           setFiltreType]           = useState("");
+  const [showModal,            setShowModal]            = useState(false);
+  const [vehiculeSelectionne,  setVehiculeSelectionne]  = useState(null);
 
   const { subscribe } = useSocket();
 
   const loadData = useCallback(async () => {
     try {
       const vehRes = await vehicleService.getAll();
-      const list = Array.isArray(vehRes.data)
-        ? vehRes.data
-        : vehRes.data?.vehicles || [];
+      const payload = vehRes.data;
+      const list = Array.isArray(payload)
+        ? payload
+        : payload?.data || payload?.vehicles || [];
       setVehicles(list);
     } catch {
       /* silencieux */
@@ -742,7 +743,10 @@ export default function Flotte() {
 
   return (
     <div className="p-7 fade-in">
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg) } }
+        @keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }
+      `}</style>
 
       {/* En-tête */}
       <div className="flex items-center justify-between mb-6">
@@ -848,11 +852,7 @@ export default function Flotte() {
             <VehicleCard
               key={v._id}
               vehicle={v}
-              onClick={() =>
-                v.transportEnCours
-                  ? navigate(`/transports/${String(v.transportEnCours?._id || v.transportEnCours)}`)
-                  : null
-              }
+              onClick={() => setVehiculeSelectionne(v)}
             />
           ))}
         </div>
@@ -864,6 +864,19 @@ export default function Flotte() {
           onCreated={() => {
             setShowModal(false);
             loadData();
+          }}
+        />
+      )}
+
+      {vehiculeSelectionne && (
+        <VehicleDetailPanel
+          vehicle={vehiculeSelectionne}
+          onClose={() => setVehiculeSelectionne(null)}
+          onUpdate={(updated) => {
+            setVehicles((prev) =>
+              prev.map((v) => v._id === updated._id ? updated : v)
+            );
+            setVehiculeSelectionne(updated);
           }}
         />
       )}
