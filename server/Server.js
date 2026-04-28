@@ -85,6 +85,9 @@ app.use("/api/maintenances", require("./routes/maintenances"));
 app.use("/api/factures", require("./routes/factures"));
 app.use("/api/analytics", require("./routes/analytics"));
 app.use("/api/planning", require("./routes/planning"));
+if (process.env.NODE_ENV !== "production") {
+  app.use("/api/demo", require("./routes/demo"));
+}
 
 // SUPPRIMÉS :
 // /api/interventions  → remplacé par /api/transports

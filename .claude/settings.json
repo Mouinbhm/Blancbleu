@@ -14,7 +14,8 @@
       "Bash(python -c \"import xgboost, shap, sklearn, pandas, numpy, matplotlib, joblib; print\\('OK'\\)\")",
       "Bash(pip install *)",
       "Bash(python -m pytest tests/test_optimizer.py -v --tb=short)",
-      "Bash(python -m pytest tests/ -v --tb=short)"
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(npx react-scripts *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory",

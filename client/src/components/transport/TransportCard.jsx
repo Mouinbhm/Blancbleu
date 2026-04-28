@@ -1,7 +1,66 @@
 // Fichier : client/src/components/transport/TransportCard.jsx
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import StatutBadge from "./StatutBadge";
 import { transportService } from "../../services/api";
+import { predictDuree } from "../../services/optimizerService";
+
+const _MOTIF_MAP = {
+  "Chimiothérapie":         "Chimiotherapie",
+  "Radiothérapie":          "Consultation",
+  "Rééducation":            "Consultation",
+  "Sortie hospitalisation": "Hospitalisation",
+  "Analyse":                "Consultation",
+  "Autre":                  "Consultation",
+};
+
+function _buildInput(transport) {
+  if (!transport) return null;
+  const heure = Math.max(6, Math.min(20, parseInt((transport.heureRDV || "09:00").split(":")[0]) || 8));
+  const dateT = transport.dateTransport ? new Date(transport.dateTransport) : new Date();
+  const jourJS = dateT.getDay();
+  return {
+    distance_km:          12.0,
+    heure_depart:         heure,
+    jour_semaine:         jourJS === 0 ? 6 : jourJS - 1,
+    mobilite:             transport.patient?.mobilite || "ASSIS",
+    type_vehicule:        transport.typeTransport || "VSL",
+    type_etablissement:   "hopital_public",
+    motif:                _MOTIF_MAP[transport.motif] || transport.motif || "Consultation",
+    aller_retour:         transport.allerRetour || false,
+    nb_patients:          1,
+    experience_chauffeur: 0.5,
+  };
+}
+
+function DurationMinibage({ transport }) {
+  const [duree, setDuree] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const input = _buildInput(transport);
+    if (!input) { setLoading(false); return; }
+    let cancelled = false;
+    predictDuree(input)
+      .then((d) => { if (!cancelled && d?.duree_minutes) setDuree(d.duree_minutes); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading) {
+    return (
+      <div className="w-3.5 h-3.5 border border-slate-200 border-t-indigo-400 rounded-full animate-spin flex-shrink-0" />
+    );
+  }
+  if (!duree) return null;
+  return (
+    <div className="flex items-center gap-1 text-xs text-indigo-600 font-mono font-semibold bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full w-fit">
+      <span className="material-symbols-outlined" style={{ fontSize: 12 }}>smart_toy</span>
+      ~{duree} min
+    </div>
+  );
+}
 
 const TYPE_ICON = {
   VSL: "directions_car",
@@ -144,6 +203,9 @@ export default function TransportCard({ transport, onRefresh }) {
           {transport.vehicule?.nom || transport.vehicule?.immatriculation || "Véhicule assigné"}
         </div>
       )}
+
+      {/* Durée estimée IA */}
+      <DurationMinibage transport={transport} />
 
       {/* Actions rapides */}
       {(actions.length > 0 || peutAnnuler) && (

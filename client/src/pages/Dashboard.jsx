@@ -5,6 +5,7 @@ import KpiCard from "../components/ui/KpiCard";
 import TransportCard from "../components/transport/TransportCard";
 import { analyticsService, vehicleService, transportService } from "../services/api";
 import useSocket from "../hooks/useSocket";
+import DemoControls from "../components/ui/DemoControls";
 
 const HeatmapFlotte = lazy(() =>
   import("../components/dashboard/HeatmapFlotte"),
@@ -123,13 +124,16 @@ export default function Dashboard() {
             })}
           </p>
         </div>
-        <button
-          onClick={() => navigate("/transports/new")}
-          className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-md shadow-primary/20"
-        >
-          <span className="material-symbols-outlined text-base">add</span>
-          Nouveau transport
-        </button>
+        <div className="flex items-center gap-3">
+          <DemoControls onSuccess={() => { loadData(); loadPrediction(); }} />
+          <button
+            onClick={() => navigate("/transports/new")}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-md shadow-primary/20"
+          >
+            <span className="material-symbols-outlined text-base">add</span>
+            Nouveau transport
+          </button>
+        </div>
       </div>
 
       {erreur && (
