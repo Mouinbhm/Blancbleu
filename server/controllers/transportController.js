@@ -474,6 +474,8 @@ const assigner = async (req, res, next) => {
 };
 const enRoute = async (req, res, next) => {
   try {
+    const errDate = await _verifierDateTerrain(req.params.id, req.body);
+    if (errDate) return res.status(400).json({ message: errDate });
     const r = await lifecycle.marquerEnRoute(req.params.id, req.user);
     res.json(r);
   } catch (e) {
@@ -482,6 +484,8 @@ const enRoute = async (req, res, next) => {
 };
 const arriveePatient = async (req, res, next) => {
   try {
+    const errDate = await _verifierDateTerrain(req.params.id, req.body);
+    if (errDate) return res.status(400).json({ message: errDate });
     const r = await lifecycle.marquerArriveePatient(
       req.params.id,
       req.body.position,
@@ -494,6 +498,8 @@ const arriveePatient = async (req, res, next) => {
 };
 const patientABord = async (req, res, next) => {
   try {
+    const errDate = await _verifierDateTerrain(req.params.id, req.body);
+    if (errDate) return res.status(400).json({ message: errDate });
     const r = await lifecycle.marquerPatientABord(req.params.id, req.user);
     res.json(r);
   } catch (e) {
@@ -502,6 +508,8 @@ const patientABord = async (req, res, next) => {
 };
 const arriveeDestination = async (req, res, next) => {
   try {
+    const errDate = await _verifierDateTerrain(req.params.id, req.body);
+    if (errDate) return res.status(400).json({ message: errDate });
     const r = await lifecycle.marquerArriveeDestination(
       req.params.id,
       req.body.position,
@@ -514,6 +522,8 @@ const arriveeDestination = async (req, res, next) => {
 };
 const completer = async (req, res, next) => {
   try {
+    const errDate = await _verifierDateTerrain(req.params.id, req.body);
+    if (errDate) return res.status(400).json({ message: errDate });
     const r = await lifecycle.completerTransport(req.params.id, req.user);
     res.json(r);
   } catch (e) {
@@ -695,6 +705,35 @@ const facturer = async (req, res, next) => {
     _handleErr(res, next, e);
   }
 };
+
+// ── Garde-fou date : transitions terrain uniquement ──────────────────────────
+// Bloque EN_ROUTE / ARRIVED / ON_BOARD / DESTINATION / COMPLETE si le transport
+// n'est pas planifié aujourd'hui.
+// Contournable avec { bypass_date_check: true } en développement uniquement.
+async function _verifierDateTerrain(transportId, body = {}) {
+  if (body.bypass_date_check && process.env.NODE_ENV !== "production") return null;
+
+  const t = await Transport.findById(transportId).select("dateTransport heureRDV");
+  if (!t?.dateTransport) return null;
+
+  const jourTransport = new Date(t.dateTransport);
+  jourTransport.setHours(0, 0, 0, 0);
+
+  const debutJour = new Date();
+  debutJour.setHours(0, 0, 0, 0);
+
+  const estJourJ = jourTransport.getTime() === debutJour.getTime();
+  if (estJourJ) return null;
+
+  const dateStr = new Date(t.dateTransport).toLocaleDateString("fr-FR", {
+    day: "numeric", month: "long", year: "numeric",
+  });
+  return {
+    message: `Ce transport est planifié le ${dateStr}. Les actions terrain ne sont disponibles qu'à cette date.`,
+    code: "TRANSPORT_DATE_FUTURE",
+    dateTransport: t.dateTransport,
+  };
+}
 
 function _handleErr(res, next, e) {
   if (e.message?.includes("introuvable"))

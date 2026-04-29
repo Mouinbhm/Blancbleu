@@ -78,19 +78,19 @@ const ACTIONS_PAR_STATUT = {
   REQUESTED: [{ label: "Confirmer la demande", fn: "confirmer", color: "blue", icon: "check_circle" }],
   CONFIRMED: [{ label: "Planifier", fn: "planifier", color: "indigo", icon: "calendar_month" }],
   SCHEDULED: [{ label: "Reprogrammer", color: "indigo", icon: "event_repeat", modal: "reprogrammer" }],
-  ASSIGNED: [{ label: "En route", fn: "enRoute", color: "orange", icon: "directions_car" }],
-  EN_ROUTE_TO_PICKUP: [{ label: "Arrivé chez le patient", fn: "arriveePatient", color: "yellow", icon: "location_on" }],
-  ARRIVED_AT_PICKUP: [{ label: "Patient à bord", fn: "patientABord", color: "cyan", icon: "personal_injury" }],
-  PATIENT_ON_BOARD: [{ label: "Arrivé à destination", fn: "arriveeDestination", color: "teal", icon: "flag" }],
+  ASSIGNED:             [{ label: "En route",               fn: "enRoute",            color: "orange", icon: "directions_car",  terrain: true }],
+  EN_ROUTE_TO_PICKUP:   [{ label: "Arrivé chez le patient", fn: "arriveePatient",     color: "yellow", icon: "location_on",     terrain: true }],
+  ARRIVED_AT_PICKUP:    [{ label: "Patient à bord",         fn: "patientABord",       color: "cyan",   icon: "personal_injury", terrain: true }],
+  PATIENT_ON_BOARD:     [{ label: "Arrivé à destination",   fn: "arriveeDestination", color: "teal",   icon: "flag",            terrain: true }],
   ARRIVED_AT_DESTINATION: [
-    { label: "Attente patient", color: "violet", icon: "hourglass", modal: "attente" },
-    { label: "Retour base", color: "slate", icon: "home", modal: "retour" },
-    { label: "Terminer", fn: "completer", color: "green", icon: "check_circle" },
+    { label: "Attente patient", color: "violet", icon: "hourglass",    modal: "attente", terrain: true },
+    { label: "Retour base",     color: "slate",  icon: "home",         modal: "retour",  terrain: true },
+    { label: "Terminer",        fn: "completer", color: "green", icon: "check_circle",  terrain: true },
   ],
   WAITING_AT_DESTINATION: [
-    { label: "Retour base", color: "slate", icon: "home", modal: "retour" },
+    { label: "Retour base", color: "slate", icon: "home", modal: "retour", terrain: true },
   ],
-  RETURN_TO_BASE: [{ label: "Terminer le transport", fn: "completer", color: "green", icon: "check_circle" }],
+  RETURN_TO_BASE: [{ label: "Terminer le transport", fn: "completer", color: "green", icon: "check_circle", terrain: true }],
   COMPLETED: [{ label: "Clôturer (CPAM)", color: "purple", icon: "receipt_long", modal: "facturer" }],
 };
 
@@ -305,6 +305,7 @@ export default function TransportDetail() {
   const [loading, setLoading] = useState(true);
   const [erreur, setErreur] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [toast, setToast] = useState(null);
   const [vehiclePosition, setVehiclePosition] = useState(null);
   const [posLive, setPosLive] = useState(null);
   const [vehicles, setVehicles] = useState([]);
@@ -414,14 +415,20 @@ export default function TransportDetail() {
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
+  const showToast = (msg, type = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
   const doAction = async (fn, ...args) => {
     setActionLoading(true);
     try {
       await transportService[fn](id, ...args);
       await loadTransport();
       closeModal();
+      showToast("Action effectuée avec succès");
     } catch (err) {
-      alert(err.response?.data?.message || "Erreur lors de l'action");
+      showToast(err.response?.data?.message || "Erreur lors de l'action", "error");
     } finally {
       setActionLoading(false);
     }
@@ -430,7 +437,7 @@ export default function TransportDetail() {
   const handleAnnuler = async () => {
     const raison = window.prompt("Raison de l'annulation :");
     if (raison === null) return;
-    doAction("annuler", raison);
+    await doAction("annuler", raison);
   };
 
   const handleAssigner = () => {
@@ -461,8 +468,9 @@ export default function TransportDetail() {
       });
       await loadTransport();
       closeModal();
+      showToast("Transport reprogrammé");
     } catch (err) {
-      alert(err.response?.data?.message || "Erreur lors de la reprogrammation");
+      showToast(err.response?.data?.message || "Erreur lors de la reprogrammation", "error");
     } finally {
       setActionLoading(false);
     }
@@ -496,6 +504,18 @@ export default function TransportDetail() {
   const actionsStatut = ACTIONS_PAR_STATUT[transport.statut] || [];
   const hasActions = actionsStatut.length > 0 || peutAnnuler || peutAssigner;
 
+  // ── Validation jour J ────────────────────────────────────────────────────────
+  const _dateT = transport.dateTransport ? new Date(transport.dateTransport) : null;
+  const _debutJour = new Date(); _debutJour.setHours(0, 0, 0, 0);
+  const estJourJ = !_dateT || (
+    _dateT.getFullYear() === _debutJour.getFullYear() &&
+    _dateT.getMonth()    === _debutJour.getMonth()    &&
+    _dateT.getDate()     === _debutJour.getDate()
+  );
+  const dateTransportFormatee = _dateT
+    ? _dateT.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
+    : null;
+
   const age = calcAge(transport.patient?.dateNaissance);
   const vehiclePos = vehiclePosition || (transport.vehicule?.position?.lat ? transport.vehicule.position : null);
   const vehicleId = String(transport.vehicule?._id || transport.vehicule?.id || "");
@@ -527,6 +547,15 @@ export default function TransportDetail() {
         @keyframes spin { to { transform: rotate(360deg) } }
         @keyframes pulse-dot { 0%,100% { opacity:1 } 50% { opacity:.3 } }
       `}</style>
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-5 right-5 z-[9999] px-4 py-3 rounded-xl shadow-lg text-sm font-semibold flex items-center gap-2 transition-all ${
+          toast.type === "error" ? "bg-red-600 text-white" : "bg-emerald-600 text-white"
+        }`}>
+          {toast.type === "error" ? "⚠️" : "✅"} {toast.msg}
+        </div>
+      )}
 
       {/* ── SECTION 1: Header + progress bar ──────────────────────────────────── */}
       <div className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-10">
@@ -561,10 +590,43 @@ export default function TransportDetail() {
           </div>
         </div>
         <ProgressBar statut={transport.statut} />
+
+        {/* ── Badge jour J / date future (Tâche 3) ──────────────────────────── */}
+        {["REQUESTED","CONFIRMED","SCHEDULED","ASSIGNED"].includes(transport.statut) && _dateT && (
+          estJourJ ? (
+            <div className="mt-2 flex items-center gap-2 text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-1.5 font-medium">
+              ✅ Transport du jour — actions terrain disponibles
+            </div>
+          ) : (
+            <div className="mt-2 flex items-center gap-2 text-xs bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-3 py-1.5 font-medium">
+              ⏳ Transport planifié — actions terrain disponibles le {dateTransportFormatee}{transport.heureRDV ? ` à ${transport.heureRDV}` : ""}
+            </div>
+          )
+        )}
       </div>
 
-      {/* ── Bannière GPS temps réel ─────────────────────────────────────────── */}
-      {posLive && !["BILLED", "CANCELLED", "NO_SHOW", "COMPLETED"].includes(transport.statut) && (
+      {/* ── Bannière véhicule assigné / en attente départ (Tâche 4) ───────── */}
+      {transport.statut === "ASSIGNED" && transport.vehicule && (
+        <div className="bg-slate-100 border-b border-slate-200 px-6 py-2.5">
+          <div className="max-w-5xl mx-auto flex items-center gap-3">
+            <span className="text-xl flex-shrink-0">🚐</span>
+            <div className="min-w-0">
+              <span className="text-sm font-semibold text-slate-700">
+                Véhicule assigné — en attente de départ
+              </span>
+              <span className="text-xs text-slate-500 ml-2">
+                {transport.vehicule.nom} · {transport.vehicule.immatriculation}
+                {dateTransportFormatee && transport.heureRDV
+                  ? ` · Départ le ${dateTransportFormatee} à ${transport.heureRDV}`
+                  : ""}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bannière GPS temps réel — uniquement en mouvement ET jour J ──────── */}
+      {posLive && estJourJ && ["EN_ROUTE_TO_PICKUP","ARRIVED_AT_PICKUP","PATIENT_ON_BOARD","ARRIVED_AT_DESTINATION","WAITING_AT_DESTINATION","RETURN_TO_BASE"].includes(transport.statut) && (
         <div className="bg-gradient-to-r from-blue-600 to-cyan-500 px-6 py-3">
           <div className="max-w-5xl mx-auto flex items-center gap-4">
             <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0 text-lg">
@@ -589,6 +651,22 @@ export default function TransportDetail() {
             <span className="text-xs font-bold text-white/80 flex-shrink-0 w-8 text-right">
               {posLive.progression ?? 0}%
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bannière alerte — statut terrain incohérent (date future) ─────────── */}
+      {["EN_ROUTE_TO_PICKUP","ARRIVED_AT_PICKUP","PATIENT_ON_BOARD","ARRIVED_AT_DESTINATION","WAITING_AT_DESTINATION","RETURN_TO_BASE"].includes(transport.statut) && !estJourJ && (
+        <div className="bg-orange-50 border-b border-orange-300 px-6 py-3">
+          <div className="max-w-5xl mx-auto flex items-start gap-3 text-orange-800">
+            <span className="text-xl flex-shrink-0 mt-0.5">⚠️</span>
+            <div>
+              <p className="text-sm font-semibold">Statut terrain incorrect</p>
+              <p className="text-xs mt-0.5 text-orange-700">
+                Ce transport est planifié le <strong>{dateTransportFormatee}</strong>. Il a été passé en statut terrain par erreur (simulation ou seed).
+                Les actions restent verrouillées jusqu'à cette date.
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -986,6 +1064,12 @@ export default function TransportDetail() {
       {/* ── SECTION 7: Sticky action panel ──────────────────────────────────────── */}
       {hasActions && (
         <div className="fixed bottom-0 left-60 right-0 bg-white/95 backdrop-blur border-t border-slate-200 px-6 py-3 z-10 shadow-lg">
+          {["EN_ROUTE_TO_PICKUP","ARRIVED_AT_PICKUP","PATIENT_ON_BOARD","ARRIVED_AT_DESTINATION","WAITING_AT_DESTINATION","RETURN_TO_BASE"].includes(transport.statut) && !estJourJ && (
+            <div className="max-w-5xl mx-auto mb-2 flex items-center gap-2 bg-orange-50 border border-orange-300 rounded-lg px-3 py-1.5 text-xs text-orange-800">
+              <span className="flex-shrink-0">⚠️</span>
+              <span>Statut terrain incorrect — planifié le <strong>{dateTransportFormatee}</strong>. Actions verrouillées jusqu'à cette date.</span>
+            </div>
+          )}
           <div className="flex items-center gap-2 max-w-5xl mx-auto flex-wrap">
             {peutAssigner && (
               <button
@@ -997,29 +1081,48 @@ export default function TransportDetail() {
                 {transport.vehicule ? "Réassigner un véhicule" : "Assigner un véhicule"}
               </button>
             )}
-            {actionsStatut.map((a, i) =>
-              a.modal ? (
-                <button
-                  key={i}
-                  onClick={() => setActiveModal(a.modal)}
-                  disabled={actionLoading}
-                  className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 ${BTN[a.color] || BTN.blue}`}
-                >
-                  <span className="material-symbols-outlined text-base">{a.icon}</span>
-                  {a.label}
-                </button>
+            {actionsStatut.map((a, i) => {
+              const bloque = a.terrain && !estJourJ;
+              return a.modal ? (
+                <div key={i} className="flex flex-col items-center">
+                  <button
+                    onClick={bloque ? undefined : () => setActiveModal(a.modal)}
+                    disabled={actionLoading || bloque}
+                    title={bloque ? `Disponible le ${dateTransportFormatee}` : undefined}
+                    className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-semibold text-sm transition-colors ${
+                      bloque
+                        ? "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                        : `${BTN[a.color] || BTN.blue} disabled:opacity-50`
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base">{bloque ? "lock" : a.icon}</span>
+                    {bloque ? `🔒 ${a.label}` : a.label}
+                  </button>
+                  {bloque && dateTransportFormatee && (
+                    <p className="text-[10px] text-slate-400 mt-1 text-center">🗓 Disponible le {dateTransportFormatee}</p>
+                  )}
+                </div>
               ) : (
-                <button
-                  key={i}
-                  onClick={() => doAction(a.fn)}
-                  disabled={actionLoading}
-                  className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 ${BTN[a.color] || BTN.blue}`}
-                >
-                  <span className="material-symbols-outlined text-base">{a.icon}</span>
-                  {actionLoading ? "…" : a.label}
-                </button>
-              )
-            )}
+                <div key={i} className="flex flex-col items-center">
+                  <button
+                    onClick={bloque ? undefined : () => doAction(a.fn)}
+                    disabled={actionLoading || bloque}
+                    title={bloque ? `Disponible le ${dateTransportFormatee}` : undefined}
+                    className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-semibold text-sm transition-colors ${
+                      bloque
+                        ? "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                        : `${BTN[a.color] || BTN.blue} disabled:opacity-50`
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base">{bloque ? "lock" : a.icon}</span>
+                    {bloque ? `🔒 ${a.label}` : (actionLoading ? "…" : a.label)}
+                  </button>
+                  {bloque && dateTransportFormatee && (
+                    <p className="text-[10px] text-slate-400 mt-1 text-center">🗓 Disponible le {dateTransportFormatee}</p>
+                  )}
+                </div>
+              );
+            })}
             {peutAnnuler && (
               <button
                 onClick={handleAnnuler}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   missionService,
@@ -6,6 +6,8 @@ import {
   vehicleService,
   personnelService,
 } from "../services/api";
+import TransportProgressBar from "../components/transport/TransportProgressBar";
+import api from "../services/api";
 import { getSocket } from "../services/socketService";
 
 // ── Statuts actifs terrain ────────────────────────────────────────────────────
@@ -60,6 +62,15 @@ const MAP_FILTRE = {
 };
 
 const DISPATCH_LABEL = { manuel: "Manuel", auto: "Auto", ia: "IA" };
+
+// ── Avancer le statut — map transition → service call ────────────────────────
+const AVANCER_ACTION = {
+  ASSIGNED:               { label: "En route →",        call: (id) => transportService.enRoute(id) },
+  EN_ROUTE_TO_PICKUP:     { label: "Arrivé patient →",  call: (id) => transportService.arriveePatient(id, null) },
+  ARRIVED_AT_PICKUP:      { label: "Patient à bord →",  call: (id) => transportService.patientABord(id) },
+  PATIENT_ON_BOARD:       { label: "À destination →",   call: (id) => transportService.arriveeDestination(id) },
+  ARRIVED_AT_DESTINATION: { label: "Terminer →",        call: (id) => transportService.completer(id) },
+};
 
 const Spinner = () => (
   <div className="flex items-center justify-center py-16 text-slate-400 gap-3">
@@ -266,13 +277,26 @@ function ModalNouvelleMission({ onClose, onSuccess }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // CARTE MISSION (données = transport actif)
 // ═════════════════════════════════════════════════════════════════════════════
-function MissionCard({ mission }) {
+function MissionCard({ mission, onRefresh, onToast }) {
   const navigate = useNavigate();
+  const [advancing, setAdvancing] = useState(false);
   const config = STATUT_CONFIG[mission.statut] || {
     label: mission.statut,
     color: "bg-slate-100 text-slate-600",
     emoji: "🚑",
   };
+
+  // Vérification jour J pour les boutons terrain
+  const _dateT = mission.dateTransport ? new Date(mission.dateTransport) : null;
+  const _debutJour = new Date(); _debutJour.setHours(0, 0, 0, 0);
+  const estJourJ = !_dateT || (
+    _dateT.getFullYear() === _debutJour.getFullYear() &&
+    _dateT.getMonth()    === _debutJour.getMonth()    &&
+    _dateT.getDate()     === _debutJour.getDate()
+  );
+  const dateFormatee = _dateT
+    ? _dateT.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })
+    : null;
 
   const heure = mission.dateTransport
     ? new Date(mission.dateTransport).toLocaleTimeString("fr-FR", {
@@ -280,6 +304,23 @@ function MissionCard({ mission }) {
         minute: "2-digit",
       })
     : "—";
+
+  const nextAction = AVANCER_ACTION[mission.statut];
+
+  const handleAvancer = async (e) => {
+    e.stopPropagation();
+    if (!nextAction || advancing) return;
+    setAdvancing(true);
+    try {
+      await nextAction.call(mission._id || mission.id);
+      onToast?.({ type: "success", msg: `✅ ${mission.numero} — statut avancé` });
+      onRefresh?.();
+    } catch (err) {
+      onToast?.({ type: "error", msg: err.response?.data?.message || "Erreur lors de la transition" });
+    } finally {
+      setAdvancing(false);
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-shadow">
@@ -293,6 +334,11 @@ function MissionCard({ mission }) {
           </span>
         </div>
         <span className="text-xs text-slate-400 font-mono shrink-0 ml-2">{heure}</span>
+      </div>
+
+      {/* Barre de progression */}
+      <div className="mb-3 -mx-1">
+        <TransportProgressBar statut={mission.statut} />
       </div>
 
       {/* Patient */}
@@ -339,14 +385,273 @@ function MissionCard({ mission }) {
         </div>
       )}
 
-      {/* Bouton */}
+      {/* Boutons */}
       <div className="flex gap-2">
         <button
           onClick={() => navigate(`/transports/${String(mission._id || mission.id)}`)}
-          className="flex-1 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="flex-1 py-1.5 text-xs font-medium border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors"
         >
           Voir détail
         </button>
+        {nextAction && (
+          <div className="flex-1 flex flex-col items-stretch">
+            <button
+              onClick={estJourJ ? handleAvancer : undefined}
+              disabled={advancing || !estJourJ}
+              title={!estJourJ && dateFormatee ? `Disponible le ${dateFormatee}` : undefined}
+              className={`w-full py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                !estJourJ
+                  ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+              }`}
+            >
+              {advancing ? "…" : !estJourJ ? `🔒 ${nextAction.label}` : nextAction.label}
+            </button>
+            {!estJourJ && dateFormatee && (
+              <p className="text-[10px] text-slate-400 mt-0.5 text-center">🗓 {dateFormatee}</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MODALE DÉMO — Cycle de vie accéléré (dev uniquement)
+// ═════════════════════════════════════════════════════════════════════════════
+const DEMO_STEPS = [
+  { statut: "ASSIGNED",               label: "En route",         call: (id) => api.patch(`/transports/${id}/en-route`, { bypass_date_check: true }) },
+  { statut: "EN_ROUTE_TO_PICKUP",     label: "Arrivé patient",   call: (id) => api.patch(`/transports/${id}/arrived`, { bypass_date_check: true }) },
+  { statut: "ARRIVED_AT_PICKUP",      label: "Patient à bord",   call: (id) => api.patch(`/transports/${id}/on-board`, { bypass_date_check: true }) },
+  { statut: "PATIENT_ON_BOARD",       label: "À destination",    call: (id) => api.patch(`/transports/${id}/destination`, { bypass_date_check: true }) },
+  { statut: "ARRIVED_AT_DESTINATION", label: "Terminer",         call: (id) => api.patch(`/transports/${id}/complete`, { bypass_date_check: true }) },
+];
+
+function _isDateFuture(transport) {
+  if (!transport?.dateTransport) return false;
+  const dateT = new Date(transport.dateTransport);
+  const debutJour = new Date(); debutJour.setHours(0, 0, 0, 0);
+  return (
+    dateT.getFullYear() !== debutJour.getFullYear() ||
+    dateT.getMonth()    !== debutJour.getMonth()    ||
+    dateT.getDate()     !== debutJour.getDate()
+  );
+}
+
+function ModalDemoCycle({ missions, onClose, onRefresh }) {
+  const [transportId, setTransportId] = useState("");
+  const [vitesse, setVitesse] = useState("normale");
+  const [steps, setSteps] = useState(() =>
+    DEMO_STEPS.reduce((acc, s) => ({ ...acc, [s.statut]: true }), {}),
+  );
+  const [estFutur, setEstFutur] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [log, setLog] = useState([]);
+  const [done, setDone] = useState(false);
+  const startTime = useRef(null);
+
+  const delayMs = vitesse === "lente" ? 3000 : vitesse === "rapide" ? 500 : 1000;
+
+  const selectedTransport = missions.find((m) => m._id === transportId || m.id === transportId);
+
+  // Auto-configure les étapes quand le transport change
+  useEffect(() => {
+    const transport = missions.find((m) => m._id === transportId || m.id === transportId);
+    const futur = _isDateFuture(transport);
+    setEstFutur(futur);
+    // Pour un transport futur : décocher toutes les étapes terrain
+    // Pour un transport du jour : tout cocher par défaut
+    setSteps(DEMO_STEPS.reduce((acc, s) => ({ ...acc, [s.statut]: !futur }), {}));
+    setLog([]);
+    setDone(false);
+  }, [transportId, missions]);
+
+  // Compute steps that are reachable from the selected transport's current statut
+  const reachableSteps = useMemo(() => {
+    if (!selectedTransport) return [];
+    const startIdx = DEMO_STEPS.findIndex((s) => s.statut === selectedTransport.statut);
+    return startIdx >= 0 ? DEMO_STEPS.slice(startIdx) : [];
+  }, [selectedTransport]);
+
+  const addLog = (msg, type = "info") =>
+    setLog((prev) => [...prev, { msg, type, ts: new Date().toLocaleTimeString("fr-FR") }]);
+
+  const handleLancer = async () => {
+    if (!transportId) return;
+    setRunning(true);
+    setLog([]);
+    setDone(false);
+    startTime.current = Date.now();
+    addLog(`🎬 Démo démarrée — transport ${selectedTransport?.numero || transportId}`);
+
+    for (const step of reachableSteps) {
+      if (!steps[step.statut]) { addLog(`⏩ ${step.label} — ignorée`, "skip"); continue; }
+      addLog(`⏳ ${step.label}…`);
+      await new Promise((r) => setTimeout(r, delayMs));
+      try {
+        await step.call(transportId);
+        addLog(`✅ ${step.label}`, "success");
+      } catch (err) {
+        const msg = err.response?.data?.message || err.message;
+        addLog(`❌ ${step.label} — ${msg}`, "error");
+        break;
+      }
+    }
+
+    const elapsed = ((Date.now() - startTime.current) / 1000).toFixed(1);
+    addLog(`🏁 Démonstration terminée en ${elapsed} s`, "done");
+    setDone(true);
+    setRunning(false);
+    onRefresh();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <h2 className="font-brand font-bold text-navy text-base flex items-center gap-2">
+            <span className="text-lg">🎬</span> Démo cycle de vie
+            <span className="text-[10px] font-mono bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">DEV ONLY</span>
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+          {/* Sélecteur transport */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 block mb-1">Transport à démontrer</label>
+            <select
+              value={transportId}
+              onChange={(e) => setTransportId(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={running}
+            >
+              <option value="">-- Sélectionner --</option>
+              {missions.map((m) => {
+                const futur = _isDateFuture(m);
+                const dateStr = m.dateTransport
+                  ? new Date(m.dateTransport).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+                  : "";
+                return (
+                  <option key={m._id} value={m._id}>
+                    {m.numero} — {m.patient?.nom} {m.patient?.prenom} ({m.statut}){futur ? ` 📅 ${dateStr}` : " ✅ Aujourd'hui"}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* Bandeau avertissement transport futur */}
+          {transportId && estFutur && selectedTransport && (
+            <div className="bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 text-sm text-amber-800">
+              <p className="font-semibold mb-1">
+                ⚠️ Transport du {new Date(selectedTransport.dateTransport).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+              </p>
+              <p className="text-xs text-amber-700 leading-relaxed">
+                La simulation s'arrête à <strong>ASSIGNED</strong>. Les étapes terrain (En route, Arrivé patient…)
+                seront disponibles le {new Date(selectedTransport.dateTransport).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}.
+              </p>
+            </div>
+          )}
+
+          {/* Bandeau transport du jour */}
+          {transportId && !estFutur && selectedTransport && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 text-xs text-emerald-700 font-medium">
+              ✅ Transport du jour — simulation complète disponible jusqu'à COMPLETED
+            </div>
+          )}
+
+          {/* Vitesse */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 block mb-2">Vitesse</label>
+            <div className="flex gap-2">
+              {[["lente", "Lente (3s)"], ["normale", "Normale (1s)"], ["rapide", "Rapide (0.5s)"]].map(([v, l]) => (
+                <button
+                  key={v}
+                  onClick={() => setVitesse(v)}
+                  disabled={running}
+                  className={`flex-1 py-1.5 text-xs rounded-lg border font-medium transition-colors disabled:opacity-50 ${
+                    vitesse === v ? "bg-primary text-white border-primary" : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                  }`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Étapes */}
+          {reachableSteps.length > 0 && (
+            <div>
+              <label className="text-xs font-semibold text-slate-500 block mb-2">Transitions à jouer</label>
+              <div className="space-y-1.5">
+                {reachableSteps.map((s) => {
+                  const locked = estFutur;
+                  return (
+                    <label
+                      key={s.statut}
+                      className={`flex items-center gap-2 text-sm ${locked ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+                      title={locked ? "Non disponible — transport futur" : undefined}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!steps[s.statut]}
+                        onChange={(e) => !locked && setSteps((prev) => ({ ...prev, [s.statut]: e.target.checked }))}
+                        disabled={running || locked}
+                        className="accent-primary"
+                      />
+                      {locked ? "🔒 " : ""}{s.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Log */}
+          {log.length > 0 && (
+            <div className="bg-slate-900 rounded-xl p-3 font-mono text-xs space-y-1 max-h-40 overflow-y-auto">
+              {log.map((l, i) => (
+                <p
+                  key={i}
+                  className={
+                    l.type === "success" ? "text-emerald-400"
+                    : l.type === "error" ? "text-red-400"
+                    : l.type === "done" ? "text-yellow-300 font-bold"
+                    : l.type === "skip" ? "text-slate-500"
+                    : "text-slate-300"
+                  }
+                >
+                  <span className="text-slate-600 mr-2">{l.ts}</span>{l.msg}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-100 flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50"
+          >
+            Fermer
+          </button>
+          <button
+            onClick={handleLancer}
+            disabled={!transportId || running || reachableSteps.length === 0}
+            className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-blue-700 disabled:opacity-40 transition-colors"
+          >
+            {running ? (
+              <span className="flex items-center justify-center gap-2">
+                <span style={{ width:14, height:14, border:"2px solid rgba(255,255,255,.4)", borderTop:"2px solid white", borderRadius:"50%", animation:"spin .7s linear infinite", display:"inline-block" }} />
+                En cours…
+              </span>
+            ) : done ? "🔁 Relancer" : "▶ Lancer la démo"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -355,6 +660,8 @@ function MissionCard({ mission }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // PAGE PRINCIPALE
 // ═════════════════════════════════════════════════════════════════════════════
+const IS_DEV = process.env.NODE_ENV !== "production";
+
 export default function Missions() {
   const navigate = useNavigate();
   const [missions, setMissions] = useState([]);
@@ -362,6 +669,8 @@ export default function Missions() {
   const [loading, setLoading] = useState(true);
   const [filtreActif, setFiltreActif] = useState("Toutes");
   const [showModal, setShowModal] = useState(false);
+  const [showDemo, setShowDemo] = useState(false);
+  const [toast, setToast] = useState(null);
 
   // ── Chargement des transports actifs ─────────────────────────────────────
   const charger = useCallback(async () => {
@@ -402,6 +711,13 @@ export default function Missions() {
     return () => clearInterval(interval);
   }, [charger]);
 
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   // Mise à jour temps réel via Socket.IO
   useEffect(() => {
     const socket = getSocket();
@@ -426,10 +742,27 @@ export default function Missions() {
     <div className="p-7 fade-in">
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-5 right-5 z-[9999] px-4 py-3 rounded-xl shadow-lg text-sm font-semibold flex items-center gap-2 transition-all ${
+          toast.type === "success" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
+        }`}>
+          {toast.msg}
+        </div>
+      )}
+
       {showModal && (
         <ModalNouvelleMission
           onClose={() => setShowModal(false)}
           onSuccess={() => { setShowModal(false); charger(); }}
+        />
+      )}
+
+      {showDemo && IS_DEV && (
+        <ModalDemoCycle
+          missions={missions}
+          onClose={() => setShowDemo(false)}
+          onRefresh={charger}
         />
       )}
 
@@ -441,13 +774,24 @@ export default function Missions() {
             Suivi opérationnel des transports en cours — actualisé toutes les 30 s
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-md shadow-primary/20"
-        >
-          <span className="material-symbols-outlined text-base">add</span>
-          Nouvelle mission
-        </button>
+        <div className="flex gap-2">
+          {IS_DEV && (
+            <button
+              onClick={() => setShowDemo(true)}
+              className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-amber-600 transition-colors"
+              title="Mode démo soutenance (dev uniquement)"
+            >
+              🎬 Démo
+            </button>
+          )}
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-md shadow-primary/20"
+          >
+            <span className="material-symbols-outlined text-base">add</span>
+            Nouvelle mission
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -514,7 +858,12 @@ export default function Missions() {
             </div>
           ) : (
             missionsFiltrees.map((mission) => (
-              <MissionCard key={mission._id} mission={mission} />
+              <MissionCard
+                key={mission._id}
+                mission={mission}
+                onRefresh={charger}
+                onToast={setToast}
+              />
             ))
           )}
         </div>

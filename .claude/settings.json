@@ -15,7 +15,10 @@
       "Bash(pip install *)",
       "Bash(python -m pytest tests/test_optimizer.py -v --tb=short)",
       "Bash(python -m pytest tests/ -v --tb=short)",
-      "Bash(npx react-scripts *)"
+      "Bash(npx react-scripts *)",
+      "Bash(grep \"src\\\\\\\\\")",
+      "Bash(node server/scripts/fix-transport-status.js)",
+      "Bash(node -e ' *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory",

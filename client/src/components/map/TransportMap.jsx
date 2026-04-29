@@ -50,12 +50,45 @@ function _makeVehiculeIcon(L) {
   });
 }
 
+function _makeStaticIcon(L) {
+  return L.divIcon({
+    html: `<div style="
+      font-size:28px;line-height:1;
+      filter:drop-shadow(1px 1px 3px rgba(0,0,0,0.3));
+      opacity:0.7;
+    ">🚐</div>`,
+    className: "vehicule-marker",
+    iconSize:    [40, 40],
+    iconAnchor:  [20, 20],
+    popupAnchor: [0, -22],
+  });
+}
+
+function _estJourJ(transport) {
+  if (!transport?.dateTransport) return true;
+  const jourTransport = new Date(transport.dateTransport);
+  jourTransport.setHours(0, 0, 0, 0);
+  const debutJour = new Date();
+  debutJour.setHours(0, 0, 0, 0);
+  return jourTransport.getTime() === debutJour.getTime();
+}
+
+const STATUTS_TERRAIN = [
+  "EN_ROUTE_TO_PICKUP", "ARRIVED_AT_PICKUP", "PATIENT_ON_BOARD",
+  "ARRIVED_AT_DESTINATION", "WAITING_AT_DESTINATION", "RETURN_TO_BASE",
+];
+
 export default function TransportMap({ transport, vehiclePosition }) {
-  const mapRef         = useRef(null);
-  const instanceRef    = useRef(null);
-  const markersRef     = useRef({});
-  const routeLayerRef  = useRef(null);
+  const mapRef            = useRef(null);
+  const instanceRef       = useRef(null);
+  const markersRef        = useRef({});
+  const routeLayerRef     = useRef(null);
   const vehiculeMarkerRef = useRef(null);
+  const markerSourceRef   = useRef(null); // "socket" | "static"
+
+  // Calculé à chaque render, lu dans les cleanups via ref
+  const estJourJRef = useRef(true);
+  estJourJRef.current = _estJourJ(transport);
 
   // ── Initialisation carte Leaflet ──────────────────────────────────────────
   useEffect(() => {
@@ -230,6 +263,12 @@ export default function TransportMap({ transport, vehiclePosition }) {
     );
 
     const onPosition = (data) => {
+      // ── Transport futur → ignorer les mises à jour de position ──────────
+      if (!estJourJRef.current) {
+        console.log("[TransportMap] Transport futur — position socket ignorée");
+        return;
+      }
+
       // ── Vérifier que la carte Leaflet est prête ──────────────────────────
       if (!instanceRef.current) {
         console.warn("[TransportMap] Carte pas encore prête, position ignorée");
@@ -259,6 +298,7 @@ export default function TransportMap({ transport, vehiclePosition }) {
         transport?.vehicule?.nom ||
         transport?.vehicule?.immatriculation ||
         "Véhicule";
+      const tooltipLabel = `🚑 En route — ${data.vitesse || 50} km/h`;
       const popupContent = `
         <div style="text-align:center;padding:4px 2px">
           <strong>🚑 ${nomVehicule}</strong><br>
@@ -274,8 +314,10 @@ export default function TransportMap({ transport, vehiclePosition }) {
           zIndexOffset: 2000,
         })
           .addTo(instanceRef.current)
+          .bindTooltip(tooltipLabel, { permanent: false, direction: "top" })
           .bindPopup(popupContent);
 
+        markerSourceRef.current = "socket";
         console.log("✅ [TransportMap] Marqueur véhicule créé à:", pos);
 
         // Centrer la carte sur le véhicule à la première apparition
@@ -283,6 +325,7 @@ export default function TransportMap({ transport, vehiclePosition }) {
       } else {
         // Déplacer le marqueur existant
         vehiculeMarkerRef.current.setLatLng(pos);
+        vehiculeMarkerRef.current.setTooltipContent(tooltipLabel);
         vehiculeMarkerRef.current.setPopupContent(popupContent);
 
         // Suivre le véhicule en douceur
@@ -294,28 +337,74 @@ export default function TransportMap({ transport, vehiclePosition }) {
 
     return () => {
       socket.off("vehicule:position", onPosition);
-      if (vehiculeMarkerRef.current) {
+      // Ne supprimer que les marqueurs créés par socket (pas le marqueur statique)
+      if (vehiculeMarkerRef.current && markerSourceRef.current === "socket") {
         vehiculeMarkerRef.current.remove();
         vehiculeMarkerRef.current = null;
+        markerSourceRef.current = null;
       }
     };
   }, [transport?._id, transport?.vehicule]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Position statique depuis la DB (fallback si pas de simulation active) ─
+  // ── Position temps réel DB (fallback si pas de socket actif) ─────────────
   useEffect(() => {
     if (!instanceRef.current || !vehiclePosition?.lat || vehiculeMarkerRef.current) return;
+    // Ne pas afficher un marqueur animé pour les transports futurs
+    if (!estJourJRef.current) return;
 
-    // N'afficher ce fallback que si le marqueur temps réel n'existe pas encore
     const pos = [vehiclePosition.lat, vehiclePosition.lng];
     vehiculeMarkerRef.current = L.marker(pos, {
       icon: _makeVehiculeIcon(L),
       zIndexOffset: 2000,
     })
       .addTo(instanceRef.current)
+      .bindTooltip("🚑 En route", { permanent: false, direction: "top" })
       .bindPopup("<b>🚑 Véhicule</b><br>Dernière position connue");
 
+    markerSourceRef.current = "socket";
     instanceRef.current.panTo(pos, { animate: true });
   }, [vehiclePosition]);
+
+  // ── Marqueur fixe pour transport futur en statut terrain incorrect ─────────
+  useEffect(() => {
+    if (!L || !instanceRef.current) return;
+    if (estJourJRef.current) return;                          // transport du jour → pas ce marqueur
+    if (!STATUTS_TERRAIN.includes(transport?.statut)) return; // pas en statut terrain → rien
+    if (vehiculeMarkerRef.current) return;                    // marqueur déjà présent
+
+    // Position au départ ou fallback garage BlancBleu (Nice)
+    const dep = transport?.adresseDepart?.coordonnees;
+    const pos = dep?.lat ? [dep.lat, dep.lng] : NICE;
+
+    const dateStr = transport?.dateTransport
+      ? new Date(transport.dateTransport).toLocaleDateString("fr-FR", {
+          day: "numeric", month: "long", year: "numeric",
+        })
+      : "date inconnue";
+
+    vehiculeMarkerRef.current = L.marker(pos, {
+      icon: _makeStaticIcon(L),
+      zIndexOffset: 2000,
+    })
+      .addTo(instanceRef.current)
+      .bindTooltip(`🚐 En attente — Départ le ${dateStr}`, { permanent: false, direction: "top" })
+      .bindPopup(
+        `<div style="text-align:center;padding:4px 2px">
+          <strong>🚐 En attente</strong><br>
+          <small style="color:#64748b">Transport planifié le ${dateStr}</small>
+        </div>`,
+      );
+
+    markerSourceRef.current = "static";
+
+    return () => {
+      if (vehiculeMarkerRef.current && markerSourceRef.current === "static") {
+        vehiculeMarkerRef.current.remove();
+        vehiculeMarkerRef.current = null;
+        markerSourceRef.current = null;
+      }
+    };
+  }, [transport?._id, transport?.statut, transport?.dateTransport]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Rendu ──────────────────────────────────────────────────────────────────
   if (!L) {
