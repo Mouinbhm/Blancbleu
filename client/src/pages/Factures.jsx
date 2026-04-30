@@ -1,15 +1,34 @@
-import { useState, useEffect } from "react";
-import { factureService } from "../services/api";
+import { useState, useEffect, useRef } from "react";
+import api, { factureService } from "../services/api";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  ArcElement,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import { Bar, Doughnut } from "react-chartjs-2";
 
+ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend);
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR") : "—");
 const fmtMontant = (m) =>
   m != null ? `${Number(m).toLocaleString("fr-FR", { minimumFractionDigits: 2 })} €` : "—";
+const fmtEur = (m) =>
+  new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(m || 0);
 
 const patientNom = (f) => {
   if (f.patientId?.nom) return `${f.patientId.nom} ${f.patientId.prenom || ""}`.trim();
   if (f.transportId?.patient?.nom) return `${f.transportId.patient.nom} ${f.transportId.patient.prenom || ""}`.trim();
   return "—";
 };
+
+const MOIS_LABELS = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
+const MOIS_NOMS   = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+const ANNEES = [2024, 2025, 2026, 2027];
 
 const STATUTS = [
   { value: "", label: "Tous" },
@@ -26,18 +45,6 @@ const STATUT_STYLE = {
   en_attente: { cls: "bg-yellow-100 text-yellow-700",  label: "En attente" },
   payee:      { cls: "bg-emerald-100 text-emerald-700",label: "Payée" },
   annulee:    { cls: "bg-red-100 text-red-700",        label: "Annulée" },
-};
-
-const inputStyle = {
-  padding: "10px 12px",
-  borderRadius: "8px",
-  border: "1px solid #e2e8f0",
-  fontSize: "14px",
-  color: "#0f172a",
-  outline: "none",
-  width: "100%",
-  backgroundColor: "#f8fafc",
-  fontFamily: "inherit",
 };
 
 // ─── Modal Impression ─────────────────────────────────────────────────────────
@@ -103,7 +110,6 @@ function ModalImpression({ facture, onClose }) {
 
         <div style={{ overflowY: "auto", padding: "32px 40px", flex: 1 }}>
           <div id="facture-print-content">
-            {/* En-tête */}
             <div className="header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "36px", paddingBottom: "20px", borderBottom: "3px solid #1D6EF5" }}>
               <div>
                 <div className="logo-name" style={{ fontSize: "24px", fontWeight: 800, marginBottom: "2px" }}>
@@ -119,13 +125,12 @@ function ModalImpression({ facture, onClose }) {
                 <div style={{ fontSize: "11px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "4px" }}>Facture N°</div>
                 <div className="facture-num" style={{ fontSize: "22px", fontWeight: 800, color: "#1D6EF5" }}>{facture.numero}</div>
                 <div className="facture-date" style={{ fontSize: "12px", color: "#64748b", marginTop: "6px" }}>Émise le : {fmtDate(facture.dateEmission)}</div>
-                <div style={{ display: "inline-block", marginTop: "8px", padding: "4px 14px", borderRadius: "999px", fontSize: "11px", fontWeight: 700, backgroundColor: statCfg.cls.split(" ")[0].replace("bg-", "#").includes("#") ? "#fef3c7" : "#f8fafc", color: "#92400e" }}>
+                <div style={{ display: "inline-block", marginTop: "8px", padding: "4px 14px", borderRadius: "999px", fontSize: "11px", fontWeight: 700, backgroundColor: "#fef3c7", color: "#92400e" }}>
                   {statCfg.label.toUpperCase()}
                 </div>
               </div>
             </div>
 
-            {/* Infos patient + transport */}
             <div className="info-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "28px" }}>
               <div className="info-box" style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "14px" }}>
                 <div className="info-label" style={{ fontSize: "10px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>Patient</div>
@@ -139,7 +144,6 @@ function ModalImpression({ facture, onClose }) {
               </div>
             </div>
 
-            {/* Tableau */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ fontSize: "10px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>Détail de la prestation</div>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -190,6 +194,11 @@ function ModalImpression({ facture, onClose }) {
 
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function Factures() {
+  const now = new Date();
+  const [moisActuel, setMoisActuel] = useState(now.getMonth() + 1);
+  const [anneeActuelle, setAnneeActuelle] = useState(now.getFullYear());
+
+  // Factures existantes
   const [factures, setFactures] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -198,6 +207,11 @@ export default function Factures() {
   const [factureImprimer, setFactureImprimer] = useState(null);
   const [actionId, setActionId] = useState(null);
 
+  // Comptabilité
+  const [compta, setCompta] = useState(null);
+  const [comptaLoading, setComptaLoading] = useState(true);
+
+  // ── Chargement factures ─────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -216,6 +230,18 @@ export default function Factures() {
     return () => { cancelled = true; };
   }, [filterStatut]);
 
+  // ── Chargement comptabilité ─────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    setComptaLoading(true);
+    api.get("/comptabilite/dashboard", { params: { annee: anneeActuelle, mois: moisActuel } })
+      .then(({ data }) => { if (!cancelled) setCompta(data); })
+      .catch(() => { if (!cancelled) setCompta(null); })
+      .finally(() => { if (!cancelled) setComptaLoading(false); });
+    return () => { cancelled = true; };
+  }, [moisActuel, anneeActuelle]);
+
+  // ── Filtrage ────────────────────────────────────────────────────────────────
   const filtered = factures.filter((f) => {
     const q = search.toLowerCase();
     return (
@@ -227,6 +253,7 @@ export default function Factures() {
     );
   });
 
+  // ── Actions factures ────────────────────────────────────────────────────────
   const handleStatut = async (id, statut) => {
     setActionId(id);
     try {
@@ -251,6 +278,7 @@ export default function Factures() {
     }
   };
 
+  // ── Exports ─────────────────────────────────────────────────────────────────
   const exportCSV = () => {
     const headers = ["N° Facture", "Date émission", "Transport", "Patient", "Motif", "Total €", "CPAM €", "Patient €", "Statut"];
     const rows = filtered.map((f) => [
@@ -265,12 +293,52 @@ export default function Factures() {
       f.statut,
     ]);
     const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
+    _downloadCSV(csv, `factures-blancbleu-${new Date().toISOString().slice(0, 10)}.csv`);
+  };
+
+  const exportDSN = () => {
+    if (!compta) return;
+    const headers = ["SIRET", "NOM", "PRENOM", "PERIODE", "BRUT", "COT_SAL", "NET", "COT_PAT"];
+    const periode = `${String(moisActuel).padStart(2, "0")}/${anneeActuelle}`;
+    const csv = [
+      headers.join(";"),
+      `000000000000000;;(collectif);${periode};${compta.charges.salaires};${compta.urssaf.cotisationsSalariales};${compta.urssaf.salaireNet};${compta.urssaf.cotisationsPatronales}`,
+    ].join("\n");
+    _downloadCSV(csv, `DSN-URSSAF-${periode.replace("/", "-")}.csv`);
+  };
+
+  const exportRapport = () => {
+    if (!compta) { exportCSV(); return; }
+    const periode = `${MOIS_NOMS[moisActuel - 1]} ${anneeActuelle}`;
+    const lines = [
+      `"=== RAPPORT COMPTABLE — ${periode} ==="`,
+      `""`,
+      `"=== CHIFFRE D'AFFAIRES ==="`,
+      `"CA total","${fmtEur(compta.ca.total)}"`,
+      `"Part CPAM","${fmtEur(compta.ca.partCPAM)}"`,
+      `"Part patient","${fmtEur(compta.ca.partPatient)}"`,
+      `""`,
+      `"=== CHARGES ==="`,
+      `"Salaires bruts","${fmtEur(compta.charges.salaires)}"`,
+      `"Cotisations patronales (URSSAF)","${fmtEur(compta.charges.urssaf)}"`,
+      `"Maintenances","${fmtEur(compta.charges.maintenances)}"`,
+      `"Total charges","${fmtEur(compta.charges.total)}"`,
+      `""`,
+      `"=== RÉSULTAT ==="`,
+      `"Résultat net","${fmtEur(compta.resultatNet)}"`,
+      `""`,
+      `"=== FACTURES ==="`,
+      `"N° Facture","Date","Patient","Montant","CPAM","Statut"`,
+      ...factures.map((f) => `"${f.numero}","${fmtDate(f.dateEmission)}","${patientNom(f)}","${f.montantTotal}","${f.montantCPAM}","${f.statut}"`),
+    ];
+    _downloadCSV(lines.join("\n"), `rapport-comptable-${periode.replace(" ", "-")}.csv`);
+  };
+
+  const _downloadCSV = (csv, filename) => {
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `factures-blancbleu-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
+    a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -279,25 +347,134 @@ export default function Factures() {
     0
   );
 
+  // ── Données graphique barres ────────────────────────────────────────────────
+  const barData = {
+    labels: MOIS_LABELS,
+    datasets: [
+      {
+        label: "CA (€)",
+        data: compta?.ca?.parMois || Array(12).fill(0),
+        backgroundColor: "#3B82F6",
+        borderRadius: 4,
+      },
+      {
+        label: "Charges (€)",
+        data: compta?.charges?.parMois || Array(12).fill(0),
+        backgroundColor: "#EF4444",
+        borderRadius: 4,
+      },
+    ],
+  };
+  const barOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { position: "top", labels: { font: { size: 11 }, boxWidth: 12 } } },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+      y: { grid: { color: "#f1f5f9" }, ticks: { font: { size: 10 }, callback: (v) => `${v} €` } },
+    },
+  };
+
+  // ── Données graphique doughnut ──────────────────────────────────────────────
+  const doughnutData = {
+    labels: ["Salaires", "URSSAF", "Maintenances"],
+    datasets: [{
+      data: [
+        compta?.charges?.salaires || 0,
+        compta?.charges?.urssaf   || 0,
+        compta?.charges?.maintenances || 0,
+      ],
+      backgroundColor: ["#3B82F6", "#F97316", "#EF4444"],
+      borderWidth: 2,
+      borderColor: "#fff",
+    }],
+  };
+  const doughnutOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: "bottom", labels: { font: { size: 11 }, boxWidth: 12, padding: 12 } },
+    },
+    cutout: "65%",
+  };
+
+  // ── Résultat net ────────────────────────────────────────────────────────────
+  const resultatNet  = compta?.resultatNet ?? null;
+  const isPositif    = resultatNet !== null && resultatNet >= 0;
+
+  const moisNomActuel = MOIS_NOMS[moisActuel - 1];
+
   return (
     <div className="p-7 fade-in">
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+
       {factureImprimer && (
         <ModalImpression facture={factureImprimer} onClose={() => setFactureImprimer(null)} />
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div>
-          <h1 className="font-brand font-bold text-2xl text-navy">Factures</h1>
-          <p className="text-slate-500 text-sm mt-1">Facturation CPAM — Ambulances Blanc Bleu</p>
+          <h1 className="font-brand font-bold text-2xl text-navy">Comptabilité</h1>
+          <p className="text-slate-500 text-sm mt-1">Finances & Facturation CPAM — Ambulances Blanc Bleu</p>
         </div>
-        <button onClick={exportCSV} className="flex items-center gap-2 text-xs font-bold text-primary border border-primary/30 px-4 py-2 rounded-lg hover:bg-primary hover:text-white transition-all">
-          <span className="material-symbols-outlined text-sm">download</span>Exporter CSV
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={exportCSV} className="flex items-center gap-2 text-xs font-bold text-primary border border-primary/30 px-4 py-2 rounded-lg hover:bg-primary hover:text-white transition-all">
+            <span className="material-symbols-outlined text-sm">download</span>Exporter CSV
+          </button>
+          <button onClick={exportDSN} className="flex items-center gap-2 text-xs font-bold text-orange-600 border border-orange-300 px-4 py-2 rounded-lg hover:bg-orange-600 hover:text-white transition-all">
+            <span className="material-symbols-outlined text-sm">description</span>Export DSN URSSAF
+          </button>
+          <button onClick={exportRapport} className="flex items-center gap-2 text-xs font-bold text-emerald-600 border border-emerald-300 px-4 py-2 rounded-lg hover:bg-emerald-600 hover:text-white transition-all">
+            <span className="material-symbols-outlined text-sm">bar_chart</span>Rapport complet
+          </button>
+        </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-5">
+      {/* ── Section A : Sélecteur de période ───────────────────────────────── */}
+      <div className="flex items-center gap-3 mb-4 bg-white border border-slate-200 rounded-xl px-4 py-3 w-fit">
+        <span className="material-symbols-outlined text-slate-400 text-base">calendar_month</span>
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Période :</span>
+        <select
+          value={moisActuel}
+          onChange={(e) => setMoisActuel(Number(e.target.value))}
+          className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm outline-none bg-white"
+        >
+          {MOIS_NOMS.map((n, i) => <option key={i} value={i + 1}>{n}</option>)}
+        </select>
+        <select
+          value={anneeActuelle}
+          onChange={(e) => setAnneeActuelle(Number(e.target.value))}
+          className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm outline-none bg-white"
+        >
+          {ANNEES.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+        {comptaLoading && (
+          <div style={{ width: 14, height: 14, border: "2px solid #e2e8f0", borderTop: "2px solid #1D6EF5", borderRadius: "50%", animation: "spin .7s linear infinite" }} />
+        )}
+      </div>
+
+      {/* ── Section F : Alertes ────────────────────────────────────────────── */}
+      {compta?.alertes?.length > 0 && (
+        <div className="flex flex-col gap-2 mb-5">
+          {compta.alertes.map((a, i) => {
+            const cfg = {
+              danger:  { bg: "bg-red-50",    border: "border-red-200",    text: "text-red-700",    icon: "error" },
+              warning: { bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-700", icon: "warning" },
+              success: { bg: "bg-green-50",  border: "border-green-200",  text: "text-green-700",  icon: "check_circle" },
+            }[a.type] || { bg: "bg-slate-50", border: "border-slate-200", text: "text-slate-600", icon: "info" };
+            return (
+              <div key={i} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium ${cfg.bg} ${cfg.border} ${cfg.text}`}>
+                <span className="material-symbols-outlined text-base">{cfg.icon}</span>
+                {a.message}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Section B : KPI cards (5 existantes + Résultat net) ────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-5">
         {[
           { l: "Total", v: stats?.total || 0, icon: "receipt_long", c: "text-navy" },
           { l: "Brouillons", v: stats?.parStatut?.brouillons || 0, icon: "draft", c: "text-slate-500" },
@@ -313,9 +490,158 @@ export default function Factures() {
             </div>
           </div>
         ))}
+
+        {/* Résultat net */}
+        <div className={`rounded-xl border p-4 flex flex-col gap-1 ${isPositif ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-base text-slate-500">analytics</span>
+            <p className="text-xs text-slate-500 font-semibold">Résultat net</p>
+          </div>
+          <p className={`text-lg font-mono font-bold ${isPositif ? "text-green-700" : "text-red-700"}`}>
+            {resultatNet !== null ? fmtEur(resultatNet) : "—"}
+          </p>
+          <p className={`text-xs font-semibold ${isPositif ? "text-green-600" : "text-red-600"}`}>
+            {resultatNet === null ? "—" : isPositif ? "✅ Bénéfice" : "🔴 Déficit"}
+          </p>
+          <p className="text-xs text-slate-400">CA − Charges</p>
+        </div>
       </div>
 
-      {/* Filtres */}
+      {/* ── Section C : Graphiques ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <p className="text-xs font-mono font-bold text-slate-400 uppercase tracking-widest mb-3">
+            Évolution CA &amp; Charges — {anneeActuelle}
+          </p>
+          <div style={{ height: 220 }}>
+            <Bar data={barData} options={barOptions} />
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <p className="text-xs font-mono font-bold text-slate-400 uppercase tracking-widest mb-3">
+            Répartition des charges — {moisNomActuel}
+          </p>
+          <div style={{ height: 220 }}>
+            {(compta?.charges?.total || 0) > 0
+              ? <Doughnut data={doughnutData} options={doughnutOptions} />
+              : <div className="h-full flex items-center justify-center text-slate-400 text-sm">Aucune charge ce mois</div>
+            }
+          </div>
+        </div>
+      </div>
+
+      {/* ── Section D : Charges + URSSAF ───────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+
+        {/* Charges */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="material-symbols-outlined text-red-500 text-base">trending_down</span>
+            <p className="text-xs font-mono font-bold text-slate-400 uppercase tracking-widest">
+              Charges — {moisNomActuel} {anneeActuelle}
+            </p>
+          </div>
+          {compta ? (() => {
+            const lignes = [
+              { label: "Salaires bruts",    val: compta.charges.salaires },
+              { label: "Cotis. URSSAF",     val: compta.charges.urssaf },
+              { label: "Maintenances",      val: compta.charges.maintenances },
+              { label: "Carburant",         val: compta.charges.carburant },
+            ];
+            const total = compta.charges.total || 1;
+            return (
+              <div className="space-y-2.5">
+                {lignes.map((l) => {
+                  const pct = total > 0 ? Math.round((l.val / total) * 100) : 0;
+                  return (
+                    <div key={l.label}>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-slate-600 font-medium">{l.label}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-slate-500">{fmtEur(l.val)}</span>
+                          <span className="text-slate-400 w-8 text-right">{pct}%</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-red-400 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-600">TOTAL CHARGES</span>
+                  <span className="text-sm font-mono font-bold text-red-600">{fmtEur(compta.charges.total)}</span>
+                </div>
+              </div>
+            );
+          })() : (
+            <p className="text-slate-400 text-sm">Données indisponibles</p>
+          )}
+        </div>
+
+        {/* URSSAF */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="material-symbols-outlined text-orange-500 text-base">account_balance</span>
+            <p className="text-xs font-mono font-bold text-slate-400 uppercase tracking-widest">
+              URSSAF — Déclaration {moisNomActuel} {anneeActuelle}
+            </p>
+          </div>
+          {compta ? (() => {
+            const u = compta.urssaf;
+            return (
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-500">Masse salariale</span>
+                  <span className="font-mono font-semibold text-navy">{fmtEur(u.masseSalariale)}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-500">Cotis. salariales (23%)</span>
+                  <span className="font-mono text-slate-600">− {fmtEur(u.cotisationsSalariales)}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-50 bg-slate-50 rounded px-2">
+                  <span className="text-slate-700 font-semibold">Salaires nets</span>
+                  <span className="font-mono font-bold text-emerald-600">{fmtEur(u.salaireNet)}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-500">Cotis. patronales (42%)</span>
+                  <span className="font-mono text-slate-600">+ {fmtEur(u.cotisationsPatronales)}</span>
+                </div>
+                <div className="flex justify-between py-1 bg-orange-50 rounded px-2">
+                  <span className="text-orange-700 font-semibold">Coût total employeur</span>
+                  <span className="font-mono font-bold text-orange-700">{fmtEur(u.coutTotalEmployeur)}</span>
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-100">
+                  <div className="flex items-center gap-2 text-xs text-orange-600 font-semibold">
+                    <span className="material-symbols-outlined text-sm">schedule</span>
+                    À payer avant le {new Date(u.echeance).toLocaleDateString("fr-FR")}
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => alert("Déclaration URSSAF marquée payée (simulation)")}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+                    >
+                      <span className="material-symbols-outlined text-sm">check_circle</span>
+                      Marquer payée
+                    </button>
+                    <button
+                      onClick={exportDSN}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-orange-50 border border-orange-200 text-xs font-bold text-orange-700 hover:bg-orange-100"
+                    >
+                      <span className="material-symbols-outlined text-sm">description</span>
+                      Export DSN
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })() : (
+            <p className="text-slate-400 text-sm">Données indisponibles</p>
+          )}
+        </div>
+      </div>
+
+      {/* ── Filtres & recherche (existants — intacts) ───────────────────────── */}
       <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
         <div className="flex gap-2 flex-wrap">
           {STATUTS.map(({ value, label }) => (
@@ -340,7 +666,13 @@ export default function Factures() {
         </div>
       </div>
 
-      {/* Tableau */}
+      {/* ── Sous-titre section factures ────────────────────────────────────── */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="material-symbols-outlined text-primary text-base">receipt_long</span>
+        <h2 className="font-brand font-bold text-navy text-base">Factures — Facturation CPAM</h2>
+      </div>
+
+      {/* ── Tableau factures (existant — intact) ───────────────────────────── */}
       <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100">
         <table className="w-full">
           <thead>
@@ -378,13 +710,10 @@ export default function Factures() {
                     <td className="px-4 py-3 font-mono text-sm text-emerald-600">{fmtMontant(f.montantCPAM)}</td>
                     <td className="px-4 py-3 font-mono text-sm text-red-500">{fmtMontant(f.montantPatient)}</td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${statCfg.cls}`}>
-                        {statCfg.label}
-                      </span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${statCfg.cls}`}>{statCfg.label}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1 flex-wrap">
-                        {/* Payer */}
                         {["brouillon", "emise", "en_attente"].includes(f.statut) && (
                           <button
                             title="Marquer payée"
@@ -392,22 +721,18 @@ export default function Factures() {
                             disabled={isPaying}
                             className="flex items-center gap-1 text-xs bg-emerald-50 border border-emerald-300 text-emerald-700 px-2 py-1 rounded-lg font-semibold hover:bg-emerald-100 disabled:opacity-50"
                           >
-                            <span className="material-symbols-outlined text-xs">payments</span>
-                            Payer
+                            <span className="material-symbols-outlined text-xs">payments</span>Payer
                           </button>
                         )}
-                        {/* Émettre */}
                         {f.statut === "brouillon" && (
                           <button
                             title="Émettre la facture"
                             onClick={() => handleStatut(f._id, "emise")}
                             className="flex items-center gap-1 text-xs bg-blue-50 border border-blue-300 text-blue-700 px-2 py-1 rounded-lg font-semibold hover:bg-blue-100"
                           >
-                            <span className="material-symbols-outlined text-xs">send</span>
-                            Émettre
+                            <span className="material-symbols-outlined text-xs">send</span>Émettre
                           </button>
                         )}
-                        {/* Imprimer */}
                         <button
                           title="Imprimer"
                           onClick={() => setFactureImprimer(f)}
@@ -415,7 +740,6 @@ export default function Factures() {
                         >
                           <span className="material-symbols-outlined text-slate-400 text-sm group-hover:text-primary">print</span>
                         </button>
-                        {/* Annuler */}
                         {f.statut !== "annulee" && (
                           <button
                             title="Annuler"
@@ -440,7 +764,67 @@ export default function Factures() {
         </div>
       </div>
 
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      {/* ── Section E : Récapitulatif annuel ───────────────────────────────── */}
+      {compta?.recapAnnuel && (
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-symbols-outlined text-slate-500 text-base">bar_chart</span>
+            <h2 className="font-brand font-bold text-navy text-base">Récapitulatif annuel {anneeActuelle}</h2>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  {["Mois", "CA", "Charges", "Résultat", "Marge"].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-mono font-bold text-slate-400 uppercase tracking-widest">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {compta.recapAnnuel.map((r) => {
+                  const estMoisActuel = r.mois === moisActuel;
+                  const estFutur = r.mois > moisActuel;
+                  const rowBg = estMoisActuel ? "bg-blue-50" : "";
+                  const numCls = estFutur ? "text-slate-300" : "text-slate-600";
+                  const resCls = r.resultat >= 0 ? "text-emerald-600" : "text-red-500";
+                  return (
+                    <tr key={r.mois} className={`${rowBg} hover:bg-slate-50 transition-colors`}>
+                      <td className={`px-4 py-2.5 font-semibold ${estMoisActuel ? "text-primary" : numCls}`}>
+                        {MOIS_LABELS[r.mois - 1]}
+                        {estMoisActuel && <span className="ml-1.5 text-xs text-primary font-normal">← actuel</span>}
+                      </td>
+                      <td className={`px-4 py-2.5 font-mono ${numCls}`}>{fmtEur(r.ca)}</td>
+                      <td className={`px-4 py-2.5 font-mono ${numCls}`}>{fmtEur(r.charges)}</td>
+                      <td className={`px-4 py-2.5 font-mono font-semibold ${estFutur ? "text-slate-300" : resCls}`}>{fmtEur(r.resultat)}</td>
+                      <td className={`px-4 py-2.5 font-mono text-xs ${estFutur ? "text-slate-300" : r.marge !== null && r.marge >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                        {estFutur || r.marge === null ? "—" : `${r.marge > 0 ? "+" : ""}${r.marge}×`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-100 border-t-2 border-slate-200 font-bold">
+                  <td className="px-4 py-3 text-xs font-mono text-slate-500 uppercase tracking-widest">TOTAL</td>
+                  <td className="px-4 py-3 font-mono text-navy">
+                    {fmtEur(compta.recapAnnuel.reduce((s, r) => s + r.ca, 0))}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-navy">
+                    {fmtEur(compta.recapAnnuel.reduce((s, r) => s + r.charges, 0))}
+                  </td>
+                  <td className="px-4 py-3 font-mono">
+                    {(() => {
+                      const tot = compta.recapAnnuel.reduce((s, r) => s + r.resultat, 0);
+                      return <span className={tot >= 0 ? "text-emerald-600" : "text-red-500"}>{fmtEur(tot)}</span>;
+                    })()}
+                  </td>
+                  <td className="px-4 py-3 text-slate-400">—</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -18,7 +18,7 @@ const NAV_GESTION = [
   { path: "/personnel", icon: "badge", label: "Personnel" },
   { path: "/equipements", icon: "medical_services", label: "Équipements" },
   { path: "/maintenances", icon: "build", label: "Maintenances" },
-  { path: "/factures", icon: "receipt_long", label: "Factures" },
+  { path: "/factures", icon: "account_balance_wallet", label: "Comptabilité" },
   { path: "/aide-ia", icon: "psychology", label: "Aide IA" },
 ];
 
@@ -33,7 +33,7 @@ const pageTitles = {
   "/personnel": "Personnel — Équipes",
   "/equipements": "Équipements — Matériel médical",
   "/maintenances": "Maintenances — Suivi véhicules",
-  "/factures": "Factures — Facturation CPAM",
+  "/factures": "Comptabilité — Finances & Facturation",
   "/aide-ia": "Aide IA — Optimisation",
 };
 

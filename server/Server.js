@@ -82,6 +82,7 @@ app.use("/api/personnel", require("./routes/personnel"));
 app.use("/api/equipements", require("./routes/equipements"));
 app.use("/api/maintenances", require("./routes/maintenances"));
 app.use("/api/factures", require("./routes/factures"));
+app.use("/api/comptabilite", require("./routes/comptabilite"));
 app.use("/api/analytics", require("./routes/analytics"));
 app.use("/api/planning", require("./routes/planning"));
 if (process.env.NODE_ENV !== "production") {
