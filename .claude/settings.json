@@ -25,7 +25,8 @@
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory",
-      "c:\\Users\\MSI\\OneDrive\\Bureau\\PFE\\blancbleu\\ai-service"
+      "c:\\Users\\MSI\\OneDrive\\Bureau\\PFE\\blancbleu\\ai-service",
+      "c:\\Users\\MSI\\OneDrive\\Bureau\\PFE\\blancbleu\\blancbleu_patient\\ios"
     ]
   }
 }
