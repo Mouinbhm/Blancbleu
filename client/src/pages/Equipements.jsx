@@ -33,6 +33,7 @@ function ModalEquipement({ equip, onClose, onSaved }) {
     etat: equip?.etat || "opérationnel",
     niveauPriorite: equip?.niveauPriorite || "normal",
     notes: equip?.notes || "",
+    prix: equip?.prix ?? 0,
   });
   const [loading, setLoading] = useState(false);
   const [erreur, setErreur] = useState(null);
@@ -42,8 +43,9 @@ function ModalEquipement({ equip, onClose, onSaved }) {
     if (!form.nom.trim()) { setErreur("Nom obligatoire."); return; }
     setLoading(true);
     try {
-      if (editing) await equipementService.update(equip._id, form);
-      else await equipementService.create(form);
+      const payload = { ...form, prix: parseFloat(form.prix) || 0 };
+      if (editing) await equipementService.update(equip._id, payload);
+      else await equipementService.create(payload);
       onSaved();
     } catch (err) {
       setErreur(err.response?.data?.message || "Erreur.");
@@ -92,6 +94,10 @@ function ModalEquipement({ equip, onClose, onSaved }) {
           <div>
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Numéro de série</label>
             <input type="text" value={form.numeroSerie} onChange={(e) => setForm((f) => ({ ...f, numeroSerie: e.target.value.toUpperCase() }))} className={inputCls} />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Prix (€)</label>
+            <input type="number" min="0" step="0.01" placeholder="0.00" value={form.prix} onChange={(e) => setForm((f) => ({ ...f, prix: e.target.value }))} className={inputCls} />
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold hover:bg-surface">Annuler</button>

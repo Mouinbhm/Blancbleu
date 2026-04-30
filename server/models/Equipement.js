@@ -44,6 +44,7 @@ const equipementSchema = new mongoose.Schema(
       default: "normal",
     },
     quantite: { type: Number, default: 1, min: 0 },
+    prix:     { type: Number, default: 0, min: 0 },
 
     etat: {
       type: String,
