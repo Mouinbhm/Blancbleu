@@ -8,7 +8,6 @@ import useSocket from "../../hooks/useSocket";
 const NAV_OPERATIONS = [
   { path: "/dashboard", icon: "dashboard", label: "Tableau de bord" },
   { path: "/transports", icon: "directions_car", label: "Transports" },
-  { path: "/missions", icon: "local_shipping", label: "Missions" },
   { path: "/planning", icon: "calendar_month", label: "Planning" },
   { path: "/patients", icon: "personal_injury", label: "Patients" },
   { path: "/prescriptions", icon: "description", label: "Prescriptions" },
@@ -27,7 +26,6 @@ const pageTitles = {
   "/dashboard": "Tableau de bord — Vue opérationnelle",
   "/transports": "Transports — Gestion des transports",
   "/transports/new": "Nouveau transport",
-  "/missions": "Missions — Dispatch & exécution terrain",
   "/planning": "Planning — Organisation journalière",
   "/flotte": "Flotte — Véhicules sanitaires",
   "/patients": "Patients — Dossiers patients",

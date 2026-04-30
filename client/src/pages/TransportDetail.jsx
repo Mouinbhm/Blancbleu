@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import StatutBadge from "../components/transport/StatutBadge";
 import TransportMap from "../components/map/TransportMap";
-import { transportService, vehicleService, missionService, factureService } from "../services/api";
+import { transportService, vehicleService, factureService } from "../services/api";
 import useSocket from "../hooks/useSocket";
 import { getSocket, getOrCreateSocket } from "../services/socketService";
 
@@ -312,7 +312,6 @@ export default function TransportDetail() {
   const [isLive, setIsLive] = useState(false);
 
   // Linked entities
-  const [linkedMission, setLinkedMission] = useState(null);
   const [linkedFacture, setLinkedFacture] = useState(null);
 
   // Modal: null | 'assigner' | 'attente' | 'retour' | 'facturer' | 'reprogrammer'
@@ -341,11 +340,6 @@ export default function TransportDetail() {
   useEffect(() => {
     if (!transport) return;
     setIsLive(!["BILLED", "CANCELLED", "NO_SHOW", "COMPLETED"].includes(transport.statut));
-
-    // Load linked mission and facture
-    missionService.getAll({ transportId: transport._id, limit: 1 })
-      .then(({ data }) => setLinkedMission(data?.missions?.[0] || null))
-      .catch(() => {});
 
     factureService.getAll({ limit: 5 })
       .then(({ data }) => {
@@ -927,41 +921,6 @@ export default function TransportDetail() {
             </SectionCard>
           )}
 
-          {/* ── SECTION 8: Mission liée ───────────────────────────────────────────── */}
-          {linkedMission && (
-            <SectionCard title="Mission opérationnelle" icon="local_shipping">
-              <div className="flex items-center gap-2 mb-3">
-                <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                  linkedMission.statut === "terminee" ? "bg-green-100 text-green-700" :
-                  linkedMission.statut === "en_cours" ? "bg-amber-100 text-amber-700" :
-                  linkedMission.statut === "annulee" ? "bg-red-100 text-red-700" :
-                  "bg-blue-100 text-blue-700"
-                }`}>
-                  {linkedMission.statut}
-                </span>
-                <span className="text-xs text-slate-400 font-mono">{linkedMission.dispatchMode?.toUpperCase()}</span>
-                {linkedMission.iaRecommendation?.confidence != null && (
-                  <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-semibold">
-                    IA {Math.round(linkedMission.iaRecommendation.confidence * 100)}%
-                  </span>
-                )}
-              </div>
-              <div className="divide-y divide-slate-50">
-                {linkedMission.vehicleId && (
-                  <InfoRow icon="airport_shuttle" label="Véhicule" value={`${linkedMission.vehicleId.nom || ""} — ${linkedMission.vehicleId.immatriculation || ""}`} />
-                )}
-                {linkedMission.chauffeurId && (
-                  <InfoRow icon="person" label="Chauffeur" value={`${linkedMission.chauffeurId.nom} ${linkedMission.chauffeurId.prenom}`} />
-                )}
-                {linkedMission.dureeReelleMinutes && (
-                  <InfoRow icon="timer" label="Durée réelle" value={`${linkedMission.dureeReelleMinutes} min`} />
-                )}
-                {linkedMission.distanceReelleKm && (
-                  <InfoRow icon="straighten" label="Distance réelle" value={`${linkedMission.distanceReelleKm} km`} />
-                )}
-              </div>
-            </SectionCard>
-          )}
 
           {/* ── SECTION 9: Facture liée ───────────────────────────────────────────── */}
           {linkedFacture && (

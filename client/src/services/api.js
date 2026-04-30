@@ -151,6 +151,11 @@ export const planningService = {
   daily: (date) => api.get("/planning/daily", { params: { date } }),
   week: (date) => api.get("/planning/week", { params: { date } }),
   unassigned: () => api.get("/planning/unassigned"),
+  mensuel: (annee, mois) => {
+    const dateDebut = new Date(annee, mois, 1).toISOString().split("T")[0];
+    const dateFin   = new Date(annee, mois + 1, 0).toISOString().split("T")[0];
+    return api.get("/transports", { params: { dateDebut, dateFin, limit: 500 } });
+  },
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -302,18 +307,6 @@ export const prescriptionService = {
   delete: (id) => api.delete(`/prescriptions/${id}`),
 };
 
-// ════════════════════════════════════════════════════════════════════════════
-// MISSIONS
-// ════════════════════════════════════════════════════════════════════════════
-export const missionService = {
-  getAll: (params = {}) => api.get("/missions", { params }),
-  getOne: (id) => api.get(`/missions/${id}`),
-  getStats: () => api.get("/missions/stats"),
-  create: (data) => api.post("/missions", data),
-  update: (id, data) => api.patch(`/missions/${id}`, data),
-  updateStatut: (id, statut, extra = {}) => api.patch(`/missions/${id}/statut`, { statut, ...extra }),
-  terminer: (id, data) => api.post(`/missions/${id}/terminer`, data),
-};
 
 // ════════════════════════════════════════════════════════════════════════════
 // ALIASES rétrocompatibilité (anciens imports directs)

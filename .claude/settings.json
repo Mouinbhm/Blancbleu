@@ -18,7 +18,10 @@
       "Bash(npx react-scripts *)",
       "Bash(grep \"src\\\\\\\\\")",
       "Bash(node server/scripts/fix-transport-status.js)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(npx vite *)",
+      "Bash(grep -E \"\\\\.\\(js|jsx\\)$\")",
+      "Bash(xargs -n1 basename)"
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory",

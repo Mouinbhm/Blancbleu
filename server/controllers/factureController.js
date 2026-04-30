@@ -16,7 +16,6 @@ const getFactures = async (req, res) => {
     const [factures, total] = await Promise.all([
       Facture.find(filter)
         .populate("transportId", "numero motif dateTransport typeTransport")
-        .populate("missionId", "statut dureeReelleMinutes distanceReelleKm")
         .populate("patientId", "nom prenom numeroPatient")
         .sort({ dateEmission: -1 })
         .skip(skip)
@@ -33,7 +32,6 @@ const getFacture = async (req, res) => {
   try {
     const f = await Facture.findById(req.params.id)
       .populate("transportId", "numero motif dateTransport adresseDestination patient typeTransport allerRetour")
-      .populate("missionId", "statut dureeReelleMinutes distanceReelleKm vehicleId chauffeurId")
       .populate("patientId", "nom prenom telephone numeroSecu caisse");
     if (!f) return res.status(404).json({ message: "Facture introuvable" });
     res.json(f);

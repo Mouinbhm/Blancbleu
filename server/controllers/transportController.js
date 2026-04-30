@@ -99,6 +99,8 @@ const getTransports = async (req, res, next) => {
       typeTransport,
       motif,
       date,
+      dateDebut,
+      dateFin,
       limit = 50,
       page = 1,
     } = req.query;
@@ -115,6 +117,10 @@ const getTransports = async (req, res, next) => {
       const fin = new Date(date);
       fin.setDate(fin.getDate() + 1);
       filter.dateTransport = { $gte: d, $lt: fin };
+    } else if (dateDebut || dateFin) {
+      filter.dateTransport = {};
+      if (dateDebut) filter.dateTransport.$gte = new Date(dateDebut);
+      if (dateFin)   filter.dateTransport.$lte = new Date(dateFin + "T23:59:59");
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
