@@ -35,7 +35,9 @@ const personnelSchema = new mongoose.Schema(
       enum: ["CDI", "CDD", "Intérim", "Stage", "Alternance", ""],
       default: "",
     },
-    dateEmbauche: { type: Date },
+    dateEmbauche:  { type: Date },
+    salaireBrut:   { type: Number, default: 0, min: 0 },
+    salaireNet:    { type: Number, default: 0, min: 0 },
 
     // ─── Statut opérationnel ──────────────────────────────────────────────────
     statut: {

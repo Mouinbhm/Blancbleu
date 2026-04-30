@@ -1,6 +1,7 @@
 // Fichier : client/src/pages/Personnel.jsx
 import { useState, useEffect, useCallback } from "react";
 import { personnelService, vehicleService } from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
 // ── Constantes métier ─────────────────────────────────────────────────────────
 const ROLES    = ["Ambulancier", "Secouriste", "Infirmier", "Médecin", "Chauffeur", "Autre"];
@@ -82,6 +83,8 @@ function initForm(m) {
     statut:          m?.statut         || "en-service",
     typeContrat:     m?.typeContrat    || "",
     dateEmbauche:    toDateInput(m?.dateEmbauche),
+    salaireBrut:     m?.salaireBrut   ?? 0,
+    salaireNet:      m?.salaireNet    ?? 0,
     uniteAssignee:   m?.uniteAssignee?._id || m?.uniteAssignee || "",
     disponibilites:  m?.disponibilites || Object.fromEntries(JOURS.map((j) => [j, false])),
     notes:           m?.notes          || "",
@@ -151,6 +154,8 @@ function ModalMembre({ membre, onClose, onSaved }) {
         ...form,
         uniteAssignee:  form.uniteAssignee  || null,
         certifications: form.certifications.filter((c) => c.nom.trim()),
+        salaireBrut:    parseFloat(form.salaireBrut) || 0,
+        salaireNet:     parseFloat(form.salaireNet)  || 0,
       };
       if (editing) {
         await personnelService.update(membre._id, payload);
@@ -483,6 +488,28 @@ function ModalMembre({ membre, onClose, onSaved }) {
                 </div>
               </div>
 
+              {/* Salaires */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Salaire brut (€)</label>
+                  <input
+                    type="number" min="0" step="0.01" placeholder="0.00"
+                    value={form.salaireBrut}
+                    onChange={(e) => set("salaireBrut", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Salaire net (€)</label>
+                  <input
+                    type="number" min="0" step="0.01" placeholder="0.00"
+                    value={form.salaireNet}
+                    onChange={(e) => set("salaireNet", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
               {/* Véhicule assigné */}
               <div>
                 <label className={labelCls}>Véhicule assigné</label>
@@ -585,6 +612,7 @@ function ModalMembre({ membre, onClose, onSaved }) {
 // FICHE DÉTAIL — slide-over latéral
 // ══════════════════════════════════════════════════════════════════════════════
 function FicheDetail({ membre, onClose, onEdit }) {
+  const { user } = useAuth();
   const anciennete = calculerAnciennete(membre.dateEmbauche);
   const cfg = STATUT_CFG[membre.statut] || STATUT_CFG.inactif;
   const contratCfg = CONTRAT_CFG[membre.typeContrat] || null;
@@ -644,6 +672,22 @@ function FicheDetail({ membre, onClose, onEdit }) {
                   <span className="material-symbols-outlined text-primary text-sm">schedule</span>
                   <span className="text-primary font-bold">{anciennete}</span>
                   <span className="text-slate-400 text-xs">d'ancienneté</span>
+                </div>
+              )}
+              {user?.role !== "dispatcher" && (membre.salaireBrut > 0 || membre.salaireNet > 0) && (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {membre.salaireBrut > 0 && (
+                    <div className="bg-slate-50 rounded-lg px-3 py-2">
+                      <p className="text-xs text-slate-400">Brut</p>
+                      <p className="text-sm font-bold text-navy">{membre.salaireBrut.toLocaleString("fr-FR")} €</p>
+                    </div>
+                  )}
+                  {membre.salaireNet > 0 && (
+                    <div className="bg-slate-50 rounded-lg px-3 py-2">
+                      <p className="text-xs text-slate-400">Net</p>
+                      <p className="text-sm font-bold text-navy">{membre.salaireNet.toLocaleString("fr-FR")} €</p>
+                    </div>
+                  )}
                 </div>
               )}
             </Section>
