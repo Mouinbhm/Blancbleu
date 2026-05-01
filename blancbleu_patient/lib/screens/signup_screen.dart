@@ -1,37 +1,54 @@
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import 'home_screen.dart';
-import 'signup_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class SignupScreen extends StatefulWidget {
+  const SignupScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<SignupScreen> createState() => _SignupScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _SignupScreenState extends State<SignupScreen> {
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _obscureConfirm = true;
   bool _isLoading = false;
   String? _errorMessage;
 
   @override
   void dispose() {
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _identifierController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _login() async {
+  Future<void> _signup() async {
+    final firstName = _firstNameController.text.trim();
+    final lastName = _lastNameController.text.trim();
     final identifier = _identifierController.text.trim();
     final password = _passwordController.text;
+    final confirm = _confirmPasswordController.text;
 
-    if (identifier.isEmpty || password.isEmpty) {
-      setState(() {
-        _errorMessage = 'Veuillez renseigner tous les champs.';
-      });
+    if (firstName.isEmpty || lastName.isEmpty || identifier.isEmpty || password.isEmpty || confirm.isEmpty) {
+      setState(() => _errorMessage = 'Veuillez renseigner tous les champs.');
+      return;
+    }
+
+    if (password != confirm) {
+      setState(() => _errorMessage = 'Les mots de passe ne correspondent pas.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setState(() => _errorMessage = 'Le mot de passe doit contenir au moins 6 caractères.');
       return;
     }
 
@@ -44,7 +61,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!mounted) return;
 
-    // Simulation : toute combinaison non vide → accès autorisé
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const HomeScreen()),
     );
@@ -59,6 +75,49 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
 
+  InputDecoration _fieldDecoration({
+    required String hint,
+    required IconData icon,
+    Widget? suffixWidget,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(
+        color: AppTheme.outlineVariant.withOpacity(0.8),
+        fontSize: 14,
+      ),
+      suffixIcon: suffixWidget ??
+          Icon(icon, color: AppTheme.outlineVariant),
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.outlineVariant),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.outlineVariant),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.primary, width: 2),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    );
+  }
+
+  Widget _fieldLabel(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.onSurface,
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -66,27 +125,22 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // ── SECTION 1 — Hero avec gradient ───────────────────────────
+            // ── SECTION 1 — Hero ────────────────────────────────────────
             SizedBox(
-              height: 200,
+              height: 180,
               width: double.infinity,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Fond bleu clair simulant l'image médicale
                   Container(
                     decoration: const BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [
-                          Color(0xFFBFD7FF),
-                          Color(0xFFE8F0FE),
-                        ],
+                        colors: [Color(0xFFBFD7FF), Color(0xFFE8F0FE)],
                       ),
                     ),
                   ),
-                  // Motif décoratif croix médicale
                   const Opacity(
                     opacity: 0.12,
                     child: Center(
@@ -97,13 +151,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                  // Gradient vers le fond en bas
                   Positioned(
                     bottom: 0,
                     left: 0,
                     right: 0,
                     child: Container(
-                      height: 100,
+                      height: 80,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
@@ -117,18 +170,35 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
+                  // Back button
+                  Positioned(
+                    top: 40,
+                    left: 12,
+                    child: SafeArea(
+                      child: IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white.withOpacity(0.7),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: AppTheme.primary),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
 
             // ── SECTION 2 — Contenu principal ───────────────────────────
             Transform.translate(
-              offset: const Offset(0, -80),
+              offset: const Offset(0, -60),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   children: [
-                    // Brand — Logo + Titre
+                    // Brand
                     const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -158,9 +228,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 28),
 
-                    // ── Login Card ───────────────────────────────────────
+                    // ── Signup Card ──────────────────────────────────────
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(24),
@@ -181,113 +251,119 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Champ Téléphone/Email
+                          // Card header
                           const Text(
-                            'Téléphone ou Email',
+                            'Créer un compte',
                             style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
                               color: AppTheme.onSurface,
+                              letterSpacing: -0.3,
                             ),
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Renseignez vos informations personnelles',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.secondary,
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Prénom + Nom — side by side
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _fieldLabel('Prénom'),
+                                    TextField(
+                                      controller: _firstNameController,
+                                      textCapitalization: TextCapitalization.words,
+                                      decoration: _fieldDecoration(
+                                        hint: 'Marcel',
+                                        icon: Icons.person_outline,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _fieldLabel('Nom'),
+                                    TextField(
+                                      controller: _lastNameController,
+                                      textCapitalization: TextCapitalization.characters,
+                                      decoration: _fieldDecoration(
+                                        hint: 'DUBOIS',
+                                        icon: Icons.badge_outlined,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Téléphone / Email
+                          _fieldLabel('Téléphone ou Email'),
                           TextField(
                             controller: _identifierController,
                             keyboardType: TextInputType.emailAddress,
-                            decoration: InputDecoration(
-                              hintText: 'Ex: 06 12 34 56 78',
-                              hintStyle: TextStyle(
-                                color: AppTheme.outlineVariant.withOpacity(0.8),
-                                fontSize: 14,
-                              ),
-                              suffixIcon: const Icon(
-                                Icons.person_outline,
-                                color: AppTheme.outlineVariant,
-                              ),
-                              filled: true,
-                              fillColor: Colors.white,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                  color: AppTheme.outlineVariant,
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                  color: AppTheme.outlineVariant,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                  color: AppTheme.primary,
-                                  width: 2,
-                                ),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
-                              ),
+                            decoration: _fieldDecoration(
+                              hint: 'Ex: 06 12 34 56 78',
+                              icon: Icons.phone_outlined,
                             ),
                           ),
 
                           const SizedBox(height: 16),
 
-                          // Champ Mot de passe
-                          const Text(
-                            'Mot de passe',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
+                          // Mot de passe
+                          _fieldLabel('Mot de passe'),
                           TextField(
                             controller: _passwordController,
                             obscureText: _obscurePassword,
-                            decoration: InputDecoration(
-                              hintText: '••••••••',
-                              hintStyle: TextStyle(
-                                color: AppTheme.outlineVariant.withOpacity(0.8),
-                                fontSize: 14,
-                              ),
-                              suffixIcon: IconButton(
+                            decoration: _fieldDecoration(
+                              hint: '••••••••',
+                              icon: Icons.lock_outline,
+                              suffixWidget: IconButton(
                                 icon: Icon(
                                   _obscurePassword
                                       ? Icons.lock_outline
                                       : Icons.lock_open_outlined,
                                   color: AppTheme.outlineVariant,
                                 ),
-                                onPressed: () => setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                }),
+                                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                               ),
-                              filled: true,
-                              fillColor: Colors.white,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Confirmer le mot de passe
+                          _fieldLabel('Confirmer le mot de passe'),
+                          TextField(
+                            controller: _confirmPasswordController,
+                            obscureText: _obscureConfirm,
+                            decoration: _fieldDecoration(
+                              hint: '••••••••',
+                              icon: Icons.lock_outline,
+                              suffixWidget: IconButton(
+                                icon: Icon(
+                                  _obscureConfirm
+                                      ? Icons.lock_outline
+                                      : Icons.lock_open_outlined,
                                   color: AppTheme.outlineVariant,
                                 ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                  color: AppTheme.outlineVariant,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                  color: AppTheme.primary,
-                                  width: 2,
-                                ),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
+                                onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
                               ),
                             ),
                           ),
@@ -327,12 +403,12 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
 
-                          // Bouton Se connecter
+                          // Bouton S'inscrire
                           SizedBox(
                             width: double.infinity,
                             height: 52,
                             child: ElevatedButton(
-                              onPressed: _isLoading ? null : _login,
+                              onPressed: _isLoading ? null : _signup,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.primaryContainer,
                                 foregroundColor: Colors.white,
@@ -353,11 +429,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     )
                                   : const Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
+                                      mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
                                         Text(
-                                          'Se connecter',
+                                          'Créer mon compte',
                                           style: TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w600,
@@ -372,14 +447,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
                           const SizedBox(height: 12),
 
-                          // Lien Première connexion
+                          // Lien retour connexion
                           Center(
                             child: TextButton(
-                              onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => const SignupScreen()),
-                              ),
+                              onPressed: () => Navigator.of(context).pop(),
                               child: const Text(
-                                'Première connexion ?',
+                                'Déjà un compte ? Se connecter',
                                 style: TextStyle(
                                   color: AppTheme.primary,
                                   fontSize: 14,
@@ -398,7 +471,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
             // ── FOOTER ──────────────────────────────────────────────────
             Transform.translate(
-              offset: const Offset(0, -60),
+              offset: const Offset(0, -40),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Column(
