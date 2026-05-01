@@ -25,12 +25,19 @@
       "Bash(flutter clean *)",
       "Bash(flutter pub *)",
       "Bash(flutter devices *)",
-      "Bash(flutter run *)"
+      "Bash(flutter run *)",
+      "Bash(flutter analyze *)",
+      "Bash(flutter --version)",
+      "Read(//c/Users/MSI/dev/flutter/flutter/packages/flutter_tools/gradle/build/libs/**)",
+      "Bash(./gradlew assembleDebug --stacktrace)",
+      "Bash(./gradlew --stop)",
+      "Bash(GRADLE_OPTS=\"-Dorg.gradle.daemon=false\" ./gradlew assembleDebug)"
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory",
       "c:\\Users\\MSI\\OneDrive\\Bureau\\PFE\\blancbleu\\ai-service",
-      "c:\\Users\\MSI\\OneDrive\\Bureau\\PFE\\blancbleu\\blancbleu_patient\\ios"
+      "c:\\Users\\MSI\\OneDrive\\Bureau\\PFE\\blancbleu\\blancbleu_patient\\ios",
+      "c:\\Users\\MSI\\OneDrive\\Bureau\\PFE\\blancbleu\\blancbleu_patient\\lib"
     ]
   }
 }
