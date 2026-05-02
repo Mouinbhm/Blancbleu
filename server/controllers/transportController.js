@@ -414,17 +414,23 @@ const creerTransportsRecurrents = async (req, res, next) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PATCH /api/transports/:id — Modifier un transport
+// PATCH /api/transports/:id — Modifier un transport (champs autorisés uniquement)
 // ─────────────────────────────────────────────────────────────────────────────
+const UPDATE_WHITELIST = [
+  "notes", "heureDepart", "allerRetour",
+  "adresseDepart", "adresseDestination", "tauxPriseEnCharge",
+];
+
 const updateTransport = async (req, res, next) => {
   try {
+    const updates = {};
+    for (const key of UPDATE_WHITELIST) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
     const transport = await Transport.findByIdAndUpdate(
       req.params.id,
-      req.body,
-      {
-        new: true,
-        runValidators: true,
-      },
+      updates,
+      { new: true, runValidators: true },
     );
     if (!transport)
       return res.status(404).json({ message: "Transport introuvable" });
@@ -439,7 +445,14 @@ const updateTransport = async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────────────────────
 const deleteTransport = async (req, res, next) => {
   try {
+    const transport = await Transport.findById(req.params.id);
+    if (!transport)
+      return res.status(404).json({ message: "Transport introuvable" });
     await Transport.findByIdAndUpdate(req.params.id, { deletedAt: new Date() });
+    logger.info("Transport supprimé (soft-delete)", {
+      numero: transport.numero,
+      suppresseur: req.user?._id,
+    });
     res.json({ message: "Transport supprimé" });
   } catch (err) {
     return next(err);

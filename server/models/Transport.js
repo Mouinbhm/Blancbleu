@@ -256,12 +256,17 @@ transportSchema.pre("validate", function (next) {
   next();
 });
 
-// ── Numéro automatique ────────────────────────────────────────────────────────
+// ── Numéro automatique — compteur atomique (évite les doublons) ───────────────
 transportSchema.pre("save", async function (next) {
   if (!this.numero) {
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const count = await mongoose.model("Transport").countDocuments();
-    this.numero = `TRS-${date}-${String(count + 1).padStart(4, "0")}`;
+    const Counter = mongoose.model("Counter");
+    const counter = await Counter.findOneAndUpdate(
+      { _id: "transport" },
+      { $inc: { seq: 1 } },
+      { upsert: true, new: true },
+    );
+    this.numero = `TRS-${date}-${String(counter.seq).padStart(4, "0")}`;
   }
   next();
 });

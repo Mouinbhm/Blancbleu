@@ -40,7 +40,11 @@
       "Bash(curl -s http://localhost:5000/api/patient/me -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5ZjRiYWIxMjA5OGEzODQwMDkzYWU0NyIsImlhdCI6MTc3NzY0NjM1NywiZXhwIjoxNzgwMjM4MzU3fQ.Z9wIhftxUOWZMguR62QjAiF1FP_D2r5Yt5XBeZyjeIo\")",
       "Bash(curl -s http://localhost:5000/api/patient/stats -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5ZjRiYWIxMjA5OGEzODQwMDkzYWU0NyIsImlhdCI6MTc3NzY0NjM1NywiZXhwIjoxNzgwMjM4MzU3fQ.Z9wIhftxUOWZMguR62QjAiF1FP_D2r5Yt5XBeZyjeIo\")",
       "PowerShell(Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; Write-Host \"Processus $_ tué\" })",
-      "Bash(curl -s -X POST http://localhost:5000/api/patient/register -H \"Content-Type: application/json\" -d \"{\\\\\"prenom\\\\\":\\\\\"Test\\\\\",\\\\\"nom\\\\\":\\\\\"FLUTTER\\\\\",\\\\\"email\\\\\":\\\\\"flutter@test.fr\\\\\",\\\\\"password\\\\\":\\\\\"123456\\\\\",\\\\\"telephone\\\\\":\\\\\"0600000000\\\\\",\\\\\"mobilite\\\\\":\\\\\"FAUTEUIL_ROULANT\\\\\",\\\\\"adresse\\\\\":\\\\\"12 Rue de France, Nice\\\\\",\\\\\"medecin\\\\\":\\\\\"Dr. MARTIN\\\\\",\\\\\"contactUrgence\\\\\":{\\\\\"nom\\\\\":\\\\\"Marie\\\\\",\\\\\"telephone\\\\\":\\\\\"0611111111\\\\\"}}\")"
+      "Bash(curl -s -X POST http://localhost:5000/api/patient/register -H \"Content-Type: application/json\" -d \"{\\\\\"prenom\\\\\":\\\\\"Test\\\\\",\\\\\"nom\\\\\":\\\\\"FLUTTER\\\\\",\\\\\"email\\\\\":\\\\\"flutter@test.fr\\\\\",\\\\\"password\\\\\":\\\\\"123456\\\\\",\\\\\"telephone\\\\\":\\\\\"0600000000\\\\\",\\\\\"mobilite\\\\\":\\\\\"FAUTEUIL_ROULANT\\\\\",\\\\\"adresse\\\\\":\\\\\"12 Rue de France, Nice\\\\\",\\\\\"medecin\\\\\":\\\\\"Dr. MARTIN\\\\\",\\\\\"contactUrgence\\\\\":{\\\\\"nom\\\\\":\\\\\"Marie\\\\\",\\\\\"telephone\\\\\":\\\\\"0611111111\\\\\"}}\")",
+      "Bash(node -e \"require\\('./Server'\\)\")",
+      "Bash(node --check models/Transport.js)",
+      "Bash(node --check models/Counter.js)",
+      "Bash(node -e \"const {audit}=require\\('./services/auditService'\\); console.log\\(Object.keys\\(audit\\)\\)\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory",

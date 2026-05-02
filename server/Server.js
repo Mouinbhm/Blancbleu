@@ -4,6 +4,7 @@ const cors = require("cors");
 const http = require("http");
 const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io");
 require("dotenv").config();
 
@@ -43,8 +44,10 @@ app.use(
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Autorise toutes les origines — les apps mobiles Flutter n'envoient pas d'Origin
-    callback(null, true);
+    // Flutter mobile n'envoie pas d'Origin header (origin === undefined) → autorisé
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origine non autorisée — ${origin}`));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -62,8 +65,26 @@ app.use(require("./middleware/auditMiddleware"));
 
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
 const io = new Server(server, {
-  cors: { origin: "*", credentials: false },
+  cors: {
+    origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : "*",
+    credentials: false,
+  },
 });
+
+// Authentification Socket.IO — rejette les connexions sans JWT valide
+io.use((socket, next) => {
+  const raw =
+    socket.handshake.auth?.token ||
+    socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, "");
+  if (!raw) return next(new Error("Non autorisé"));
+  try {
+    socket.user = jwt.verify(raw, process.env.JWT_SECRET);
+    next();
+  } catch {
+    next(new Error("Non autorisé"));
+  }
+});
+
 app.set("io", io);
 require("./services/socketService").init(io);
 
