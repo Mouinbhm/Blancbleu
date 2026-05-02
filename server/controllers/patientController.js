@@ -6,9 +6,15 @@ const Patient = require("../models/Patient");
 const Transport = require("../models/Transport");
 const logger = require("../utils/logger");
 
+const safeMsg = (err) =>
+  process.env.NODE_ENV === "production"
+    ? "Erreur interne du serveur"
+    : err.message;
+
 const _err = (res, err, status = 500) => {
   logger.error("patientController", { err: err.message });
-  res.status(status).json({ message: err.message || "Erreur interne" });
+  const msg = status === 500 ? safeMsg(err) : (err.message || "Erreur interne");
+  res.status(status).json({ message: msg });
 };
 
 // ── GET /api/patients/stats ───────────────────────────────────────────────────

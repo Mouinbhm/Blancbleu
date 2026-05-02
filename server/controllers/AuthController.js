@@ -4,6 +4,11 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const RefreshToken = require("../models/RefreshToken");
 
+const safeMsg = (err) =>
+  process.env.NODE_ENV === "production"
+    ? "Erreur interne du serveur"
+    : err.message;
+
 // ─── Config tokens ────────────────────────────────────────────────────────────
 const ACCESS_TOKEN_TTL = "15m";
 const REFRESH_COOKIE_NAME = "bb_refresh";
@@ -91,7 +96,7 @@ const register = async (req, res) => {
       user: userPayload(user),
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 
@@ -142,7 +147,7 @@ const login = async (req, res) => {
       user: userPayload(user),
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 
@@ -192,7 +197,7 @@ const refresh = async (req, res) => {
       user: userPayload(user),
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 
@@ -216,7 +221,7 @@ const logout = async (req, res) => {
     res.clearCookie(REFRESH_COOKIE_NAME, { path: "/api/auth" });
     res.json({ message: "Déconnexion réussie" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 
@@ -231,7 +236,7 @@ const logoutAll = async (req, res) => {
     res.clearCookie(REFRESH_COOKIE_NAME, { path: "/api/auth" });
     res.json({ message: "Déconnexion de tous les appareils effectuée" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 
@@ -244,7 +249,7 @@ const getMe = async (req, res) => {
   try {
     res.json({ user: userPayload(req.user) });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 
@@ -294,7 +299,7 @@ const updatePassword = async (req, res) => {
       token: accessToken,
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 
@@ -317,7 +322,7 @@ const updateProfile = async (req, res) => {
 
     res.json({ message: "Profil mis à jour", user: userPayload(user) });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 
@@ -328,10 +333,16 @@ const updateProfile = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find().sort({ createdAt: -1 });
-    res.json(users);
+    const page  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+    const skip  = (page - 1) * limit;
+    const [users, total] = await Promise.all([
+      User.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+      User.countDocuments(),
+    ]);
+    res.json({ users, total, page, pages: Math.ceil(total / limit) });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 
@@ -367,7 +378,7 @@ const toggleUser = async (req, res) => {
       user: userPayload(user),
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 

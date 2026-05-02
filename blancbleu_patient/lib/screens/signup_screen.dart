@@ -67,8 +67,8 @@ class _SignupScreenState extends State<SignupScreen> {
       setState(() => _errorMessage = 'Adresse email invalide.');
       return false;
     }
-    if (_passwordController.text.length < 6) {
-      setState(() => _errorMessage = 'Mot de passe : 6 caractères minimum.');
+    if (_passwordController.text.length < 8) {
+      setState(() => _errorMessage = 'Mot de passe : 8 caractères minimum.');
       return false;
     }
     if (_passwordController.text != _confirmController.text) {

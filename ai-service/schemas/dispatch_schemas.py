@@ -34,6 +34,7 @@ class TransportDispatch(BaseModel):
     mobilite: MobilitePatient = MobilitePatient.ASSIS
     adresseDepart: Optional[str] = None
     adresseDestination: Optional[str] = None
+    positionDepart: Optional[Position] = None  # coordonnées GPS du lieu de prise en charge
     dateTransport: Optional[str] = None
     heureDepart: Optional[str] = None
     oxygene: bool = False
@@ -56,7 +57,8 @@ class VehiculeDispatch(BaseModel):
     statut: str
     position: Optional[Position] = None
     capacites: CapacitesVehicule = Field(default_factory=CapacitesVehicule)
-    ponctualite: Optional[float] = None  # % de ponctualité historique
+    ponctualite: Optional[float] = None        # % de ponctualité historique
+    nbTransportsDuJour: Optional[int] = None   # transports déjà effectués aujourd'hui
 
 
 class ChauffeurDispatch(BaseModel):

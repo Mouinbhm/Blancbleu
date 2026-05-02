@@ -3,8 +3,10 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // Android emulator → 10.0.2.2 pointe vers localhost de la machine hôte
-  static const String _base = 'http://10.0.2.2:5000/api/patient';
+  static const String _base = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:5000/api/patient',
+  );
   static const String _tokenKey  = 'bb_token';
   static const String _patientKey = 'bb_patient';
 

@@ -6,6 +6,11 @@ const Facture = require("../models/Facture");
 
 const STATUTS_VALIDES = ["brouillon", "emise", "en_attente", "payee", "annulee"];
 
+const safeMsg = (err) =>
+  process.env.NODE_ENV === "production"
+    ? "Erreur interne du serveur"
+    : err.message;
+
 const getFactures = async (req, res) => {
   try {
     const { statut, patientId, limit = 50, page = 1 } = req.query;
@@ -24,7 +29,7 @@ const getFactures = async (req, res) => {
     ]);
     res.json({ factures, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 
@@ -36,7 +41,7 @@ const getFacture = async (req, res) => {
     if (!f) return res.status(404).json({ message: "Facture introuvable" });
     res.json(f);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 
@@ -99,7 +104,7 @@ const updateStatut = async (req, res) => {
     if (!f) return res.status(404).json({ message: "Facture introuvable" });
     res.json({ message: "Statut mis à jour", facture: f });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 
@@ -110,7 +115,7 @@ const deleteFacture = async (req, res) => {
     if (!f) return res.status(404).json({ message: "Facture introuvable" });
     res.json({ message: "Facture annulée" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 
@@ -133,7 +138,7 @@ const getStats = async (req, res) => {
       chiffreAffaires: chiffre[0]?.total || 0,
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: safeMsg(err) });
   }
 };
 

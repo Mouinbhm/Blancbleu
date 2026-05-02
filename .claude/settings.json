@@ -44,7 +44,12 @@
       "Bash(node -e \"require\\('./Server'\\)\")",
       "Bash(node --check models/Transport.js)",
       "Bash(node --check models/Counter.js)",
-      "Bash(node -e \"const {audit}=require\\('./services/auditService'\\); console.log\\(Object.keys\\(audit\\)\\)\")"
+      "Bash(node -e \"const {audit}=require\\('./services/auditService'\\); console.log\\(Object.keys\\(audit\\)\\)\")",
+      "Bash(node --check controllers/AuthController.js)",
+      "Bash(node --check controllers/factureController.js)",
+      "Bash(node --check controllers/patientController.js)",
+      "Bash(node --check routes/patient.js)",
+      "Bash(Select-String -Pattern \"console\\\\.\" routes/patient.js)"
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory",

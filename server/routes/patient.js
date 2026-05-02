@@ -1,11 +1,20 @@
-const express   = require('express')
-const router    = express.Router()
-const jwt       = require('jsonwebtoken')
-const bcrypt    = require('bcryptjs')
-const User      = require('../models/User')
-const Patient   = require('../models/Patient')
-const Transport = require('../models/Transport')
-const Facture   = require('../models/Facture')
+const express        = require('express')
+const router         = express.Router()
+const jwt            = require('jsonwebtoken')
+const bcrypt         = require('bcryptjs')
+const { randomBytes } = require('crypto')
+const User           = require('../models/User')
+const Patient        = require('../models/Patient')
+const Transport      = require('../models/Transport')
+const Facture        = require('../models/Facture')
+const RevokedToken   = require('../models/RevokedToken')
+const logger         = require('../utils/logger')
+
+// Masque les détails d'erreur en production
+const safeMsg = (err) =>
+  process.env.NODE_ENV === 'production'
+    ? 'Erreur interne du serveur'
+    : err.message
 
 // Crée ou met à jour le dossier Patient de la plateforme web à partir d'un User patient.
 // findOneAndUpdate avec upsert ne déclenche pas le pre('save') qui génère numeroPatient,
@@ -43,7 +52,11 @@ async function syncPatientRecord(user) {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function signToken(id) {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' })
+  return jwt.sign(
+    { id, jti: randomBytes(16).toString('hex') },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' },
+  )
 }
 
 function patientPayload(u) {
@@ -102,7 +115,14 @@ const authPatient = async (req, res, next) => {
     }
     const token   = header.split(' ')[1]
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
-    const user    = await User.findById(decoded.id).select('-password')
+
+    // Vérifier que le token n'a pas été révoqué (logout explicite)
+    if (decoded.jti) {
+      const revoked = await RevokedToken.findOne({ jti: decoded.jti }).lean()
+      if (revoked) return res.status(401).json({ message: 'SESSION_EXPIRED' })
+    }
+
+    const user = await User.findById(decoded.id).select('-password')
     if (!user || !user.actif) {
       return res.status(401).json({ message: 'Compte inactif' })
     }
@@ -126,12 +146,17 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Prénom, nom, email et mot de passe requis' })
     }
 
+    if (password.length < 8) {
+      return res.status(400).json({ message: 'Le mot de passe doit contenir au moins 8 caractères' })
+    }
+
     const existing = await User.findOne({ email: email.toLowerCase().trim() })
     if (existing) {
       return res.status(409).json({ message: 'Cet email est déjà utilisé' })
     }
 
-    const hash = await bcrypt.hash(password, 10)
+    const salt = await bcrypt.genSalt(12)
+    const hash = await bcrypt.hash(password, salt)
     const user = await User.create({
       prenom:    prenom.trim(),
       nom:       nom.trim().toUpperCase(),
@@ -156,15 +181,15 @@ router.post('/register', async (req, res) => {
       await syncPatientRecord(user)
     } catch (syncErr) {
       await User.findByIdAndDelete(user._id).catch(() => {})
-      console.error('[patient/register] sync Patient échoué — User rollback', syncErr.message)
+      logger.warn('[patient/register] sync Patient échoué — User rollback', { err: syncErr.message })
       return res.status(500).json({ message: 'Erreur lors de la création du dossier patient : ' + syncErr.message })
     }
 
     const accessToken = signToken(user._id)
     res.status(201).json({ accessToken, patient: patientPayload(user) })
   } catch (err) {
-    console.error('[patient/register]', err)
-    res.status(500).json({ message: err.message || 'Erreur serveur' })
+    logger.error('[patient/register]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
   }
 })
 
@@ -180,6 +205,8 @@ router.post('/login', async (req, res) => {
 
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password')
     if (!user) {
+      // Timing normalization : même durée qu'un vrai bcrypt.compare
+      await bcrypt.compare(password, '$2b$12$invalidhashfortimingnormalization')
       return res.status(401).json({ message: 'Identifiants incorrects' })
     }
     if (!user.actif) {
@@ -194,8 +221,27 @@ router.post('/login', async (req, res) => {
     const accessToken = signToken(user._id)
     res.json({ accessToken, patient: patientPayload(user) })
   } catch (err) {
-    console.error('[patient/login]', err)
-    res.status(500).json({ message: 'Erreur serveur', detail: err.message })
+    logger.error('[patient/login]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
+  }
+})
+
+// ── ROUTE 2b : POST /api/patient/logout ──────────────────────────────────────
+
+router.post('/logout', authPatient, async (req, res) => {
+  try {
+    const token   = req.headers.authorization.split(' ')[1]
+    const decoded = jwt.decode(token)
+    if (decoded?.jti && decoded?.exp) {
+      await RevokedToken.create({
+        jti:       decoded.jti,
+        expiresAt: new Date(decoded.exp * 1000),
+      })
+    }
+    res.json({ message: 'Déconnexion réussie' })
+  } catch (err) {
+    logger.error('[patient/logout]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
   }
 })
 
@@ -205,7 +251,7 @@ router.get('/me', authPatient, async (req, res) => {
   try {
     res.json({ patient: patientPayload(req.user) })
   } catch (err) {
-    console.error('[patient/me]', err)
+    logger.error('[patient/me]', { err: err.message })
     res.status(500).json({ message: 'Erreur serveur' })
   }
 })
@@ -227,8 +273,8 @@ router.put('/profil', authPatient, async (req, res) => {
 
     res.json({ message: 'Profil mis à jour', patient: patientPayload(updated) })
   } catch (err) {
-    console.error('[patient/profil]', err)
-    res.status(500).json({ message: err.message || 'Erreur serveur' })
+    logger.error('[patient/profil]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
   }
 })
 
@@ -236,15 +282,12 @@ router.put('/profil', authPatient, async (req, res) => {
 
 router.get('/transports', authPatient, async (req, res) => {
   try {
-    const filter = {
-      deletedAt: null,
-      $or: [
-        { 'patient.email':     req.user.email },
-        { 'patient.telephone': req.user.telephone },
-        { 'patient.nom': req.user.nom, 'patient.prenom': req.user.prenom },
-      ],
-    }
+    const orConditions = []
+    if (req.user.email)                orConditions.push({ 'patient.email': req.user.email })
+    if (req.user.telephone?.trim())    orConditions.push({ 'patient.telephone': req.user.telephone })
+    orConditions.push({ 'patient.nom': req.user.nom, 'patient.prenom': req.user.prenom })
 
+    const filter = { deletedAt: null, $or: orConditions }
     if (req.query.statut) filter.statut = req.query.statut
 
     const transports = await Transport.find(filter)
@@ -255,8 +298,8 @@ router.get('/transports', authPatient, async (req, res) => {
 
     res.json({ transports })
   } catch (err) {
-    console.error('[patient/transports GET]', err)
-    res.status(500).json({ message: 'Erreur serveur', detail: err.message })
+    logger.error('[patient/transports GET]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
   }
 })
 
@@ -313,13 +356,13 @@ router.post('/transports', authPatient, async (req, res) => {
       const io = req.app.get('io')
       if (io) io.emit('nouvelle_demande_patient', { transportId: transport._id, numero: transport.numero })
     } catch (socketErr) {
-      console.error('[patient/transports POST] socket.io emit échoué', socketErr.message)
+      logger.warn('[patient/transports POST] socket.io emit échoué', { err: socketErr.message })
     }
 
     res.status(201).json({ transport })
   } catch (err) {
-    console.error('[patient/transports POST]', err)
-    res.status(500).json({ message: 'Erreur serveur', detail: err.message })
+    logger.error('[patient/transports POST]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
   }
 })
 
@@ -335,10 +378,21 @@ router.get('/transports/:id', authPatient, async (req, res) => {
       return res.status(404).json({ message: 'Transport introuvable' })
     }
 
+    // Vérification IDOR : le transport doit appartenir au patient connecté
+    const p = transport.patient
+    const owned =
+      (req.user.email && p?.email === req.user.email) ||
+      (req.user.telephone?.trim() && p?.telephone === req.user.telephone) ||
+      (p?.nom === req.user.nom && p?.prenom === req.user.prenom)
+
+    if (!owned) {
+      return res.status(403).json({ message: 'Accès non autorisé' })
+    }
+
     res.json({ transport })
   } catch (err) {
-    console.error('[patient/transports/:id]', err)
-    res.status(500).json({ message: 'Erreur serveur', detail: err.message })
+    logger.error('[patient/transports/:id]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
   }
 })
 
@@ -364,7 +418,7 @@ router.get('/transports/:id/tracking', authPatient, async (req, res) => {
         etaMinutes = Math.round(distKm / 0.5) // 30 km/h en minutes
       }
     } catch (etaErr) {
-      console.error('[tracking] calcul ETA échoué', etaErr.message)
+      logger.warn('[tracking] calcul ETA échoué', { err: etaErr.message })
     }
 
     res.json({
@@ -391,8 +445,8 @@ router.get('/transports/:id/tracking', authPatient, async (req, res) => {
       adresseArrivee:     transport.adresseDestination,
     })
   } catch (err) {
-    console.error('[patient/transports/:id/tracking]', err)
-    res.status(500).json({ message: 'Erreur serveur', detail: err.message })
+    logger.error('[patient/transports/:id/tracking]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
   }
 })
 
@@ -408,8 +462,8 @@ router.get('/factures', authPatient, async (req, res) => {
 
     res.json({ factures })
   } catch (err) {
-    console.error('[patient/factures]', err)
-    res.status(500).json({ message: 'Erreur serveur', detail: err.message })
+    logger.error('[patient/factures]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
   }
 })
 
@@ -417,14 +471,11 @@ router.get('/factures', authPatient, async (req, res) => {
 
 router.get('/stats', authPatient, async (req, res) => {
   try {
-    const baseFilter = {
-      deletedAt: null,
-      $or: [
-        { 'patient.email':     req.user.email },
-        { 'patient.telephone': req.user.telephone },
-        { 'patient.nom': req.user.nom, 'patient.prenom': req.user.prenom },
-      ],
-    }
+    const orCond = []
+    if (req.user.email)             orCond.push({ 'patient.email': req.user.email })
+    if (req.user.telephone?.trim()) orCond.push({ 'patient.telephone': req.user.telephone })
+    orCond.push({ 'patient.nom': req.user.nom, 'patient.prenom': req.user.prenom })
+    const baseFilter = { deletedAt: null, $or: orCond }
 
     const factureFilter = {
       $or: [
@@ -448,8 +499,8 @@ router.get('/stats', authPatient, async (req, res) => {
 
     res.json({ totalTransports, transportsTermines, transportsAVenir, totalFactures })
   } catch (err) {
-    console.error('[patient/stats]', err)
-    res.status(500).json({ message: 'Erreur serveur', detail: err.message })
+    logger.error('[patient/stats]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
   }
 })
 
@@ -457,14 +508,11 @@ router.get('/stats', authPatient, async (req, res) => {
 
 router.get('/dashboard', authPatient, async (req, res) => {
   try {
-    const patientFilter = {
-      deletedAt: null,
-      $or: [
-        { 'patient.email':     req.user.email },
-        { 'patient.telephone': req.user.telephone },
-        { 'patient.nom': req.user.nom, 'patient.prenom': req.user.prenom },
-      ],
-    }
+    const orDash = []
+    if (req.user.email)             orDash.push({ 'patient.email': req.user.email })
+    if (req.user.telephone?.trim()) orDash.push({ 'patient.telephone': req.user.telephone })
+    orDash.push({ 'patient.nom': req.user.nom, 'patient.prenom': req.user.prenom })
+    const patientFilter = { deletedAt: null, $or: orDash }
     const factureFilter = {
       $or: [{ patientNom: req.user.nom, patientPrenom: req.user.prenom }],
     }
@@ -506,8 +554,8 @@ router.get('/dashboard', authPatient, async (req, res) => {
       stats: { totalTransports, transportsTermines, transportsAVenir, totalFactures },
     })
   } catch (err) {
-    console.error('[patient/dashboard]', err)
-    res.status(500).json({ message: 'Erreur serveur', detail: err.message })
+    logger.error('[patient/dashboard]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
   }
 })
 

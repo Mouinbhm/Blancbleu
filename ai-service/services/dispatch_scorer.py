@@ -144,8 +144,17 @@ def _calculer_score(transport, vehicule, chauffeurs: list) -> ScoreDetail:
     score_proximite = _calculer_score_proximite(vehicule, transport)
 
     # ── 4. Charge de travail journalière (0-10 pts) ───────────────────────────
-    # Pour le MVP : score fixe à 7 (à améliorer avec données réelles)
-    score_charge = 7
+    nb = vehicule.nbTransportsDuJour
+    if nb is None:
+        score_charge = 7  # valeur neutre si données absentes
+    elif nb == 0:
+        score_charge = 10
+    elif nb <= 3:
+        score_charge = 8
+    elif nb <= 6:
+        score_charge = 5
+    else:
+        score_charge = 2
 
     # ── 5. Fiabilité chauffeur (0-10 pts) ────────────────────────────────────
     score_fiabilite = _calculer_score_fiabilite(vehicule, chauffeurs)
@@ -168,10 +177,21 @@ def _calculer_score(transport, vehicule, chauffeurs: list) -> ScoreDetail:
     )
 
 
+def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Retourne la distance en kilomètres entre deux points GPS (formule Haversine)."""
+    R = 6371.0  # rayon de la Terre en km
+    d_lat = math.radians(lat2 - lat1)
+    d_lon = math.radians(lon2 - lon1)
+    a = (math.sin(d_lat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(d_lon / 2) ** 2)
+    return R * 2 * math.asin(math.sqrt(a))
+
+
 def _calculer_score_proximite(vehicule, transport) -> int:
     """
-    Calcule le score de proximité basé sur la distance GPS.
-    Plus le véhicule est proche, plus le score est élevé.
+    Calcule le score de proximité basé sur la distance GPS (Haversine).
+    Plus le véhicule est proche du lieu de prise en charge, plus le score est élevé.
 
     Barème :
       < 2 km   → 20 pts
@@ -182,12 +202,25 @@ def _calculer_score_proximite(vehicule, transport) -> int:
       Inconnu  → 10 pts (valeur neutre)
     """
     if not vehicule.position or not vehicule.position.lat:
-        return 10  # Valeur neutre si position inconnue
+        return 10
+    if not transport.positionDepart or not transport.positionDepart.lat:
+        return 10
 
-    # Pour simplifier dans le MVP, on utilise Haversine si on a les coords de départ
-    # Ici on utilise un score estimé basé sur la présence de la position
-    # (Dans une version complète, on passerait les coordonnées du départ)
-    return 12  # Score moyen — à affiner avec coordonnées réelles
+    dist = _haversine(
+        vehicule.position.lat, vehicule.position.lng,
+        transport.positionDepart.lat, transport.positionDepart.lng,
+    )
+
+    if dist < 2:
+        return 20
+    elif dist < 5:
+        return 16
+    elif dist < 10:
+        return 12
+    elif dist < 20:
+        return 8
+    else:
+        return 4
 
 
 def _calculer_score_fiabilite(vehicule, chauffeurs: list) -> int:
@@ -223,14 +256,18 @@ def _calculer_score_fiabilite(vehicule, chauffeurs: list) -> int:
 def _estimer_eta(vehicule, transport) -> Optional[int]:
     """
     Estime l'ETA en minutes depuis le véhicule jusqu'au point de prise en charge.
-    Version simplifiée sans appel OSRM (pour performances).
+    Basé sur Haversine + vitesse moyenne urbaine de 30 km/h.
     """
     if not vehicule.position or not vehicule.position.lat:
         return None
+    if not transport.positionDepart or not transport.positionDepart.lat:
+        return None
 
-    # ETA estimé à 15 minutes par défaut si on n'a pas les coordonnées de départ
-    # Dans une version complète : appel Haversine + facteur trafic
-    return 15
+    dist = _haversine(
+        vehicule.position.lat, vehicule.position.lng,
+        transport.positionDepart.lat, transport.positionDepart.lng,
+    )
+    return max(1, round(dist / 30 * 60))
 
 
 def _construire_justification(transport, vehicule, score: ScoreDetail) -> List[str]:
