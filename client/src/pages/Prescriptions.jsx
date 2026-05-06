@@ -236,14 +236,193 @@ const FORM_INIT = {
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-// MODALE NOUVELLE PRESCRIPTION (CERFA n°11574)
+// MODALE DÉTAIL / IMPRESSION
 // ═════════════════════════════════════════════════════════════════════════════
-function ModalNouvellePrescription({ onClose, onSuccess }) {
+function ModalDetailPrescription({ prescription: p, onClose, onEdit }) {
+  const cfg = STATUT_CONFIG[p.statut] || { label: p.statut, cls: "bg-slate-100 text-slate-500" };
+  const cx = p.contenuExtrait || {};
+
+  const handlePrint = () => {
+    const zone = document.getElementById("pmt-print-zone");
+    const win = window.open("", "_blank");
+    win.document.write(`<!DOCTYPE html><html><head><title>PMT ${p.numero}</title>
+      <style>
+        *{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:20px}
+        h2{font-size:14px;margin:0 0 2px}h3{font-size:11px;margin:0;font-weight:bold;text-transform:uppercase;color:#666;letter-spacing:.5px}
+        .banner{background:#1A3A5C;color:#fff;padding:8px 12px;font-weight:bold;font-size:13px;margin-bottom:0}
+        .card{border:1px solid #ddd;border-radius:8px;padding:12px;margin-bottom:10px}
+        .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        .field{margin-bottom:6px}.label{font-size:10px;color:#888;font-weight:bold;text-transform:uppercase}
+        .value{font-size:12px;border-bottom:1px solid #e0e0e0;padding-bottom:2px;min-height:16px}
+        .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:#dcfce7;color:#166534}
+        @media print{body{margin:8px}}
+      </style></head><body>${zone.innerHTML}</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); win.close(); }, 300);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div style={{ background: "#1A3A5C" }} className="px-6 py-4 flex items-center justify-between shrink-0">
+          <div>
+            <p className="text-white font-bold">{p.numero}</p>
+            <p className="text-slate-400 text-xs mt-0.5">CERFA n°11574 — émis le {fmtDate(p.dateEmission)}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={handlePrint} className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-sm transition-colors">
+              <span className="material-symbols-outlined text-sm">print</span>Imprimer
+            </button>
+            <button onClick={onEdit} className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-400 text-white px-3 py-1.5 rounded-lg text-sm transition-colors">
+              <span className="material-symbols-outlined text-sm">edit</span>Modifier
+            </button>
+            <button onClick={onClose} className="text-slate-400 hover:text-white ml-1">
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 p-6" id="pmt-print-zone">
+          <div style={{ background: "#1A3A5C", color: "#fff", padding: "8px 12px", fontWeight: "bold", marginBottom: 12 }}>
+            PRESCRIPTION MÉDICALE DE TRANSPORT — {p.numero}
+          </div>
+
+          <div className="flex items-center gap-2 mb-4">
+            <span className={`text-xs px-3 py-1 rounded-full font-semibold ${cfg.cls}`}>{cfg.label}</span>
+            <span className="text-sm text-slate-600 font-medium">{p.motif}</span>
+            {cx.trajet?.allerRetour && <span className="text-xs bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full">Aller-retour</span>}
+          </div>
+
+          {/* Patient */}
+          <div className="border border-slate-200 rounded-xl p-4 mb-3">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Bénéficiaire</p>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><p className="text-xs text-slate-400">Nom complet</p><p className="font-semibold">{p.patientId?.nom} {p.patientId?.prenom}</p></div>
+              {cx.numeroSS && <div><p className="text-xs text-slate-400">N° Sécu</p><p className="font-mono">{cx.numeroSS}</p></div>}
+              {cx.dateNaissancePatient && <div><p className="text-xs text-slate-400">Date de naissance</p><p>{fmtDate(cx.dateNaissancePatient)}</p></div>}
+              {cx.telephonePatient && <div><p className="text-xs text-slate-400">Téléphone</p><p>{cx.telephonePatient}</p></div>}
+              {cx.adressePatient?.rue && <div className="col-span-2"><p className="text-xs text-slate-400">Adresse</p><p>{cx.adressePatient.rue}{cx.adressePatient.cp ? `, ${cx.adressePatient.cp}` : ""}{cx.adressePatient.ville ? ` ${cx.adressePatient.ville}` : ""}</p></div>}
+            </div>
+          </div>
+
+          {/* Transport */}
+          <div className="border border-slate-200 rounded-xl p-4 mb-3">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Transport prescrit</p>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {cx.modeTransport && <div><p className="text-xs text-slate-400">Mode</p><p className="font-semibold">{cx.modeTransport}</p></div>}
+              {cx.accompagnateur && <div><p className="text-xs text-slate-400">Accompagnateur</p><p>Oui</p></div>}
+              {cx.trajet?.adresseDepart && <div><p className="text-xs text-slate-400">Départ</p><p>{cx.trajet.adresseDepart}</p></div>}
+              {cx.trajet?.adresseArrivee && <div><p className="text-xs text-slate-400">Destination</p><p>{cx.trajet.adresseArrivee}</p></div>}
+              {cx.trajet?.structureSoins && <div className="col-span-2"><p className="text-xs text-slate-400">Structure de soins</p><p>{cx.trajet.structureSoins}</p></div>}
+              {cx.trajet?.nbTransportsIteratifs > 0 && <div><p className="text-xs text-slate-400">Transports itératifs</p><p>{cx.trajet.nbTransportsIteratifs}</p></div>}
+            </div>
+            {cx.situation && Object.values(cx.situation).some(Boolean) && (
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                <p className="text-xs text-slate-400 mb-2">Situation</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {cx.situation.hemodialyse && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100">Hémodialyse</span>}
+                  {cx.situation.chimiotherapie && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100">Chimiothérapie</span>}
+                  {cx.situation.radiotherapie && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100">Radiothérapie</span>}
+                  {cx.situation.hospitalisation && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100">Hospitalisation</span>}
+                  {cx.situation.aldExonerante && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100">ALD exonérante</span>}
+                  {cx.situation.atMp && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100">AT/MP</span>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Prescripteur */}
+          <div className="border border-slate-200 rounded-xl p-4 mb-3">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Prescripteur</p>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><p className="text-xs text-slate-400">Médecin</p><p className="font-semibold">{p.medecin?.nom} {p.medecin?.prenom}</p></div>
+              {p.medecin?.specialite && <div><p className="text-xs text-slate-400">Spécialité</p><p>{p.medecin.specialite}</p></div>}
+              {p.medecin?.etablissement && <div><p className="text-xs text-slate-400">Établissement</p><p>{p.medecin.etablissement}</p></div>}
+              {p.medecin?.rpps && <div><p className="text-xs text-slate-400">RPPS</p><p className="font-mono">{p.medecin.rpps}</p></div>}
+              {p.medecin?.telephone && <div><p className="text-xs text-slate-400">Téléphone</p><p>{p.medecin.telephone}</p></div>}
+            </div>
+          </div>
+
+          {/* Dates */}
+          <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+            <div className="border border-slate-200 rounded-xl p-3">
+              <p className="text-xs text-slate-400">Date d'émission</p>
+              <p className="font-semibold">{fmtDate(p.dateEmission)}</p>
+            </div>
+            <div className="border border-slate-200 rounded-xl p-3">
+              <p className="text-xs text-slate-400">Date d'expiration</p>
+              <p className={`font-semibold ${!p.dateExpiration ? "text-slate-300" : ""}`}>{fmtDate(p.dateExpiration)}</p>
+            </div>
+          </div>
+
+          {p.notes && (
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+              <p className="text-xs font-bold text-amber-700 uppercase tracking-widest mb-1">Notes médicales</p>
+              <p className="text-sm text-slate-700 whitespace-pre-line">{p.notes}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MODALE NOUVELLE / MODIFIER PRESCRIPTION (CERFA n°11574)
+// ═════════════════════════════════════════════════════════════════════════════
+function ModalNouvellePrescription({ onClose, onSuccess, prescriptionToEdit }) {
+  const isEdit = Boolean(prescriptionToEdit);
+
+  // Pré-remplissage depuis la prescription existante
+  const buildFormFromPrescription = (p) => {
+    if (!p) return FORM_INIT;
+    const cx = p.contenuExtrait || {};
+    return {
+      ...FORM_INIT,
+      patientId: p.patientId?._id || p.patientId || "",
+      recherchePatient: "",
+      numeroSS: cx.numeroSS ? cx.numeroSS.split("") : Array(15).fill(""),
+      dateNaissancePatient: cx.dateNaissancePatient || "",
+      adressePatient: cx.adressePatient?.rue || "",
+      cpPatient: cx.adressePatient?.cp || "",
+      villePatient: cx.adressePatient?.ville || "",
+      telephonePatient: cx.telephonePatient || "",
+      situation: cx.situation || FORM_INIT.situation,
+      modeTransport: cx.modeTransport || "",
+      ambulanceMotifs: cx.ambulanceMotifs || FORM_INIT.ambulanceMotifs,
+      accompagnateur: cx.accompagnateur || false,
+      departType: cx.trajet?.departType || "domicile",
+      adresseDepart: cx.trajet?.adresseDepart || "",
+      arriveeType: cx.trajet?.arriveeType || "structure",
+      adresseArrivee: cx.trajet?.adresseArrivee || "",
+      structureSoins: cx.trajet?.structureSoins || "",
+      allerRetour: cx.trajet?.allerRetour || false,
+      nbTransportsIteratifs: cx.trajet?.nbTransportsIteratifs || "",
+      urgenceSAMU: cx.urgence?.samu || false,
+      autresUrgences: cx.urgence?.autres || false,
+      precisionUrgence: cx.urgence?.precision || "",
+      exonerationTM: cx.casParticuliers?.exonerationTM || false,
+      pensionMilitaire: cx.casParticuliers?.pensionMilitaire || false,
+      notes: p.notes || "",
+      "medecin.nom": p.medecin?.nom || "",
+      "medecin.prenom": p.medecin?.prenom || "",
+      "medecin.rpps": p.medecin?.rpps || "",
+      "medecin.telephone": p.medecin?.telephone || "",
+      "medecin.specialite": p.medecin?.specialite || "",
+      "medecin.etablissement": p.medecin?.etablissement || "",
+      "medecin.adresse": cx.prescripteur?.adresse || "",
+      "medecin.nStructure": cx.prescripteur?.nStructure || "",
+      dateEmission: p.dateEmission ? p.dateEmission.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      dateExpiration: p.dateExpiration ? p.dateExpiration.slice(0, 10) : "",
+    };
+  };
+
   const [patients, setPatients] = useState([]);
-  const [form, setForm] = useState(FORM_INIT);
+  const [form, setForm] = useState(() => buildFormFromPrescription(prescriptionToEdit));
   const [submitting, setSubmitting] = useState(false);
   const [erreur, setErreur] = useState("");
-  const numRef = useRef(genNumPreview());
+  const numRef = useRef(prescriptionToEdit?.numero || genNumPreview());
 
   const motifAuto = autoDeduceMotif(form.situation);
 
@@ -321,7 +500,9 @@ function ModalNouvellePrescription({ onClose, onSuccess }) {
           },
         },
       };
-      const { data } = await prescriptionService.create(payload);
+      const { data } = isEdit
+        ? await prescriptionService.update(prescriptionToEdit._id, payload)
+        : await prescriptionService.create(payload);
       onSuccess(data);
     } catch (err) {
       setErreur(err.response?.data?.message || "Erreur lors de la création.");
@@ -338,7 +519,7 @@ function ModalNouvellePrescription({ onClose, onSuccess }) {
         <div style={{ background: "#1A3A5C" }} className="px-6 py-4 flex items-center justify-between shrink-0">
           <div>
             <p className="text-white font-bold text-base leading-tight">
-              Prescription Médicale de Transport
+              {isEdit ? "Modifier la prescription" : "Nouvelle prescription"}
             </p>
             <p className="text-slate-400 text-xs mt-0.5 font-mono">
               CERFA n°11574 — {numRef.current}
@@ -875,7 +1056,7 @@ function ModalNouvellePrescription({ onClose, onSuccess }) {
               ) : (
                 <>
                   <span className="material-symbols-outlined text-sm">check_circle</span>
-                  Valider la prescription
+                  {isEdit ? "Enregistrer les modifications" : "Valider la prescription"}
                 </>
               )}
             </button>
@@ -897,6 +1078,9 @@ export default function Prescriptions() {
   const [filtreStatut, setFiltreStatut] = useState("");
   const [filtreMotif, setFiltreMotif] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [selectedPrescription, setSelectedPrescription] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -947,6 +1131,22 @@ export default function Prescriptions() {
         <ModalNouvellePrescription
           onClose={() => setShowModal(false)}
           onSuccess={() => { setShowModal(false); loadData(); }}
+        />
+      )}
+
+      {showDetail && selectedPrescription && (
+        <ModalDetailPrescription
+          prescription={selectedPrescription}
+          onClose={() => { setShowDetail(false); setSelectedPrescription(null); }}
+          onEdit={() => { setShowDetail(false); setShowEdit(true); }}
+        />
+      )}
+
+      {showEdit && selectedPrescription && (
+        <ModalNouvellePrescription
+          prescriptionToEdit={selectedPrescription}
+          onClose={() => { setShowEdit(false); setSelectedPrescription(null); }}
+          onSuccess={() => { setShowEdit(false); setSelectedPrescription(null); loadData(); }}
         />
       )}
 
@@ -1091,19 +1291,47 @@ export default function Prescriptions() {
                         </span>
                       </td>
                       <td className="px-5 py-3">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1">
+                          {/* Voir */}
+                          <button
+                            onClick={() => { setSelectedPrescription(p); setShowDetail(true); }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                            title="Voir le détail"
+                          >
+                            <span className="material-symbols-outlined text-base">visibility</span>
+                          </button>
+                          {/* Modifier */}
+                          {!["annulee"].includes(p.statut) && (
+                            <button
+                              onClick={() => { setSelectedPrescription(p); setShowEdit(true); }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                              title="Modifier"
+                            >
+                              <span className="material-symbols-outlined text-base">edit</span>
+                            </button>
+                          )}
+                          {/* Imprimer */}
+                          <button
+                            onClick={() => { setSelectedPrescription(p); setShowDetail(true); }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                            title="Imprimer"
+                          >
+                            <span className="material-symbols-outlined text-base">print</span>
+                          </button>
+                          {/* Valider brouillon */}
                           {p.statut === "en_attente_validation" && (
                             <button
                               onClick={() => handleValider(p._id)}
-                              className="text-xs bg-green-600 text-white px-2 py-1 rounded-lg font-semibold hover:bg-green-700"
+                              className="text-xs bg-green-600 text-white px-2 py-1 rounded-lg font-semibold hover:bg-green-700 ml-1"
                             >
                               Valider
                             </button>
                           )}
+                          {/* Annuler */}
                           {!["annulee", "expiree"].includes(p.statut) && (
                             <button
                               onClick={() => handleDelete(p._id)}
-                              className="text-xs text-red-400 hover:text-red-600"
+                              className="p-1.5 rounded-lg text-red-300 hover:text-red-600 hover:bg-red-50 transition-colors"
                               title="Annuler"
                             >
                               <span className="material-symbols-outlined text-base">cancel</span>
