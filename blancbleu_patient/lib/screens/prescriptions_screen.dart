@@ -78,6 +78,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
         ],
       ),
       body: _buildBody(),
+      bottomNavigationBar: _buildBottomNav(),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final created = await Navigator.push<bool>(
@@ -90,6 +91,62 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text('Nouvelle ordonnance', style: TextStyle(fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
+
+  Widget _buildBottomNav() {
+    const items = [
+      {'icon': Icons.home_outlined,             'filledIcon': Icons.home,             'label': 'Accueil'},
+      {'icon': Icons.medical_services_outlined, 'filledIcon': Icons.medical_services, 'label': 'Transports'},
+      {'icon': Icons.receipt_long_outlined,     'filledIcon': Icons.receipt_long,     'label': 'Factures'},
+      {'icon': Icons.description_outlined,      'filledIcon': Icons.description,      'label': 'Ordonnances'},
+      {'icon': Icons.person_outline,            'filledIcon': Icons.person,           'label': 'Profil'},
+    ];
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12, offset: const Offset(0, -4))],
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: List.generate(items.length, (i) {
+              final active = i == 3;
+              final item   = items[i];
+              return GestureDetector(
+                onTap: () { if (i != 3) Navigator.of(context).pop(); },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: active ? const Color(0xFFEFF6FF) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        active ? item['filledIcon'] as IconData : item['icon'] as IconData,
+                        color: active ? AppTheme.primary : Colors.grey,
+                        size: 24,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        item['label'] as String,
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                            color: active ? AppTheme.primary : Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
       ),
     );
   }

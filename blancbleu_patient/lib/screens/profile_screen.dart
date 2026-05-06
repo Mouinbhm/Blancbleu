@@ -145,6 +145,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       {'icon': Icons.home_outlined,             'label': 'Accueil'},
       {'icon': Icons.medical_services_outlined, 'label': 'Transports'},
       {'icon': Icons.receipt_long_outlined,     'label': 'Factures'},
+      {'icon': Icons.description_outlined,      'label': 'Ordonnances'},
       {'icon': Icons.person,                    'label': 'Profil'},
     ];
     return Container(
@@ -159,10 +160,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: List.generate(items.length, (i) {
-              final active = i == 3;
+              final active = i == 4;
               final item   = items[i];
               return GestureDetector(
-                onTap: () { if (i != 3) Navigator.of(context).pop(); },
+                onTap: () { if (i != 4) Navigator.of(context).pop(); },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
