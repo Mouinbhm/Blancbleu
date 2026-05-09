@@ -162,6 +162,99 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _exportGdprData() async {
+    try {
+      final data = await ApiService.exportGdprData();
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Vos donnees exportees'),
+          content: SingleChildScrollView(
+            child: Text(
+              'Export genere le : ${data['exportedAt'] ?? ''}\n\n'
+              'Compte : ${data['compte']?['prenom']} ${data['compte']?['nom']}\n'
+              'Email : ${data['compte']?['email']}\n'
+              'Role : ${data['compte']?['role']}\n\n'
+              'Transports : ${(data['transports'] as List?)?.length ?? 0}\n'
+              'Prescriptions : ${(data['prescriptions'] as List?)?.length ?? 0}\n'
+              'Factures : ${(data['factures'] as List?)?.length ?? 0}\n\n'
+              'Pour telecharger le fichier JSON complet, connectez-vous sur le portail web.',
+              style: const TextStyle(fontSize: 13, height: 1.5),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Fermer'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: _errorColor),
+      );
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final pwdController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Supprimer mon compte'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Cette action est irreversible. Vos donnees personnelles seront anonymisees conformement au RGPD (Art. 17).\n\nConfirmez votre mot de passe pour continuer.',
+              style: TextStyle(fontSize: 13, height: 1.5),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: pwdController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Mot de passe',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: _errorColor),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ApiService.deleteAccount(pwdController.text);
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: _errorColor),
+      );
+    }
+  }
+
   Future<void> _logout() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -555,6 +648,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
             onTap: _showLanguagePicker,
+          ),
+          const Divider(height: 1, color: Color(0xFFF8F8F8)),
+          _settingsItem(
+            icon: Icons.download_outlined,
+            label: 'Exporter mes donnees',
+            onTap: _exportGdprData,
+          ),
+          const Divider(height: 1, color: Color(0xFFF8F8F8)),
+          _settingsItem(
+            icon: Icons.delete_forever_outlined,
+            label: 'Supprimer mon compte',
+            iconColor: _errorColor,
+            textColor: _errorColor,
+            onTap: _deleteAccount,
           ),
           const Divider(height: 1, color: Color(0xFFF8F8F8)),
           _settingsItem(

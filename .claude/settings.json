@@ -81,7 +81,9 @@
       "Bash(git remote *)",
       "Bash(git stash *)",
       "Bash(git pull *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(node --check controllers/gdprController.js)",
+      "Bash(node --check routes/gdpr.js)"
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory",

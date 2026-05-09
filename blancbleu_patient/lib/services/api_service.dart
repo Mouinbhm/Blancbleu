@@ -266,4 +266,37 @@ class ApiService {
     if (res.statusCode >= 400) throw Exception(data['message'] ?? 'Erreur serveur');
     return data;
   }
+
+  // ── RGPD ───────────────────────────────────────────────────────────────────
+
+  // GET /api/gdpr/export — droit à la portabilité (Art. 20)
+  static Future<Map<String, dynamic>> exportGdprData() async {
+    final base = _base.replaceFirst('/api/patient', '/api');
+    final res = await http.get(
+      Uri.parse('$base/gdpr/export'),
+      headers: await _headers(),
+    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
+    if (res.statusCode == 401) throw Exception('SESSION_EXPIRED');
+    if (res.statusCode >= 400) {
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      throw Exception(data['message'] ?? 'Erreur serveur');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  // DELETE /api/gdpr/me — droit à l'effacement (Art. 17)
+  static Future<void> deleteAccount(String password) async {
+    final base = _base.replaceFirst('/api/patient', '/api');
+    final res = await http.delete(
+      Uri.parse('$base/gdpr/me'),
+      headers: await _headers(),
+      body: jsonEncode({'password': password}),
+    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
+    if (res.statusCode == 401) throw Exception('SESSION_EXPIRED');
+    if (res.statusCode >= 400) {
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      throw Exception(data['message'] ?? 'Erreur serveur');
+    }
+    await clearSession();
+  }
 }
