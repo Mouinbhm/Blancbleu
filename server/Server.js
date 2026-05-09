@@ -101,6 +101,7 @@ if (process.env.NODE_ENV !== "production") setupSwagger(app);
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use("/api/auth", require("./routes/auth"));
+app.use("/api/gdpr", require("./routes/gdpr"));
 app.use("/api/patients", require("./routes/patients"));           // ← NOUVEAU
 app.use("/api/prescriptions", require("./routes/prescriptions")); // ← NOUVEAU
 app.use("/api/transports", require("./routes/transports"));

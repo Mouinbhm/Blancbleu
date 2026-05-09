@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,17 +13,21 @@ class ApiService {
   static const String _tokenKey   = 'bb_token';
   static const String _patientKey = 'bb_patient';
 
+  static const _secure = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
   // ── Token / session ────────────────────────────────────────────────────────
 
-  static Future<void> saveToken(String t) async =>
-      (await SharedPreferences.getInstance()).setString(_tokenKey, t);
+  static Future<void> saveToken(String t) =>
+      _secure.write(key: _tokenKey, value: t);
 
-  static Future<String?> getToken() async =>
-      (await SharedPreferences.getInstance()).getString(_tokenKey);
+  static Future<String?> getToken() =>
+      _secure.read(key: _tokenKey);
 
   static Future<void> clearSession() async {
+    await _secure.delete(key: _tokenKey);
     final p = await SharedPreferences.getInstance();
-    p.remove(_tokenKey);
     p.remove(_patientKey);
   }
 
