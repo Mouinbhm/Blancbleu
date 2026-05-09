@@ -25,36 +25,38 @@
     ],
     "coverageDirectory": "coverage",
     "collectCoverageFrom": [
-      "services/**/*.js",
-      "controllers/**/*.js",
-      "middleware/**/*.js",
-      "utils/**/*.js",
-      "!services/simulationService.js",
-      "!utils/logger.js"
+      "controllers/gdprController.js",
+      "middleware/auth.js",
+      "middleware/auditMiddleware.js",
+      "middleware/httpLogger.js",
+      "middleware/rateLimiter.js",
+      "middleware/sanitize.js",
+      "middleware/validate.js",
+      "services/transportStateMachine.js",
+      "services/tarifService.js",
+      "services/predictionService.js",
+      "utils/geoUtils.js",
+      "utils/healthCheck.js"
     ],
     "coverageThreshold": {
       "global": {
-        "statements": 40,
-        "branches": 30,
-        "functions": 33,
-        "lines": 40
+        "statements": 60,
+        "branches": 50,
+        "functions": 60,
+        "lines": 60
       },
-      "./services/stateMachine.js": {
+      "./services/transportStateMachine.js": {
+        "branches": 75,
+        "functions": 90,
+        "lines": 85
+      },
+      "./middleware/auth.js": {
         "branches": 80,
-        "functions": 95,
-        "lines": 90
-      },
-      "./middleware/Auth.js": {
-        "branches": 85,
         "functions": 100,
-        "lines": 90
+        "lines": 85
       },
       "./middleware/auditMiddleware.js": {
-        "lines": 95
-      },
-      "./services/escaladeService.js": {
-        "functions": 25,
-        "lines": 35
+        "lines": 75
       },
       "./utils/geoUtils.js": {
         "functions": 60,

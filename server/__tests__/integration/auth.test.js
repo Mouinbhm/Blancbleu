@@ -55,7 +55,10 @@ async function loginAs(app, email, password) {
   const res = await request(app)
     .post("/api/auth/login")
     .send({ email, password });
-  return res.body.token;
+  const cookies = res.headers["set-cookie"] || [];
+  const bbAccess = cookies.find((c) => c.startsWith("bb_access="));
+  if (!bbAccess) return null;
+  return bbAccess.split(";")[0].replace("bb_access=", "");
 }
 
 beforeEach(async () => {
@@ -76,9 +79,11 @@ describe("POST /api/auth/login", () => {
       .send({ email: "disp@test.fr", password: "pass1234" });
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty("token");
+    expect(res.body).toHaveProperty("user");
     expect(res.body.user.email).toBe("disp@test.fr");
     expect(res.body.user).not.toHaveProperty("password");
+    const cookies = res.headers["set-cookie"] || [];
+    expect(cookies.some((c) => c.startsWith("bb_access="))).toBe(true);
   });
 
   test("401 si mot de passe incorrect", async () => {

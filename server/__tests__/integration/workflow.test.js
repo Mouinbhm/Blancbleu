@@ -9,6 +9,7 @@ const request = require("supertest");
 const mongoose = require("mongoose");
 const { MongoMemoryServer } = require("mongodb-memory-server");
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 let mongod;
 
@@ -27,7 +28,7 @@ beforeAll(async () => {
   const User = require("../../models/User");
   const salt = await bcrypt.genSalt(10);
   const hashed = await bcrypt.hash("pass1234", salt);
-  await User.create({
+  const dispUser = await User.create({
     nom: "Test",
     prenom: "Dispatcher",
     email: "disp@test.fr",
@@ -36,12 +37,7 @@ beforeAll(async () => {
     actif: true,
   });
 
-  const app = require("../../Server");
-  const res = await request(app)
-    .post("/api/auth/login")
-    .send({ email: "disp@test.fr", password: "pass1234" });
-
-  global.__token__ = res.body.token;
+  global.__token__ = jwt.sign({ id: dispUser._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
 }, 60000);
 
 afterAll(async () => {

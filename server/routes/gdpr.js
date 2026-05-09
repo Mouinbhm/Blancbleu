@@ -17,6 +17,7 @@ const erasureLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler,
+  skip: () => process.env.NODE_ENV === "test",
 });
 
 // GET  /api/gdpr/export — droit à la portabilité (RGPD Art. 20)

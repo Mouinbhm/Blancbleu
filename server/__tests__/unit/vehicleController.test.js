@@ -7,6 +7,7 @@ const request = require("supertest");
 const mongoose = require("mongoose");
 const { MongoMemoryServer } = require("mongodb-memory-server");
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 let mongod;
 
@@ -26,19 +27,15 @@ beforeAll(async () => {
   const salt = await bcrypt.genSalt(10);
   const hash = await bcrypt.hash("pass1234", salt);
 
-  await User.create([
+  const [adminUser, , dispUser] = await User.create([
     { nom: "Admin", prenom: "Test", email: "admin@test.fr", password: hash, role: "admin", actif: true },
     { nom: "Superv", prenom: "Test", email: "superv@test.fr", password: hash, role: "superviseur", actif: true },
     { nom: "Disp", prenom: "Test", email: "disp@test.fr", password: hash, role: "dispatcher", actif: true },
   ]);
 
-  const app = require("../../Server");
-
-  const resAdmin = await request(app).post("/api/auth/login").send({ email: "admin@test.fr", password: "pass1234" });
-  global.__adminToken__ = resAdmin.body.token;
-
-  const resDisp = await request(app).post("/api/auth/login").send({ email: "disp@test.fr", password: "pass1234" });
-  global.__dispToken__ = resDisp.body.token;
+  const secret = process.env.JWT_SECRET;
+  global.__adminToken__ = jwt.sign({ id: adminUser._id }, secret, { expiresIn: "1h" });
+  global.__dispToken__ = jwt.sign({ id: dispUser._id }, secret, { expiresIn: "1h" });
 }, 60000);
 
 afterAll(async () => {
