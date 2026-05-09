@@ -12,21 +12,16 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// ─── Intercepteur requête — injecte le JWT ────────────────────────────────────
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
 // ─── Intercepteur réponse — gère les 401 et le refresh automatique ────────────
+// Les cookies bb_access/bb_refresh sont httpOnly et envoyés automatiquement.
+// Plus besoin d'injecter manuellement l'Authorization header.
 let isRefreshing = false;
 let pendingQueue = [];
 
-const processQueue = (error, token = null) => {
+const processQueue = (error) => {
   pendingQueue.forEach(({ resolve, reject }) => {
     if (error) reject(error);
-    else resolve(token);
+    else resolve();
   });
   pendingQueue = [];
 };
@@ -45,28 +40,18 @@ api.interceptors.response.use(
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           pendingQueue.push({ resolve, reject });
-        }).then((token) => {
-          originalRequest.headers.Authorization = `Bearer ${token}`;
-          return api(originalRequest);
-        });
+        }).then(() => api(originalRequest));
       }
 
       originalRequest._retry = true;
       isRefreshing = true;
 
       try {
-        const { data } = await api.post("/auth/refresh");
-        const newToken = data.token;
-        localStorage.setItem("token", newToken);
-        if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
-        api.defaults.headers.common.Authorization = `Bearer ${newToken}`;
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        processQueue(null, newToken);
+        await api.post("/auth/refresh");
+        processQueue(null);
         return api(originalRequest);
       } catch (refreshError) {
-        processQueue(refreshError, null);
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
+        processQueue(refreshError);
         window.location.href = "/login";
         return Promise.reject(refreshError);
       } finally {

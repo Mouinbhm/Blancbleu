@@ -13,7 +13,7 @@ export function connectSocket(role = "dispatcher") {
   if (socket?.connected) return socket;
 
   socket = io(SOCKET_URL, {
-    auth: { token: localStorage.getItem("token") },
+    withCredentials: true,
     transports: ["websocket", "polling"],
     reconnection: true,
     reconnectionDelay: 2000,

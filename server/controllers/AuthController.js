@@ -14,11 +14,19 @@ const safeMsg = (err) =>
 const ACCESS_TOKEN_TTL = "15m";
 const REFRESH_COOKIE_NAME = "bb_refresh";
 const REFRESH_COOKIE_OPTS = {
-  httpOnly: true, // inaccessible depuis JS (XSS mitigation)
-  secure: process.env.NODE_ENV === "production", // HTTPS only en prod
-  sameSite: "strict", // CSRF mitigation
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "strict",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 jours en ms
-  path: "/api/auth", // cookie envoyé seulement sur ce chemin
+  path: "/api/auth",
+};
+const ACCESS_COOKIE_NAME = "bb_access";
+const ACCESS_COOKIE_OPTS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "strict",
+  maxAge: 15 * 60 * 1000, // 15 minutes en ms
+  path: "/api",
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -144,10 +152,10 @@ const login = async (req, res) => {
 
     const accessToken = generateAccessToken(user._id);
     await issueRefreshToken(user._id, res, req);
+    res.cookie(ACCESS_COOKIE_NAME, accessToken, ACCESS_COOKIE_OPTS);
 
     res.json({
       message: "Connexion réussie",
-      token: accessToken,
       user: userPayload(user),
     });
   } catch (err) {
@@ -195,11 +203,9 @@ const refresh = async (req, res) => {
     await issueRefreshToken(user._id, res, req);
 
     const accessToken = generateAccessToken(user._id);
+    res.cookie(ACCESS_COOKIE_NAME, accessToken, ACCESS_COOKIE_OPTS);
 
-    res.json({
-      token: accessToken,
-      user: userPayload(user),
-    });
+    res.json({ user: userPayload(user) });
   } catch (err) {
     res.status(500).json({ message: safeMsg(err) });
   }
@@ -223,6 +229,7 @@ const logout = async (req, res) => {
     }
 
     res.clearCookie(REFRESH_COOKIE_NAME, { path: "/api/auth" });
+    res.clearCookie(ACCESS_COOKIE_NAME, { path: "/api" });
     res.json({ message: "Déconnexion réussie" });
   } catch (err) {
     res.status(500).json({ message: safeMsg(err) });
@@ -238,6 +245,7 @@ const logoutAll = async (req, res) => {
   try {
     await RefreshToken.revokeAllForUser(req.user._id, "logout-all");
     res.clearCookie(REFRESH_COOKIE_NAME, { path: "/api/auth" });
+    res.clearCookie(ACCESS_COOKIE_NAME, { path: "/api" });
     res.json({ message: "Déconnexion de tous les appareils effectuée" });
   } catch (err) {
     res.status(500).json({ message: safeMsg(err) });
@@ -302,11 +310,10 @@ const updatePassword = async (req, res) => {
     // Émettre un nouvel access token pour la session courante
     const accessToken = generateAccessToken(user._id);
     await issueRefreshToken(user._id, res, req);
+    res.cookie(ACCESS_COOKIE_NAME, accessToken, ACCESS_COOKIE_OPTS);
 
     res.json({
-      message:
-        "Mot de passe mis à jour — toutes les autres sessions ont été révoquées",
-      token: accessToken,
+      message: "Mot de passe mis à jour — toutes les autres sessions ont été révoquées",
     });
   } catch (err) {
     res.status(500).json({ message: safeMsg(err) });

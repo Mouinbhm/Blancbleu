@@ -5,6 +5,7 @@ const http = require("http");
 const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
+const cookieLib = require("cookie");
 const { Server } = require("socket.io");
 require("dotenv").config();
 
@@ -66,16 +67,23 @@ app.use(require("./middleware/auditMiddleware"));
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
 const io = new Server(server, {
   cors: {
-    origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : "*",
-    credentials: false,
+    origin: ALLOWED_ORIGINS,
+    credentials: true,
   },
 });
 
-// Authentification Socket.IO — rejette les connexions sans JWT valide
+// Authentification Socket.IO — lit le token depuis cookie bb_access ou Authorization header
 io.use((socket, next) => {
-  const raw =
+  let raw =
     socket.handshake.auth?.token ||
     socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, "");
+
+  // Fallback : lire depuis le cookie httpOnly bb_access
+  if (!raw && socket.handshake.headers.cookie) {
+    const cookies = cookieLib.parse(socket.handshake.headers.cookie);
+    raw = cookies.bb_access;
+  }
+
   if (!raw) return next(new Error("Non autorisé"));
   try {
     socket.user = jwt.verify(raw, process.env.JWT_SECRET);

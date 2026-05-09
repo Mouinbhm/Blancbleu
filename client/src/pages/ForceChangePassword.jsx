@@ -31,11 +31,10 @@ export default function ForceChangePassword() {
     setSubmitting(true);
     setApiError("");
     try {
-      const { data } = await userService.updatePassword({
+      await userService.updatePassword({
         ancienPassword: form.ancien,
         nouveauPassword: form.nouveau,
       });
-      if (data?.token) localStorage.setItem("token", data.token);
       clearMustChangePassword();
       navigate("/dashboard");
     } catch (err) {
