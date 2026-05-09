@@ -78,7 +78,10 @@
       "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\MSI\\\\OneDrive\\\\Bureau\\\\PFE\\\\blancbleu\\\\blancbleu_patient\" -Force | Select-Object Name, @{Name=\"Type\";Expression={if\\($_.PSIsContainer\\){\"Folder\"}else{\"File\"}}} | Format-Table -AutoSize)",
       "Bash(git checkout *)",
       "Bash(git rebase *)",
-      "Bash(git remote *)"
+      "Bash(git remote *)",
+      "Bash(git stash *)",
+      "Bash(git pull *)",
+      "Bash(git push *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory",
