@@ -87,8 +87,10 @@ async function geocodeAdresse(adresseString) {
  * @returns {Promise<[deparGeo|null, destGeo|null]>}
  */
 async function geocodeTransport(adresseDepart, adresseDestination) {
-  const buildLabel = (a) =>
-    [a?.rue, a?.codePostal, a?.ville].filter(Boolean).join(" ");
+  const buildLabel = (a) => {
+    const standard = [a?.rue, a?.codePostal, a?.ville].filter(Boolean).join(" ");
+    return standard || a?.nom || "";
+  };
 
   const labelDepart = buildLabel(adresseDepart);
   const labelDest = buildLabel(adresseDestination);

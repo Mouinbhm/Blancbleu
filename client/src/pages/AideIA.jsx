@@ -54,6 +54,15 @@ function normalizeMotif(motif) {
   return MOTIF_MAP[motif] || motif || "Consultation";
 }
 
+function fmtApiError(err, fallback) {
+  const d = err.response?.data;
+  if (!d) return err.message || fallback;
+  if (typeof d.message === "string") return d.message;
+  if (typeof d.detail === "string") return d.detail;
+  if (Array.isArray(d.detail)) return d.detail.map((e) => e.msg ?? JSON.stringify(e)).join(" · ");
+  return fallback;
+}
+
 function motifToEtab(motif) {
   const MAP = {
     Dialyse:         "centre_dialyse",
@@ -188,9 +197,7 @@ function ModuleDispatch() {
         : await aiService.recommanderDispatch(selectedId);
       setResult(data);
     } catch (err) {
-      setError(
-        err.response?.data?.message || "Erreur lors de l'analyse dispatch IA"
-      );
+      setError(fmtApiError(err, "Erreur lors de l'analyse dispatch IA"));
     } finally {
       setLoading(false);
     }
@@ -663,7 +670,7 @@ function ModulePMT({ aiStatus }) {
       if (err.response?.status === 503) {
         setError("Service OCR indisponible. Assurez-vous que le microservice Python est démarré et que Tesseract est installé.");
       } else {
-        setError(err.response?.data?.detail || err.response?.data?.message || "Erreur d'extraction PMT");
+        setError(fmtApiError(err, "Erreur d'extraction PMT"));
       }
     } finally {
       setLoading(false);
@@ -1055,7 +1062,7 @@ function ModuleRouting({ aiStatus }) {
       if (err.response?.status === 503) {
         setError("Service d'optimisation non disponible. Vérifiez que le microservice IA Python est démarré.");
       } else {
-        setError(err.response?.data?.message || err.response?.data?.detail || "Erreur d'optimisation");
+        setError(fmtApiError(err, "Erreur d'optimisation"));
       }
     } finally {
       setLoading(false);
@@ -1116,7 +1123,7 @@ function ModuleRouting({ aiStatus }) {
               <span className="material-symbols-outlined text-sm">info</span>
               Comment ça fonctionne
             </p>
-            <p>L'algorithme Google OR-Tools récupère tous les transports planifiés pour la date sélectionnée (statuts CONFIRMED et SCHEDULED) et optimise leur répartition sur les véhicules disponibles pour minimiser la distance totale parcourue.</p>
+            <p>L'algorithme Google OR-Tools récupère tous les transports planifiés pour la date sélectionnée (statuts CONFIRMED, SCHEDULED, ASSIGNED et RESCHEDULED) et optimise leur répartition sur les véhicules disponibles pour minimiser la distance totale parcourue.</p>
           </div>
 
           {!aiStatus?.available && (
@@ -1146,16 +1153,40 @@ function ModuleRouting({ aiStatus }) {
         </div>
       </div>
 
+      {/* État chargement */}
+      {loading && (
+        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-slate-500 font-mono">OR-Tools en cours de calcul… (jusqu'à 30s)</p>
+        </div>
+      )}
+
       {/* Résultats */}
-      {result && (
+      {result && !loading && (
         <div className="space-y-4">
+          {/* État vide */}
+          {result.nbTransports === 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 flex items-center gap-3 text-sm text-amber-700">
+              <span className="material-symbols-outlined text-amber-500">event_busy</span>
+              <span>Aucun transport confirmé ou planifié pour le <strong>{date}</strong>. Vérifiez les statuts dans le planning.</span>
+            </div>
+          )}
+
           {/* KPIs */}
           <div className="grid grid-cols-4 gap-4">
             {[
-              { label: "Transports", val: result.nbTransports, icon: "directions_car" },
-              { label: "Véhicules", val: result.nbVehicules, icon: "local_shipping" },
-              { label: "Distance totale", val: `${result.distanceTotale} km`, icon: "route" },
-              { label: "Durée max", val: `${result.dureeMaxMinutes} min`, icon: "timer" },
+              { label: "Transports", val: result.nbTransports ?? "—", icon: "directions_car" },
+              { label: "Véhicules", val: result.nbVehicules ?? "—", icon: "local_shipping" },
+              {
+                label: "Distance totale",
+                val: result.distanceTotale != null ? `${result.distanceTotale} km` : "—",
+                icon: "route",
+              },
+              {
+                label: "Durée max",
+                val: result.dureeMaxMinutes != null ? `${result.dureeMaxMinutes} min` : "—",
+                icon: "timer",
+              },
             ].map(({ label, val, icon }) => (
               <div key={label} className="bg-white rounded-xl border border-slate-200 p-4 text-center">
                 <span className="material-symbols-outlined text-teal-500 text-2xl">{icon}</span>
@@ -1176,7 +1207,7 @@ function ModuleRouting({ aiStatus }) {
             <span className="material-symbols-outlined text-sm">
               {result.statut === "OPTIMAL" ? "check_circle" : result.statut === "FEASIBLE" ? "info" : "error"}
             </span>
-            {result.statut} — {result.messageOptimiseur}
+            {result.statut ?? "—"} — {result.messageOptimiseur ?? ""}
           </div>
 
           {/* Tournées par véhicule */}

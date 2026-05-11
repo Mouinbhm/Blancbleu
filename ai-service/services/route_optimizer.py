@@ -85,13 +85,13 @@ def _resoudre_avec_ortools(request, routing_enums_pb2, pywrapcp) -> RoutingRespo
     transport_indices = []  # (idx_pec, idx_dest) pour chaque transport
 
     for t in transports:
-        coords_pec = _parse_adresse(t.adresseDepart)
-        coords_dest = _parse_adresse(t.adresseDestination)
+        coords_pec = _parse_adresse(t.adresseDepart, t.coordonneesDepart)
+        coords_dest = _parse_adresse(t.adresseDestination, t.coordonneesDestination)
 
         idx_pec = len(points)
-        points.append({**coords_pec, "nom": f"PEC {t.numero}", "transportId": t._id, "numero": t.numero})
+        points.append({**coords_pec, "nom": f"PEC {t.numero}", "transportId": t.id, "numero": t.numero})
         idx_dest = len(points)
-        points.append({**coords_dest, "nom": f"DEST {t.numero}", "transportId": t._id, "numero": t.numero})
+        points.append({**coords_dest, "nom": f"DEST {t.numero}", "transportId": t.id, "numero": t.numero})
         transport_indices.append((idx_pec, idx_dest))
 
     n_nodes = len(points)
@@ -190,7 +190,7 @@ def _resoudre_avec_ortools(request, routing_enums_pb2, pywrapcp) -> RoutingRespo
 
         if etapes:
             routes.append(RouteTournee(
-                vehiculeId=vehicules[vehicule_idx]._id,
+                vehiculeId=vehicules[vehicule_idx].id,
                 immatriculation=vehicules[vehicule_idx].immatriculation,
                 etapes=etapes,
                 distanceTotaleKm=round(distance_vehicule, 2),
@@ -231,14 +231,14 @@ def _fallback_attribution_sequentielle(request: RoutingRequest) -> RoutingRespon
     distance_totale = 0.0
     duree_max = 0
 
-    for vehicule, transports_v in transports_par_vehicule.items():
+    for vehicule, transports_v in transports_par_vehicule:
         etapes = []
         distance_v = 0.0
         for i, t in enumerate(transports_v):
             dist_estimee = 10.0  # km estimés par défaut
             etapes.append(EtapeRoute(
                 ordre=i * 2,
-                transportId=t._id,
+                transportId=t.id,
                 numero=t.numero,
                 type="PRISE_EN_CHARGE",
                 adresse=t.adresseDepart,
@@ -246,7 +246,7 @@ def _fallback_attribution_sequentielle(request: RoutingRequest) -> RoutingRespon
             ))
             etapes.append(EtapeRoute(
                 ordre=i * 2 + 1,
-                transportId=t._id,
+                transportId=t.id,
                 numero=t.numero,
                 type="DESTINATION",
                 adresse=t.adresseDestination,
@@ -257,7 +257,7 @@ def _fallback_attribution_sequentielle(request: RoutingRequest) -> RoutingRespon
         if etapes:
             duree = int(distance_v / VITESSE_MOYENNE_KMH * 60)
             routes.append(RouteTournee(
-                vehiculeId=vehicule._id,
+                vehiculeId=vehicule.id,
                 immatriculation=vehicule.immatriculation,
                 etapes=etapes,
                 distanceTotaleKm=round(distance_v, 2),
@@ -316,21 +316,21 @@ def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def _parse_adresse(adresse: str) -> dict:
+def _parse_adresse(adresse: str, coords=None) -> dict:
     """
-    Extrait les coordonnées GPS d'une adresse.
-    Dans le MVP, retourne des coordonnées Nice par défaut.
-    Dans une version complète : appel OSRM Geocoding ou Nominatim.
+    Retourne les coordonnées GPS d'une adresse.
+    Utilise les coordonnées pré-géocodées si disponibles (BAN côté Node.js),
+    sinon replie sur le centre de Nice (MVP — à remplacer par Nominatim).
     """
-    # Pour le MVP : position approximative Nice centre
-    # TODO : intégrer géocodage Nominatim (open source)
+    if coords and coords.lat and coords.lng:
+        return {"lat": coords.lat, "lng": coords.lng}
+    logger.warning(f"Coordonnées GPS manquantes pour l'adresse '{adresse}' — repli sur dépôt")
     return {"lat": 43.7102, "lng": 7.2620}
 
 
-def _repartir_equitablement(transports, vehicules) -> dict:
+def _repartir_equitablement(transports, vehicules) -> list:
     """Répartit les transports équitablement sur les véhicules disponibles."""
-    result = {v: [] for v in vehicules}
+    result = [(v, []) for v in vehicules]
     for i, t in enumerate(transports):
-        vehicule = vehicules[i % len(vehicules)]
-        result[vehicule].append(t)
+        result[i % len(vehicules)][1].append(t)
     return result

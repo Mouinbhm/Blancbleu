@@ -13,6 +13,7 @@
 const aiClient = require("../services/aiClient");
 const { audit } = require("../services/auditService");
 const socketService = require("../services/socketService");
+const { geocodeTransport } = require("../utils/geocodeUtils");
 
 // ════════════════════════════════════════════════════════════════════════════
 // MODULE 1 — PMT (Prescription Médicale de Transport)
@@ -191,6 +192,15 @@ const recommanderDispatch = async (req, res) => {
 };
 
 /**
+ * Sérialise un sous-document adresse MongoDB en chaîne lisible pour l'API Python.
+ * Pydantic attend un str, pas un objet.
+ */
+function _fmtAdresse(a) {
+  if (!a || typeof a === "string") return a || "";
+  return [a.nom, a.rue, a.ville, a.codePostal].filter(Boolean).join(", ");
+}
+
+/**
  * Scoring local de dispatch (fallback si microservice IA indisponible).
  * Basé uniquement sur les règles métier (compatibilité mobilité/véhicule).
  */
@@ -316,7 +326,7 @@ const optimiserTournee = async (req, res) => {
     // Charger les transports planifiés pour ce jour
     const filtre = {
       dateTransport: { $gte: dateDebut, $lt: dateFin },
-      statut: { $in: ["CONFIRMED", "SCHEDULED"] },
+      statut: { $in: ["CONFIRMED", "SCHEDULED", "ASSIGNED", "RESCHEDULED"] },
     };
     if (transportIds?.length) {
       filtre._id = { $in: transportIds };
@@ -328,26 +338,74 @@ const optimiserTournee = async (req, res) => {
     ]);
 
     if (transports.length === 0) {
-      return res.json({ message: "Aucun transport à optimiser pour cette date", routes: [] });
+      return res.json({
+        date,
+        routes: [],
+        distanceTotale: 0,
+        dureeMaxMinutes: 0,
+        nbTransports: 0,
+        nbVehicules: 0,
+        statut: "OPTIMAL",
+        messageOptimiseur: "Aucun transport confirmé/planifié pour cette date",
+      });
     }
+
+    // Rétrogéocoder à la volée les transports sans coordonnées (best-effort)
+    await Promise.all(
+      transports.map(async (t) => {
+        const manqueDepart = !t.adresseDepart?.coordonnees?.lat;
+        const manqueDest   = !t.adresseDestination?.coordonnees?.lat;
+        if (!manqueDepart && !manqueDest) return;
+        try {
+          const [geoD, geoDest] = await geocodeTransport(
+            manqueDepart ? t.adresseDepart : null,
+            manqueDest   ? t.adresseDestination : null,
+          );
+          if (manqueDepart && geoD) {
+            t.adresseDepart = t.adresseDepart.toObject
+              ? { ...t.adresseDepart.toObject(), coordonnees: { lat: geoD.lat, lng: geoD.lng } }
+              : { ...t.adresseDepart, coordonnees: { lat: geoD.lat, lng: geoD.lng } };
+            await t.constructor.updateOne(
+              { _id: t._id },
+              { $set: { "adresseDepart.coordonnees": { lat: geoD.lat, lng: geoD.lng } } },
+            );
+          }
+          if (manqueDest && geoDest) {
+            t.adresseDestination = t.adresseDestination.toObject
+              ? { ...t.adresseDestination.toObject(), coordonnees: { lat: geoDest.lat, lng: geoDest.lng } }
+              : { ...t.adresseDestination, coordonnees: { lat: geoDest.lat, lng: geoDest.lng } };
+            await t.constructor.updateOne(
+              { _id: t._id },
+              { $set: { "adresseDestination.coordonnees": { lat: geoDest.lat, lng: geoDest.lng } } },
+            );
+          }
+        } catch { /* géocodage non bloquant */ }
+      })
+    );
 
     const result = await aiClient.optimiserTournee({
       date,
       transports: transports.map((t) => ({
-        _id: t._id,
+        _id: String(t._id),
         numero: t.numero,
-        adresseDepart: t.adresseDepart,
-        adresseDestination: t.adresseDestination,
-        heureDepart: t.heureDepart,
-        mobilite: t.patient?.mobilite,
-        typeTransport: t.typeTransport,
-        dureeEstimee: t.dureeEstimee,
+        adresseDepart: _fmtAdresse(t.adresseDepart),
+        adresseDestination: _fmtAdresse(t.adresseDestination),
+        coordonneesDepart: t.adresseDepart?.coordonnees?.lat
+          ? { lat: t.adresseDepart.coordonnees.lat, lng: t.adresseDepart.coordonnees.lng }
+          : null,
+        coordonneesDestination: t.adresseDestination?.coordonnees?.lat
+          ? { lat: t.adresseDestination.coordonnees.lat, lng: t.adresseDestination.coordonnees.lng }
+          : null,
+        heureDepart: t.heureRDV || t.heureDepart || null,
+        mobilite: t.patient?.mobilite || "ASSIS",
+        typeTransport: t.typeTransport || "VSL",
+        dureeEstimee: t.dureeEstimee || 30,
       })),
       vehicules: vehicules.map((v) => ({
-        _id: v._id,
+        _id: String(v._id),
         immatriculation: v.immatriculation,
         type: v.type,
-        position: v.position,
+        position: v.position?.lat ? { lat: v.position.lat, lng: v.position.lng } : null,
       })),
       depot: depot || { lat: 43.7102, lng: 7.2620 }, // Nice centre par défaut
     });

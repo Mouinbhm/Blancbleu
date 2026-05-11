@@ -86,7 +86,10 @@
       "Bash(node --check routes/gdpr.js)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\); print\\('---'\\); print\\(json.dumps\\(d.get\\('jest',{}\\), indent=2\\)\\)\")",
       "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(32\\).toString\\('base64'\\)\\)\")",
-      "Bash(node scripts/migrate-email-index.js)"
+      "Bash(node scripts/migrate-email-index.js)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(xargs grep -l \"routing\\\\|optimize\")",
+      "Bash(node scripts/geocode-existing-transports.js)"
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory",

@@ -2,7 +2,7 @@
 Schémas Pydantic — Module Routing (optimisation de tournée VRP)
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 
 
@@ -13,22 +13,28 @@ class Position(BaseModel):
 
 class TransportRouting(BaseModel):
     """Transport à intégrer dans la tournée."""
-    _id: str
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str = Field(alias="_id")
     numero: str
     adresseDepart: str
     adresseDestination: str
-    heureDepart: Optional[str] = None       # "08:30" — contrainte horaire
+    coordonneesDepart: Optional[Position] = None
+    coordonneesDestination: Optional[Position] = None
+    heureDepart: Optional[str] = None
     mobilite: Optional[str] = "ASSIS"
     typeTransport: Optional[str] = "VSL"
-    dureeEstimee: Optional[int] = 30         # Minutes estimées pour le trajet
+    dureeEstimee: Optional[int] = 30
 
 
 class VehiculeRouting(BaseModel):
     """Véhicule disponible pour la tournée."""
-    _id: str
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str = Field(alias="_id")
     immatriculation: str
     type: str
-    position: Optional[Position] = None     # Position de départ
+    position: Optional[Position] = None
 
 
 class RoutingRequest(BaseModel):
