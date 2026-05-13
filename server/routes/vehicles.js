@@ -7,10 +7,11 @@ const router = express.Router();
 const { protect, authorize } = require("../middleware/auth");
 const validate = require("../middleware/validate");
 const { createVehicleSchema, updateVehicleSchema } = require("../validators/schemas");
-const Vehicle = require("../models/Vehicle");
-const Transport = require("../models/Transport");
-const socketService = require("../services/socketService");
-const { audit } = require("../services/auditService");
+const Vehicle        = require("../models/Vehicle");
+const Transport      = require("../models/Transport");
+const socketService  = require("../services/socketService");
+const { audit }      = require("../services/auditService");
+const fleetAnalytics = require("../services/fleetAnalyticsService");
 
 // Statuts indiquant qu'un transport est terminé (véhicule devrait être libre)
 const STATUTS_TERMINES = ["COMPLETED", "CANCELLED", "NO_SHOW", "BILLED"];
@@ -129,6 +130,42 @@ router.get(
   },
 );
 
+// ── GET /api/vehicles/dashboard ──────────────────────────────────────────────
+// Tableau de bord flotte : KPI, véhicules, missions, alertes
+router.get("/dashboard", protect, async (req, res, next) => {
+  try {
+    const { period = "month" } = req.query;
+    const data = await fleetAnalytics.getFleetDashboardStats(period);
+    res.json({ success: true, ...data });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ── GET /api/vehicles/availability?date=YYYY-MM-DD ────────────────────────────
+// Disponibilité flotte par créneau horaire pour une date donnée
+router.get("/availability", protect, async (req, res, next) => {
+  try {
+    const date = req.query.date || new Date().toISOString().split("T")[0];
+    const slots = await fleetAnalytics.getFleetAvailabilityByTimeSlot(date);
+    res.json({ success: true, date, slots });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ── GET /api/vehicles/maintenance/upcoming?days=30 ────────────────────────────
+// Maintenances à venir dans les X prochains jours
+router.get("/maintenance/upcoming", protect, async (req, res, next) => {
+  try {
+    const days = Math.min(365, Math.max(1, parseInt(req.query.days) || 30));
+    const maintenances = await fleetAnalytics.getUpcomingMaintenances(days);
+    res.json({ success: true, daysAhead: days, count: maintenances.length, maintenances });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // ── GET /api/vehicles/:id/stats ──────────────────────────────────────────────
 router.get("/:id/stats", protect, async (req, res, next) => {
   try {
@@ -172,6 +209,66 @@ router.get("/:id/stats", protect, async (req, res, next) => {
       equipements_actifs:       equipementsActifs,
       taux_utilisation_30j:     Math.min(100, Math.round((transports30j / 30) * 100)),
     });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ── GET /api/vehicles/:id/analytics ─────────────────────────────────────────
+// Métriques détaillées d'un véhicule (taux utilisation, km, coût, alertes…)
+router.get("/:id/analytics", protect, async (req, res, next) => {
+  try {
+    const { period = "month" } = req.query;
+    const vehicle = await Vehicle.findById(req.params.id).lean();
+    if (!vehicle) return res.status(404).json({ success: false, message: "Véhicule introuvable" });
+
+    const [utilizationRate, totalKm, estimatedCost, missionHistory, upcomingMaint, alerts] =
+      await Promise.all([
+        fleetAnalytics.getVehicleUtilizationRate(req.params.id, period),
+        fleetAnalytics.getVehicleKilometers(req.params.id, period),
+        fleetAnalytics.getVehicleEstimatedCost(req.params.id, period),
+        fleetAnalytics.getVehicleMissionHistory(req.params.id, { page: 1, limit: 10 }),
+        fleetAnalytics.getUpcomingMaintenances(60),
+        fleetAnalytics.detectMaintenanceAlerts(),
+      ]);
+
+    const vehicleAlerts = alerts.filter((a) => String(a.vehicleId) === String(req.params.id));
+    const vehicleMaint  = upcomingMaint.filter((m) => String(m.vehicleId) === String(req.params.id));
+
+    return res.json({
+      success: true,
+      vehicle,
+      period,
+      utilizationRate,
+      totalKm,
+      monthlyKm:         totalKm,
+      estimatedCost,
+      totalMissions:     vehicle.vehicleMetrics?.totalMissions     || 0,
+      completedMissions: vehicle.vehicleMetrics?.completedMissions || 0,
+      cancelledMissions: vehicle.vehicleMetrics?.cancelledMissions || 0,
+      missionHistory:    missionHistory.missions,
+      maintenanceInfo:   vehicle.maintenanceInfo,
+      upcomingMaintenances: vehicleMaint,
+      alerts:            vehicleAlerts,
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ── GET /api/vehicles/:id/missions ──────────────────────────────────────────
+// Historique paginé des missions d'un véhicule
+router.get("/:id/missions", protect, async (req, res, next) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id).select("_id nom").lean();
+    if (!vehicle) return res.status(404).json({ success: false, message: "Véhicule introuvable" });
+
+    const { startDate, endDate, status, page = 1, limit = 20 } = req.query;
+    const result = await fleetAnalytics.getVehicleMissionHistory(req.params.id, {
+      startDate, endDate, status, page, limit,
+    });
+
+    res.json({ success: true, vehicleId: req.params.id, vehicleName: vehicle.nom, ...result });
   } catch (err) {
     return next(err);
   }
@@ -250,6 +347,25 @@ router.delete("/:id", protect, authorize("admin"), async (req, res, next) => {
     return next(err);
   }
 });
+
+// ── POST /api/vehicles/:id/recalculate-metrics ───────────────────────────────
+// Réservé admin — recalcule et persiste les métriques du véhicule
+router.post(
+  "/:id/recalculate-metrics",
+  protect,
+  authorize("admin", "superviseur"),
+  async (req, res, next) => {
+    try {
+      const vehicle = await Vehicle.findById(req.params.id).select("_id nom").lean();
+      if (!vehicle) return res.status(404).json({ success: false, message: "Véhicule introuvable" });
+
+      const metrics = await fleetAnalytics.recalculateVehicleMetrics(req.params.id);
+      res.json({ success: true, vehicleId: req.params.id, vehicleName: vehicle.nom, metrics });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
 
 // ── PATCH /api/vehicles/:id/statut ────────────────────────────────────────────
 router.patch("/:id/statut", protect, async (req, res, next) => {

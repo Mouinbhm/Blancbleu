@@ -156,11 +156,58 @@ const vehicleSchema = new mongoose.Schema(
 
     notes:     { type: String, default: "" },
     deletedAt: { type: Date, default: null },
+
+    // ── Métriques performance (PHASE 1) ───────────────────────────────────────
+    // Calculées et mises en cache via recalculateVehicleMetrics()
+    vehicleMetrics: {
+      totalKm:           { type: Number, default: 0 },
+      monthlyKm:         { type: Number, default: 0 },
+      totalMissions:     { type: Number, default: 0 },
+      completedMissions: { type: Number, default: 0 },
+      cancelledMissions: { type: Number, default: 0 },
+      totalWorkingHours: { type: Number, default: 0 },
+      totalIdleHours:    { type: Number, default: 0 },
+      estimatedCost:     { type: Number, default: 0 },
+      lastMetricUpdate:  { type: Date,   default: null },
+    },
+
+    // ── Informations maintenance enrichies (PHASE 1) ──────────────────────────
+    maintenanceInfo: {
+      lastMaintenanceDate:     { type: Date,   default: null },
+      nextMaintenanceDate:     { type: Date,   default: null },
+      nextMaintenanceKm:       { type: Number, default: null },
+      maintenanceIntervalKm:   { type: Number, default: 15000 },
+      maintenanceIntervalDays: { type: Number, default: 365 },
+      maintenanceStatus: {
+        type:    String,
+        enum:    ["ok", "soon", "urgent", "overdue"],
+        default: "ok",
+      },
+    },
+
+    // ── Disponibilité opérationnelle (PHASE 1) ────────────────────────────────
+    availability: {
+      currentStatus: {
+        type:    String,
+        enum:    ["available", "in_mission", "maintenance", "out_of_service"],
+        default: "available",
+      },
+      currentTransportId: {
+        type:    mongoose.Schema.Types.ObjectId,
+        ref:     "Transport",
+        default: null,
+      },
+      availableFrom:     { type: Date,   default: null },
+      unavailableReason: { type: String, default: "" },
+    },
   },
   { timestamps: true },
 );
 
 vehicleSchema.index({ statut: 1, type: 1 });
 vehicleSchema.index({ "position.lat": 1, "position.lng": 1 });
+vehicleSchema.index({ "maintenanceInfo.nextMaintenanceDate": 1 });
+vehicleSchema.index({ "availability.currentTransportId": 1 });
+vehicleSchema.index({ immatriculation: 1 });
 
 module.exports = mongoose.model("Vehicle", vehicleSchema);

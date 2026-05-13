@@ -39,6 +39,13 @@ const notificationSchema = new mongoose.Schema(
         "PMT_UPLOADED",
         "PMT_OCR_DONE",
         "STATUS_CHANGED",
+        // ── Alertes flotte (PHASE 5) ──────────────────────────────────────────
+        "MAINTENANCE_DUE",
+        "MAINTENANCE_OVERDUE",
+        "VEHICLE_BLOCKED",
+        "VEHICLE_OUT_OF_SERVICE",
+        "HIGH_UTILIZATION",
+        "LOW_UTILIZATION",
       ],
       required: true,
     },
@@ -47,6 +54,7 @@ const notificationSchema = new mongoose.Schema(
 
     // ── Liens ─────────────────────────────────────────────────────────────────
     transportId: { type: mongoose.Schema.Types.ObjectId, ref: "Transport", default: null },
+    vehicleId:   { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle",   default: null },
     metadata:    { type: mongoose.Schema.Types.Mixed, default: {} },
 
     // ── État ──────────────────────────────────────────────────────────────────

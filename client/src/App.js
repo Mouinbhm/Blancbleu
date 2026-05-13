@@ -13,7 +13,8 @@ import Dashboard from "./pages/Dashboard";
 import Transports from "./pages/Transports";
 import NouveauTransport from "./pages/NouveauTransport";
 import TransportDetail from "./pages/TransportDetail";
-import Flotte from "./pages/Flotte";
+import Flotte         from "./pages/Flotte";
+import FleetDashboard from "./pages/FleetDashboard";
 import Planning from "./pages/Planning";
 import Patients from "./pages/Patients";
 import Prescriptions from "./pages/Prescriptions";
@@ -53,7 +54,8 @@ function App() {
             <Route path="/transports/new" element={<NouveauTransport />} />
             <Route path="/transports/:id" element={<TransportDetail />} />
             <Route path="/missions" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/flotte" element={<Flotte />} />
+            <Route path="/flotte"           element={<Flotte />} />
+            <Route path="/flotte/dashboard" element={<FleetDashboard />} />
             <Route path="/planning" element={<Planning />} />
             <Route path="/patients" element={<Patients />} />
             <Route path="/prescriptions" element={<Prescriptions />} />

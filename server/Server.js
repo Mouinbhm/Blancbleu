@@ -159,63 +159,8 @@ app.use(errorHandler);
 module.exports = app;
 
 // ── Nettoyage des véhicules bloqués ──────────────────────────────────────────
-// Libère les véhicules restés en statut "en_mission" après la fin de leur
-// transport. Conçu pour être idempotent et non-bloquant.
-async function nettoyerVehiculesBloqués() {
-  // Import local pour éviter les dépendances circulaires au chargement
-  const Vehicle = require("./models/Vehicle");
-  const Transport = require("./models/Transport");
-
-  const STATUTS_TERMINES = ["COMPLETED", "CANCELLED", "NO_SHOW", "BILLED"];
-  const vehiculesEnMission = await Vehicle.find({
-    statut: "En service",
-    deletedAt: null,
-  });
-
-  let liberes = 0;
-
-  for (const vehicule of vehiculesEnMission) {
-    let doitLiberer = false;
-    let raison = "";
-
-    if (!vehicule.transportEnCours) {
-      doitLiberer = true;
-      raison = "aucun transport associé";
-    } else {
-      const transport = await Transport.findById(
-        vehicule.transportEnCours,
-      ).select("numero statut");
-
-      if (!transport) {
-        doitLiberer = true;
-        raison = "transport introuvable en base";
-      } else if (STATUTS_TERMINES.includes(transport.statut)) {
-        doitLiberer = true;
-        raison = `transport ${transport.numero} terminé (${transport.statut})`;
-      }
-    }
-
-    if (doitLiberer) {
-      await Vehicle.findByIdAndUpdate(vehicule._id, {
-        statut: "Disponible",
-        transportEnCours: null,
-      });
-      logger.info("Véhicule débloqué automatiquement", {
-        vehicule: vehicule.nom,
-        immatriculation: vehicule.immatriculation,
-        raison,
-      });
-      liberes++;
-    }
-  }
-
-  if (liberes > 0 || vehiculesEnMission.length > 0) {
-    logger.info("Nettoyage véhicules terminé", {
-      verifies: vehiculesEnMission.length,
-      liberes,
-    });
-  }
-}
+// Délégué à vehicleCleanupService pour séparation des responsabilités.
+const { nettoyerVehiculesBloqués } = require("./services/vehicleCleanupService");
 
 // ── Migration one-shot : normalise les valeurs de statut ──────────────────────
 async function migrateStatuts() {

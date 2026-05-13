@@ -1,5 +1,6 @@
 // Fichier : client/src/pages/Flotte.jsx
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import VehicleCard from "../components/vehicle/VehicleCard";
 import VehicleDetailPanel from "../components/vehicle/VehicleDetailPanel";
 import { vehicleService } from "../services/api";
@@ -700,6 +701,7 @@ const Spinner = () => (
 );
 
 export default function Flotte() {
+  const navigate = useNavigate();
   const [vehicles,             setVehicles]             = useState([]);
   const [loading,              setLoading]              = useState(true);
   const [filtreStatut,         setFiltreStatut]         = useState("");
@@ -767,13 +769,22 @@ export default function Flotte() {
             {vehicles.length} véhicule(s) enregistré(s)
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-md shadow-primary/20"
-        >
-          <span className="material-symbols-outlined text-base">add</span>
-          Nouveau véhicule
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/flotte/dashboard")}
+            className="flex items-center gap-2 border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-slate-50 transition-colors"
+          >
+            <span className="material-symbols-outlined text-base">dashboard</span>
+            Dashboard
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-md shadow-primary/20"
+          >
+            <span className="material-symbols-outlined text-base">add</span>
+            Nouveau véhicule
+          </button>
+        </div>
       </div>
 
       {/* KPIs rapides */}
