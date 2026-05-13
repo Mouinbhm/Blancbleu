@@ -120,6 +120,15 @@ export default function Shifts() {
               {shifts.map((s) => {
                 const sc = STATUS_COLORS[s.status] || STATUS_COLORS.COMPLETED;
                 const isExpanded = expanded === s._id;
+                const p = s.personnelId;
+                const driverName = p && typeof p === "object"
+                  ? [p.prenom, p.nom].filter(Boolean).join(" ") || "—"
+                  : (p || "—");
+                const v = s.vehicleId;
+                const vehiclePlate = v && typeof v === "object"
+                  ? (v.immatriculation || "—")
+                  : (v || "—");
+                const vehicleType = v && typeof v === "object" ? (v.type || "") : "";
                 return [
                   <tr
                     key={s._id}
@@ -129,12 +138,14 @@ export default function Shifts() {
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs flex-shrink-0">
-                          {(s.driverName || "?")[0].toUpperCase()}
+                          {(driverName !== "—" ? driverName : "?")[0].toUpperCase()}
                         </div>
-                        <span className="font-semibold text-navy truncate max-w-[120px]">{s.driverName || s.driverId}</span>
+                        <span className="font-semibold text-navy truncate max-w-[120px]">{driverName}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 text-slate-600 font-mono">{s.vehicleImmat || s.vehicleId || "—"}</td>
+                    <td className="px-4 py-3.5 text-slate-600 font-mono">
+                      {vehiclePlate}{vehicleType ? ` · ${vehicleType}` : ""}
+                    </td>
                     <td className="px-4 py-3.5 text-slate-500">{fmtDate(s.startTime)}</td>
                     <td className="px-4 py-3.5 text-slate-600 font-mono">{fmtTime(s.startTime)}</td>
                     <td className="px-4 py-3.5 text-slate-600 font-mono">{fmtTime(s.endTime)}</td>

@@ -2,13 +2,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/shift_cubit.dart';
+import '../../tournee/cubit/tournee_cubit.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/location/location_service.dart';
 import '../../../features/documents/services/route_sheet_service.dart';
 import '../../../shared/theme/app_theme.dart';
 
 class ShiftScreen extends StatefulWidget {
-  const ShiftScreen({super.key});
+  final Map<String, dynamic> user;
+  const ShiftScreen({super.key, required this.user});
 
   @override
   State<ShiftScreen> createState() => _ShiftScreenState();
@@ -31,7 +33,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
 
   // Last shift summary (shown after end)
   Map<String, dynamic>? _lastShift;
-  final List<Map<String, dynamic>> _lastTransports = [];
+  List<Map<String, dynamic>> _lastTransports = [];
 
   final Map<String, bool> _checklist = {
     'fuel':        false,
@@ -140,6 +142,11 @@ class _ShiftScreenState extends State<ShiftScreen> {
             onPressed: () {
               Navigator.pop(context);
               _lastShift = shift;
+              // Snapshot current transports for the PDF before they're cleared
+              final tourneeState = context.read<TourneeCubit>().state;
+              if (tourneeState is TourneeLoaded) {
+                _lastTransports = List<Map<String, dynamic>>.from(tourneeState.transports);
+              }
               context.read<ShiftCubit>().end(
                 totalKm: int.tryParse(_kmController.text) ?? 0,
                 notes: _notesController.text,
@@ -299,7 +306,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
             onPressed: () async {
               Navigator.pop(context);
               try {
-                final user = <String, dynamic>{};
+                final user = widget.user;
                 await RouteSheetService.shareRouteSheet(
                   shift: shift,
                   transports: _lastTransports,
@@ -403,7 +410,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
           OutlinedButton.icon(
             onPressed: () async {
               try {
-                final user = <String, dynamic>{};
+                final user = widget.user;
                 await RouteSheetService.shareRouteSheet(
                   shift: shift,
                   transports: _lastTransports,

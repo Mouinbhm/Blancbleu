@@ -55,8 +55,8 @@ const corsOptions = {
   allowedHeaders: ["Content-Type", "Authorization"],
 };
 app.use(cors(corsOptions));
-app.use(express.json({ limit: "10kb" }));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ limit: "5mb", extended: false }));
 app.use(cookieParser());
 app.use(noSqlSanitize);
 app.use(xssSanitize);
@@ -138,6 +138,18 @@ app.use("/api/v1/tracking",       require("./routes/tracking.routes"));
 // ── Fichiers statiques (photos PMT) ───────────────────────────────────────────
 app.use("/uploads", require("express").static(require("path").join(__dirname, "uploads")));
 
+// ─── Admin one-shot migration (dev only) ─────────────────────────────────────
+if (process.env.NODE_ENV !== "production") {
+  app.post("/api/admin/migrate-statuts", async (req, res) => {
+    try {
+      await migrateStatuts();
+      res.json({ message: "Migration terminée" });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+}
+
 // ─── Health ────────────────────────────────────────────────────────────────────
 app.get("/api/health", healthHandler);
 app.use((req, res) => res.status(404).json({ message: "Route non trouvée" }));
@@ -205,12 +217,48 @@ async function nettoyerVehiculesBloqués() {
   }
 }
 
+// ── Migration one-shot : normalise les valeurs de statut ──────────────────────
+async function migrateStatuts() {
+  const db = mongoose.connection;
+
+  const vehicleMap = {
+    "disponible":  "Disponible",
+    "en_mission":  "En service",
+    "maintenance": "Maintenance",
+    "hors_service":"Hors service",
+  };
+  let total = 0;
+  for (const [old, newVal] of Object.entries(vehicleMap)) {
+    const r = await db.collection("vehicles").updateMany({ statut: old }, { $set: { statut: newVal } });
+    total += r.modifiedCount;
+  }
+
+  const personnelMap = {
+    "en-service": "Disponible",
+    "conge":      "Congé",
+    "formation":  "Formation",
+    "maladie":    "Maladie",
+    "inactif":    "Inactif",
+  };
+  for (const [old, newVal] of Object.entries(personnelMap)) {
+    const r = await db.collection("personnels").updateMany({ statut: old }, { $set: { statut: newVal } });
+    total += r.modifiedCount;
+  }
+
+  if (total > 0) logger.info(`Migration statuts terminée — ${total} document(s) mis à jour`);
+}
+
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   mongoose
     .connect(process.env.MONGO_URI)
     .then(() => {
       logger.info("MongoDB connecté");
+
+      // Migration one-shot des valeurs de statut legacy
+      migrateStatuts().catch((err) =>
+        logger.warn("Migration statuts échouée", { err: err.message }),
+      );
 
       // Nettoyage immédiat au démarrage (non bloquant)
       nettoyerVehiculesBloqués().catch((err) =>

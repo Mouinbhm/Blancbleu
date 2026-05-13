@@ -23,7 +23,7 @@ function initDriverSocket(io) {
     if (!user) return;
 
     // Driver joins their personal room
-    if (user.role === "driver" || user.role === "ambulancier") {
+    if (user.type === "personnel" || user.role === "driver" || user.role === "ambulancier") {
       socket.join(`driver:${user.id}`);
       io.to("role:dispatcher").to("role:admin").emit("driver:online", {
         driverId:  user.id,

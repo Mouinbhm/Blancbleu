@@ -6,10 +6,16 @@ const TYPE_CONFIG = {
 };
 
 const STATUT_CONFIG = {
+  // New canonical values
   "Disponible":   { label: "Disponible",   dot: "bg-green-500",  bg: "bg-green-100",  text: "text-green-700"  },
   "En service":   { label: "En service",   dot: "bg-blue-500",   bg: "bg-blue-100",   text: "text-blue-700"   },
   "Maintenance":  { label: "Maintenance",  dot: "bg-yellow-500", bg: "bg-yellow-100", text: "text-yellow-700" },
   "Hors service": { label: "Hors service", dot: "bg-red-500",    bg: "bg-red-100",    text: "text-red-700"    },
+  // Legacy values (pre-migration fallback)
+  "disponible":   { label: "Disponible",   dot: "bg-green-500",  bg: "bg-green-100",  text: "text-green-700"  },
+  "en_mission":   { label: "En service",   dot: "bg-blue-500",   bg: "bg-blue-100",   text: "text-blue-700"   },
+  "maintenance":  { label: "Maintenance",  dot: "bg-yellow-500", bg: "bg-yellow-100", text: "text-yellow-700" },
+  "hors_service": { label: "Hors service", dot: "bg-red-500",    bg: "bg-red-100",    text: "text-red-700"    },
 };
 
 function FuelBar({ value }) {

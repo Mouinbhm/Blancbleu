@@ -214,6 +214,15 @@ async function assignerVehicule(
     }
   }
 
+  // If still no shiftId, derive it from the vehicle's active shift
+  if (!shiftIdFinal && vehiculeIdFinal) {
+    const activeShift = await DriverShift.findOne({ vehicleId: vehiculeIdFinal, status: "ACTIVE" });
+    if (activeShift) {
+      shiftIdFinal = activeShift._id;
+      if (!chauffeurIdFinal) chauffeurIdFinal = activeShift.personnelId;
+    }
+  }
+
   // Mettre à jour avant la transition
   await Transport.findByIdAndUpdate(transportId, {
     vehicule: vehiculeIdFinal,

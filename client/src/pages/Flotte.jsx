@@ -411,9 +411,9 @@ function Tab5({ form, set, setNested, onUseGaragePos }) {
       <Divider label="Statut initial" />
       <div className="grid grid-cols-3 gap-2">
         {[
-          { v: "disponible",   label: "Disponible",   cls: "border-green-300 bg-green-50 text-green-700"   },
-          { v: "maintenance",  label: "Maintenance",  cls: "border-yellow-300 bg-yellow-50 text-yellow-700" },
-          { v: "hors_service", label: "Hors service", cls: "border-red-300 bg-red-50 text-red-700"         },
+          { v: "Disponible",   label: "Disponible",   cls: "border-green-300 bg-green-50 text-green-700"   },
+          { v: "Maintenance",  label: "Maintenance",  cls: "border-yellow-300 bg-yellow-50 text-yellow-700" },
+          { v: "Hors service", label: "Hors service", cls: "border-red-300 bg-red-50 text-red-700"         },
         ].map((s) => (
           <label key={s.v}
             className={`py-3 rounded-xl border-2 text-sm font-semibold text-center cursor-pointer transition-all ${
@@ -477,7 +477,7 @@ function ModalNouveauVehicule({ onClose, onCreated }) {
     // Onglet 5
     position: { lat: "", lng: "" },
     garage: { nom: "Garage principal", adresse: "59 Bd Madeleine, Nice", lat: 43.7102, lng: 7.262 },
-    statut: "disponible",
+    statut: "Disponible",
     notes: "",
   });
 
@@ -733,15 +733,24 @@ export default function Flotte() {
     return () => { u1(); u2(); u3(); };
   }, [subscribe, loadData]);
 
+  // Normalize legacy lowercase/underscore status to canonical French values
+  const normalizeStatut = (s) => {
+    const m = { "disponible": "Disponible", "en_mission": "En service", "maintenance": "Maintenance", "hors_service": "Hors service" };
+    return m[s] ?? s;
+  };
+  const isDisponible  = (s) => normalizeStatut(s) === "Disponible";
+  const isEnService   = (s) => normalizeStatut(s) === "En service";
+  const isMaintenance = (s) => normalizeStatut(s) === "Maintenance";
+
   const vehiclesFiltres = vehicles.filter((v) => {
-    if (filtreStatut && v.statut !== filtreStatut) return false;
+    if (filtreStatut && normalizeStatut(v.statut) !== filtreStatut) return false;
     if (filtreType && v.type !== filtreType) return false;
     return true;
   });
 
-  const disponibles = vehicles.filter((v) => v.statut === "Disponible").length;
-  const enMission   = vehicles.filter((v) => v.statut === "En service").length;
-  const maintenance = vehicles.filter((v) => v.statut === "Maintenance").length;
+  const disponibles = vehicles.filter((v) => isDisponible(v.statut)).length;
+  const enMission   = vehicles.filter((v) => isEnService(v.statut)).length;
+  const maintenance = vehicles.filter((v) => isMaintenance(v.statut)).length;
 
   return (
     <div className="p-7 fade-in">

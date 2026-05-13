@@ -62,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           _buildTournee(),
           const ChatScreen(),
-          const ShiftScreen(),
+          ShiftScreen(user: widget.user),
           ProfileScreen(user: widget.user),
         ],
       ),

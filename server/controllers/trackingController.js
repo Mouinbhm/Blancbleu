@@ -10,7 +10,7 @@ const batchInsert = async (req, res) => {
       return res.status(400).json({ message: "points[] requis et non vide" });
     }
 
-    const shift = await DriverShift.findOne({ driverId: req.personnel._id, status: "ACTIVE" });
+    const shift = await DriverShift.findOne({ personnelId: req.personnel._id, status: "ACTIVE" });
     if (!shift) return res.status(409).json({ message: "Aucun shift actif — impossible d'enregistrer la position" });
 
     const docs = points.map((p) => ({
@@ -29,14 +29,18 @@ const batchInsert = async (req, res) => {
     const last = docs[docs.length - 1];
     const io = req.app.get("io");
     if (io) {
+      const vehicle = await require("../models/Vehicle").findById(shift.vehicleId).select("immatriculation type").lean();
       io.to("role:dispatcher").to("role:admin").to("role:superviseur").emit("driver:location_updated", {
-        driverId:  req.personnel._id,
-        driverNom: `${req.personnel.prenom} ${req.personnel.nom}`,
-        vehicleId: shift.vehicleId,
-        lat:       last.lat,
-        lng:       last.lng,
-        speed:     last.speed,
-        timestamp: last.timestamp,
+        driverId:     req.personnel._id,
+        driverNom:    `${req.personnel.prenom} ${req.personnel.nom}`,
+        vehicleId:    shift.vehicleId,
+        vehiclePlate: vehicle?.immatriculation ?? null,
+        vehicleType:  vehicle?.type ?? null,
+        shiftId:      shift._id,
+        lat:          last.lat,
+        lng:          last.lng,
+        speed:        last.speed,
+        updatedAt:    last.timestamp,
       });
     }
 
@@ -50,8 +54,8 @@ const batchInsert = async (req, res) => {
 const getLive = async (req, res) => {
   try {
     const activeShifts = await DriverShift.find({ status: "ACTIVE" })
-      .populate("driverId",  "nom prenom")
-      .populate("vehicleId", "immatriculation type");
+      .populate("personnelId", "nom prenom")
+      .populate("vehicleId",   "immatriculation type");
 
     const result = await Promise.all(
       activeShifts.map(async (s) => {
@@ -59,12 +63,16 @@ const getLive = async (req, res) => {
           .sort({ timestamp: -1 })
           .select("lat lng speed timestamp");
         return {
-          driverId:   s.driverId?._id,
-          driverNom:  s.driverId ? `${s.driverId.prenom} ${s.driverId.nom}` : "—",
-          vehicleId:  s.vehicleId?._id,
-          immat:      s.vehicleId?.immatriculation,
-          shiftId:    s._id,
-          lastPos:    last || null,
+          driverId:    s.personnelId?._id,
+          driverNom:   s.personnelId ? `${s.personnelId.prenom} ${s.personnelId.nom}` : "—",
+          vehicleId:   s.vehicleId?._id,
+          vehiclePlate: s.vehicleId?.immatriculation,
+          vehicleType:  s.vehicleId?.type,
+          shiftId:     s._id,
+          lat:         last?.lat   ?? null,
+          lng:         last?.lng   ?? null,
+          speed:       last?.speed ?? null,
+          updatedAt:   last?.timestamp ?? null,
         };
       })
     );

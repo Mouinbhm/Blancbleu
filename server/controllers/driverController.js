@@ -25,23 +25,45 @@ const getTournee = async (req, res) => {
 
     if (!shift) return res.json({ date: dateStr, transports: [], shift: null });
 
-    const transports = await Transport.find({
-      shiftId:   shift._id,
-      deletedAt: null,
-    })
-      .select([
-        "numero", "statut", "typeTransport", "motif",
-        "dateTransport", "heureRDV", "heureDepart",
-        "patient", "adresseDepart", "adresseDestination",
-        "notes", "statusHistory",
-        "driverSignedAt", "pmtPhotoUrl",
-        "actualPickupTime", "actualDropoffTime", "estimatedArrival",
-        "prescription",
-      ].join(" "))
+    const SELECT_FIELDS = [
+      "numero", "statut", "typeTransport", "motif",
+      "dateTransport", "heureRDV", "heureDepart",
+      "patient", "adresseDepart", "adresseDestination",
+      "notes", "statusHistory",
+      "driverSignedAt", "pmtPhotoUrl",
+      "actualPickupTime", "actualDropoffTime", "estimatedArrival",
+      "prescription",
+    ].join(" ");
+
+    let transports = await Transport.find({ shiftId: shift._id, deletedAt: null })
+      .select(SELECT_FIELDS)
       .populate("vehicule", "immatriculation type")
       .sort({ heureRDV: 1 });
 
-    return res.json({ date: dateStr, transports, shift: { _id: shift._id, vehicleId: shift.vehicleId } });
+    // Fallback: if no transports found by shiftId, search by vehicle and auto-link
+    if (transports.length === 0 && shift.vehicleId) {
+      const legacy = await Transport.find({
+        vehicule:  shift.vehicleId,
+        shiftId:   null,
+        deletedAt: null,
+        statut:    { $nin: ["CANCELLED", "COMPLETED", "BILLED", "NO_SHOW"] },
+      })
+        .select(SELECT_FIELDS)
+        .populate("vehicule", "immatriculation type")
+        .sort({ heureRDV: 1 });
+
+      if (legacy.length > 0) {
+        await Transport.updateMany(
+          { vehicule: shift.vehicleId, shiftId: null, deletedAt: null },
+          { $set: { shiftId: shift._id, chauffeur: shift.personnelId } }
+        );
+        transports = legacy;
+      }
+    }
+
+    const shiftObj = shift.toObject ? shift.toObject() : shift;
+    shiftObj.transportCount = transports.length;
+    return res.json({ date: dateStr, transports, shift: shiftObj });
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
@@ -201,4 +223,21 @@ const sosSend = async (req, res) => {
   }
 };
 
-module.exports = { getTournee, updateStatus, saveSignature, uploadPmtPhoto, sosSend };
+// ════════════════════════════════════════════════════════════════════════════
+// GET /api/v1/driver/vehicles  — véhicules disponibles pour démarrer un shift
+// ════════════════════════════════════════════════════════════════════════════
+const Vehicle = require("../models/Vehicle");
+
+const getAvailableVehicles = async (req, res) => {
+  try {
+    const vehicles = await Vehicle.find({
+      statut:    "Disponible",
+      deletedAt: null,
+    }).select("nom immatriculation type marque modele carburant");
+    return res.json({ vehicles });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { getTournee, updateStatus, saveSignature, uploadPmtPhoto, sosSend, getAvailableVehicles };

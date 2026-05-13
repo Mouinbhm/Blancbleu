@@ -16,9 +16,14 @@ class _SignatureScreenState extends State<SignatureScreen> {
   final _driverCtrl  = SignatureController(penStrokeWidth: 3, penColor: Colors.black);
   bool _saving = false;
 
+  // Export at fixed 800×240 px — enough detail for a legal signature,
+  // caps the base64 payload to ~150 KB regardless of device DPI.
+  static const _sigW = 800;
+  static const _sigH = 240;
+
   Future<void> _save() async {
-    final patBytes = await _patientCtrl.toPngBytes();
-    final drvBytes = await _driverCtrl.toPngBytes();
+    final patBytes = await _patientCtrl.toPngBytes(width: _sigW, height: _sigH);
+    final drvBytes = await _driverCtrl.toPngBytes(width: _sigW, height: _sigH);
     if (patBytes == null && drvBytes == null) return;
 
     setState(() => _saving = true);

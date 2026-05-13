@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
+import '../network/api_client.dart';
 import '../storage/local_database.dart';
 
 class LocationService {
@@ -54,6 +55,7 @@ class LocationService {
     if (_activeShiftId == null) return;
     final pos = await getCurrentPosition();
     if (pos == null) return;
+
     await LocalDatabase.instance.queueTrackingPoint(
       lat:         pos.latitude,
       lng:         pos.longitude,
@@ -62,5 +64,18 @@ class LocationService {
       shiftId:     _activeShiftId,
       transportId: _activeTransportId,
     );
+
+    // Send immediately so the live map updates in real time.
+    // The SQLite queue above is the offline fallback if this call fails.
+    try {
+      await ApiClient.instance.batchTracking([{
+        'lat':         pos.latitude,
+        'lng':         pos.longitude,
+        'speed':       pos.speed,
+        'accuracy':    pos.accuracy,
+        if (_activeTransportId != null) 'transportId': _activeTransportId,
+        'timestamp':   DateTime.now().toIso8601String(),
+      }]);
+    } catch (_) {}
   }
 }

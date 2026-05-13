@@ -177,20 +177,36 @@ const getTodayShifts = async (req, res) => {
   }
 };
 
-// GET /api/v1/shifts?date=YYYY-MM-DD  (dispatcher — history view)
+// GET /api/v1/shifts?date=YYYY-MM-DD&status=ACTIVE&page=1&limit=20
 const listShifts = async (req, res) => {
   try {
-    const dateStr = req.query.date || new Date().toISOString().split("T")[0];
-    const from = new Date(dateStr);
-    const to   = new Date(dateStr);
-    to.setDate(to.getDate() + 1);
+    const page  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
 
-    const shifts = await DriverShift.find({ startTime: { $gte: from, $lt: to } })
-      .populate("personnelId", "nom prenom")
-      .populate("vehicleId",  "immatriculation type")
-      .sort({ startTime: 1 });
+    const filter = {};
 
-    return res.json({ date: dateStr, shifts });
+    if (req.query.status && req.query.status !== "ALL") {
+      filter.status = req.query.status;
+    }
+
+    if (req.query.date) {
+      const from = new Date(req.query.date);
+      const to   = new Date(req.query.date);
+      to.setDate(to.getDate() + 1);
+      filter.startTime = { $gte: from, $lt: to };
+    }
+
+    const [shifts, total] = await Promise.all([
+      DriverShift.find(filter)
+        .populate("personnelId", "nom prenom")
+        .populate("vehicleId",  "immatriculation type")
+        .sort({ startTime: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      DriverShift.countDocuments(filter),
+    ]);
+
+    return res.json({ shifts, total, page, limit });
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }

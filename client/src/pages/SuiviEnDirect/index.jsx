@@ -66,7 +66,12 @@ export default function SuiviEnDirect() {
       try {
         const { data } = await api.get("/v1/tracking/live");
         const map = {};
-        (data.drivers || []).forEach((d) => { map[d.driverId] = d; });
+        (data.drivers || []).forEach((d) => {
+          map[d.driverId] = {
+            ...d,
+            driverName: d.driverNom || d.driverName,
+          };
+        });
         setDrivers(map);
       } catch { /* silencieux */ }
     };
@@ -75,12 +80,16 @@ export default function SuiviEnDirect() {
     return () => clearInterval(iv);
   }, []);
 
-  // Écoute Socket.IO : driver:location
+  // Écoute Socket.IO : driver:location_updated
   useEffect(() => {
-    const unsub = subscribe("driver:location", (data) => {
+    const unsub = subscribe("driver:location_updated", (data) => {
       setDrivers((prev) => ({
         ...prev,
-        [data.driverId]: { ...prev[data.driverId], ...data },
+        [data.driverId]: {
+          ...prev[data.driverId],
+          ...data,
+          driverName: data.driverNom || data.driverName || prev[data.driverId]?.driverName,
+        },
       }));
     });
     return unsub;
@@ -148,7 +157,7 @@ export default function SuiviEnDirect() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold text-navy truncate">
-                        {d.driverName || d.driverId}
+                        {d.driverName || d.driverNom || d.driverId}
                       </p>
                       <p className="text-xs mt-0.5 truncate" style={{ color }}>
                         {STATUS_LABELS[d.status] || d.status}
@@ -213,7 +222,7 @@ export default function SuiviEnDirect() {
             >
               <Popup>
                 <div className="text-xs">
-                  <p className="font-bold text-navy">{d.driverName || d.driverId}</p>
+                  <p className="font-bold text-navy">{d.driverName || d.driverNom || d.driverId}</p>
                   <p className="text-slate-500 mt-0.5">{STATUS_LABELS[d.status] || d.status}</p>
                   {d.transportRef && <p className="text-slate-400 mt-0.5">{d.transportRef}</p>}
                   {d.updatedAt && (

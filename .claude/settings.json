@@ -100,7 +100,8 @@
       "Read(//c/Users/MSI/AppData/Roaming/Flutter/**)",
       "Read(//c/Users/MSI/**)",
       "Bash(cp \"/c/Program Files/Eclipse Adoptium/jdk-21.0.5.11-hotspot/bin/java.exe\" \"/c/Program Files/Android/Android Studio/jbr/bin/java.exe\" && echo \"copied\" || echo \"copy failed\")",
-      "Bash(xargs grep -l \"BrowserRouter\\\\|createBrowserRouter\\\\|Routes\")"
+      "Bash(xargs grep -l \"BrowserRouter\\\\|createBrowserRouter\\\\|Routes\")",
+      "Bash(node fix-transport.js)"
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory",
