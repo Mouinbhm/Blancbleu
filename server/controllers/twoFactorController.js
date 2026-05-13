@@ -1,21 +1,47 @@
-const crypto = require("crypto");
-const jwt = require("jsonwebtoken");
-const speakeasy = require("speakeasy");
-const QRCode = require("qrcode");
-const User = require("../models/User");
-const RefreshToken = require("../models/RefreshToken");
+/**
+ * BlancBleu — Contrôleur 2FA (TOTP)
+ *
+ * Endpoints :
+ *  GET  /api/auth/2fa/status              — statut 2FA (public, requires protect)
+ *  POST /api/auth/2fa/setup               — génère secret + QR code
+ *  POST /api/auth/2fa/verify-setup        — confirme et active la 2FA
+ *  POST /api/auth/2fa/verify-login        — valide le 2e facteur après login
+ *  POST /api/auth/2fa/disable             — désactive (mot de passe + code TOTP)
+ *  POST /api/auth/2fa/regenerate-backup-codes — régénère les backup codes
+ *
+ * Sécurité :
+ *  - Secret TOTP chiffré AES-256-GCM (via twoFactorService)
+ *  - Backup codes hashés bcrypt, utilisables une seule fois
+ *  - tempToken JWT court (5 min) pour le flux login → 2FA
+ *  - Audit log sur chaque action sensible
+ *  - Aucun secret brut dans les réponses après activation
+ */
 
-const TWO_FACTOR_ROLES = ["admin", "dispatcher", "superviseur"];
+const crypto   = require("crypto");
+const jwt      = require("jsonwebtoken");
+const bcrypt   = require("bcryptjs");
+const QRCode   = require("qrcode");
+const User     = require("../models/User");
+const RefreshToken = require("../models/RefreshToken");
+const tfa      = require("../services/twoFactorService");
+const { log }  = require("../services/auditService");
+
+// Rôles pour lesquels la 2FA est disponible (optionnelle ou obligatoire)
+const TWO_FACTOR_ELIGIBLE_ROLES = ["admin", "superviseur", "dispatcher"];
+
+// Rôles pour lesquels la 2FA est OBLIGATOIRE
+const TWO_FACTOR_REQUIRED_ROLES = ["admin"];
 
 const safeMsg = (err) =>
   process.env.NODE_ENV === "production" ? "Erreur interne du serveur" : err.message;
 
-// ── Shared token helpers (mirror authController — extracted here to avoid circular dep) ──
+// ── Helpers partagés ─────────────────────────────────────────────────────────
+
 const generateAccessToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "15m" });
 
 const issueRefreshToken = async (userId, res, req) => {
-  const raw = crypto.randomBytes(40).toString("hex");
+  const raw  = crypto.randomBytes(40).toString("hex");
   const hash = RefreshToken.hashToken(raw);
   await RefreshToken.create({
     userId,
@@ -25,54 +51,69 @@ const issueRefreshToken = async (userId, res, req) => {
   });
   res.cookie("bb_refresh", raw, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure:   process.env.NODE_ENV === "production",
     sameSite: "strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: "/api/auth",
+    maxAge:   7 * 24 * 60 * 60 * 1000,
+    path:     "/api/auth",
   });
 };
 
 const buildUserPayload = (user) => ({
-  id: user._id,
-  nom: user.nom,
-  prenom: user.prenom,
-  email: user.email,
-  role: user.role,
+  id:                user._id,
+  nom:               user.nom,
+  prenom:            user.prenom,
+  email:             user.email,
+  role:              user.role,
   mustChangePassword: user.mustChangePassword ?? false,
+  twoFactorEnabled:  user.twoFactorEnabled,
+  twoFactorSetupCompleted: user.twoFactorSetupCompleted,
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// @desc    Générer un secret TOTP + QR code (étape 1 de la configuration)
-// @route   POST /api/auth/2fa/setup
-// @access  Privé — admin, dispatcher, superviseur
+// GET /api/auth/2fa/status
+// Retourne uniquement les indicateurs publics 2FA de l'utilisateur connecté.
+// ─────────────────────────────────────────────────────────────────────────────
+const getStatus = async (req, res) => {
+  try {
+    res.json({
+      twoFactorEnabled:        req.user.twoFactorEnabled        ?? false,
+      twoFactorRequired:       req.user.twoFactorRequired       ?? false,
+      twoFactorSetupCompleted: req.user.twoFactorSetupCompleted ?? false,
+    });
+  } catch (err) {
+    res.status(500).json({ message: safeMsg(err) });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/auth/2fa/setup
+// Étape 1 : génère un secret TOTP temporaire + QR code.
+// Le secret est stocké dans twoFactorTempSecret (chiffré).
 // ─────────────────────────────────────────────────────────────────────────────
 const setup2FA = async (req, res) => {
   try {
-    if (!TWO_FACTOR_ROLES.includes(req.user.role)) {
+    if (!TWO_FACTOR_ELIGIBLE_ROLES.includes(req.user.role)) {
       return res.status(403).json({
-        message: "2FA disponible uniquement pour admin, dispatcher et superviseur",
+        message: "La double authentification est réservée aux administrateurs, superviseurs et dispatchers.",
       });
     }
 
-    const secret = speakeasy.generateSecret({
-      name: `BlancBleu (${req.user.email})`,
-      issuer: "Ambulances Blanc Bleu",
-      length: 32,
-    });
+    const { base32, otpauthUrl } = tfa.generateTotpSecret(req.user.email);
 
-    // Persist secret (not yet active — pending confirmation)
+    const encrypted = tfa.encryptSecret(base32);
+
+    // Stocke le secret temporaire (pas encore activé)
     await User.findByIdAndUpdate(req.user._id, {
-      twoFactorSecret: secret.base32,
-      twoFactorEnabled: false,
+      twoFactorTempSecret: encrypted,
     });
 
-    const qrDataUrl = await QRCode.toDataURL(secret.otpauth_url);
+    const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
 
+    // Retourne QR code + clé manuelle (sans le secret chiffré ni l'URL brute)
     res.json({
-      secret: secret.base32,
-      qrCode: qrDataUrl,
-      message:
-        "Scannez le QR code avec Google Authenticator ou Authy, puis confirmez avec votre code à 6 chiffres.",
+      qrCodeDataUrl,
+      manualKey: base32, // clé manuelle pour les apps sans scanner
+      message: "Scannez le QR code ou saisissez la clé manuelle dans Google Authenticator / Authy, puis confirmez avec votre code à 6 chiffres.",
     });
   } catch (err) {
     res.status(500).json({ message: safeMsg(err) });
@@ -80,125 +121,190 @@ const setup2FA = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// @desc    Confirmer le code TOTP et activer le 2FA (étape 2)
-// @route   POST /api/auth/2fa/confirm
-// @access  Privé
+// POST /api/auth/2fa/verify-setup
+// Étape 2 : vérifie le code TOTP, active la 2FA, génère les backup codes.
 // ─────────────────────────────────────────────────────────────────────────────
-const confirm2FA = async (req, res) => {
+const verifySetup = async (req, res) => {
   try {
     const { code } = req.body;
     if (!code) {
-      return res.status(400).json({ message: "Code TOTP à 6 chiffres requis" });
+      return res.status(400).json({ message: "Code à 6 chiffres requis" });
     }
 
-    const user = await User.findById(req.user._id).select("+twoFactorSecret");
-    if (!user?.twoFactorSecret) {
+    const user = await User.findById(req.user._id).select("+twoFactorTempSecret +twoFactorBackupCodes");
+    if (!user?.twoFactorTempSecret) {
       return res.status(400).json({
-        message: "Configurez d'abord le 2FA via POST /api/auth/2fa/setup",
+        message: "Commencez d'abord la configuration via POST /api/auth/2fa/setup",
       });
     }
 
-    const valid = speakeasy.totp.verify({
-      secret: user.twoFactorSecret,
-      encoding: "base32",
-      token: String(code),
-      window: 1, // ±30 s pour compenser les décalages horaires
-    });
-
+    const valid = tfa.verifyTotp(user.twoFactorTempSecret, code);
     if (!valid) {
-      return res.status(401).json({ message: "Code TOTP incorrect ou expiré" });
+      return res.status(401).json({ message: "Code invalide ou expiré" });
     }
 
-    await User.findByIdAndUpdate(user._id, { twoFactorEnabled: true });
+    const { plain, hashed } = await tfa.generateBackupCodes();
 
-    res.json({ message: "Double authentification activée avec succès" });
+    // Active la 2FA : déplace temp → actif, efface temp, stocke backup codes hashés
+    await User.findByIdAndUpdate(user._id, {
+      twoFactorSecret:         user.twoFactorTempSecret,
+      twoFactorTempSecret:     null,
+      twoFactorEnabled:        true,
+      twoFactorSetupCompleted: true,
+      twoFactorRequired:       false,
+      twoFactorVerifiedAt:     new Date(),
+      twoFactorBackupCodes:    hashed,
+    });
+
+    await log({
+      action:     "2FA_ACTIVATED",
+      origine:    "HUMAIN",
+      utilisateur: req.user,
+      ressource:  { type: "User", id: req.user._id, reference: req.user.email },
+      details:    { message: "Double authentification activée" },
+    });
+
+    res.json({
+      message:     "Double authentification activée avec succès.",
+      backupCodes: plain, // retournés UNE SEULE FOIS
+      warning:     "Conservez ces codes de secours en lieu sûr. Ils ne seront plus affichés.",
+    });
   } catch (err) {
     res.status(500).json({ message: safeMsg(err) });
   }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// @desc    Vérifier le TOTP après la saisie du mot de passe (2e facteur login)
-// @route   POST /api/auth/2fa/verify
-// @access  Public — nécessite un tempToken émis par /auth/login
+// POST /api/auth/2fa/verify-login
+// Vérifie le code TOTP ou un backup code après le premier facteur (login).
+// Émet les cookies définitifs si valide.
 // ─────────────────────────────────────────────────────────────────────────────
-const verify2FA = async (req, res) => {
+const verifyLogin = async (req, res) => {
   try {
     const { tempToken, code } = req.body;
     if (!tempToken || !code) {
-      return res.status(400).json({ message: "tempToken et code TOTP requis" });
+      return res.status(400).json({ message: "tempToken et code requis" });
     }
 
+    // Vérifier le tempToken
     let payload;
     try {
       payload = jwt.verify(tempToken, process.env.JWT_SECRET);
     } catch {
-      return res
-        .status(401)
-        .json({ message: "Session expirée — recommencez la connexion" });
+      return res.status(401).json({ message: "Session expirée — recommencez la connexion" });
     }
 
     if (!payload.requires2FA) {
-      return res
-        .status(400)
-        .json({ message: "Token invalide pour la vérification 2FA" });
+      return res.status(400).json({ message: "Token invalide pour la vérification 2FA" });
     }
 
-    const user = await User.findById(payload.id).select("+twoFactorSecret");
+    const user = await User.findById(payload.id).select(
+      "+twoFactorSecret +twoFactorBackupCodes"
+    );
     if (!user || !user.actif) {
-      return res.status(401).json({ message: "Compte introuvable ou désactivé" });
+      return res.status(401).json({ message: "Code invalide ou expiré" });
     }
 
-    const valid = speakeasy.totp.verify({
-      secret: user.twoFactorSecret,
-      encoding: "base32",
-      token: String(code),
-      window: 1,
-    });
+    // 1. Essayer code TOTP
+    let method = "totp";
+    let valid   = false;
+
+    if (user.twoFactorSecret) {
+      valid = tfa.verifyTotp(user.twoFactorSecret, code);
+    }
+
+    // 2. Si TOTP invalide → essayer backup code
+    if (!valid && user.twoFactorBackupCodes?.length) {
+      const idx = await tfa.verifyAndConsumeBackupCode(code, user.twoFactorBackupCodes);
+      if (idx >= 0) {
+        // Consommer le backup code (le remplacer par null)
+        const updated = [...user.twoFactorBackupCodes];
+        updated[idx] = null;
+        await User.findByIdAndUpdate(user._id, { twoFactorBackupCodes: updated });
+        valid  = true;
+        method = "backup_code";
+      }
+    }
 
     if (!valid) {
-      return res.status(401).json({ message: "Code TOTP incorrect ou expiré" });
+      return res.status(401).json({ message: "Code invalide ou expiré" });
     }
 
+    // Mettre à jour la date de vérification
+    await User.findByIdAndUpdate(user._id, { twoFactorVerifiedAt: new Date() });
+
+    // Émettre les tokens définitifs
     const accessToken = generateAccessToken(user._id);
     await issueRefreshToken(user._id, res, req);
     res.cookie("bb_access", accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure:   process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 15 * 60 * 1000,
-      path: "/api",
+      maxAge:   15 * 60 * 1000,
+      path:     "/api",
     });
 
-    res.json({ message: "Connexion réussie", user: buildUserPayload(user) });
+    await log({
+      action:     "2FA_LOGIN",
+      origine:    "HUMAIN",
+      utilisateur: user,
+      ressource:  { type: "User", id: user._id, reference: user.email },
+      details:    { message: `Connexion 2FA réussie via ${method}`, method },
+    });
+
+    res.json({
+      message: "Connexion réussie",
+      user:    buildUserPayload(user),
+    });
   } catch (err) {
     res.status(500).json({ message: safeMsg(err) });
   }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// @desc    Désactiver le 2FA (confirmation par mot de passe requise)
-// @route   DELETE /api/auth/2fa
-// @access  Privé
+// POST /api/auth/2fa/disable
+// Désactive la 2FA — exige mot de passe ET code TOTP.
 // ─────────────────────────────────────────────────────────────────────────────
 const disable2FA = async (req, res) => {
   try {
-    const { password } = req.body;
-    if (!password) {
-      return res
-        .status(400)
-        .json({ message: "Mot de passe requis pour désactiver le 2FA" });
+    const { password, code } = req.body;
+    if (!password || !code) {
+      return res.status(400).json({ message: "Mot de passe et code TOTP requis" });
     }
 
-    const user = await User.findById(req.user._id).select("+password");
-    const valid = await user.comparePassword(password);
-    if (!valid) {
+    const user = await User.findById(req.user._id).select("+password +twoFactorSecret");
+    if (!user) return res.status(404).json({ message: "Utilisateur introuvable" });
+
+    // Vérifier le mot de passe
+    const pwdValid = await user.comparePassword(password);
+    if (!pwdValid) {
       return res.status(401).json({ message: "Mot de passe incorrect" });
     }
 
+    // Vérifier le code TOTP (ou backup code)
+    let valid = false;
+    if (user.twoFactorSecret) {
+      valid = tfa.verifyTotp(user.twoFactorSecret, code);
+    }
+    if (!valid) {
+      return res.status(401).json({ message: "Code invalide ou expiré" });
+    }
+
     await User.findByIdAndUpdate(user._id, {
-      twoFactorEnabled: false,
-      twoFactorSecret: null,
+      twoFactorEnabled:        false,
+      twoFactorSecret:         null,
+      twoFactorTempSecret:     null,
+      twoFactorBackupCodes:    [],
+      twoFactorSetupCompleted: false,
+      twoFactorVerifiedAt:     null,
+    });
+
+    await log({
+      action:     "2FA_DISABLED",
+      origine:    "HUMAIN",
+      utilisateur: req.user,
+      ressource:  { type: "User", id: req.user._id, reference: req.user.email },
+      details:    { message: "Double authentification désactivée" },
     });
 
     res.json({ message: "Double authentification désactivée" });
@@ -207,4 +313,61 @@ const disable2FA = async (req, res) => {
   }
 };
 
-module.exports = { setup2FA, confirm2FA, verify2FA, disable2FA };
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/auth/2fa/regenerate-backup-codes
+// Régénère les backup codes — exige un code TOTP valide.
+// ─────────────────────────────────────────────────────────────────────────────
+const regenerateBackupCodes = async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ message: "Code TOTP requis" });
+    }
+
+    const user = await User.findById(req.user._id).select("+twoFactorSecret");
+    if (!user?.twoFactorEnabled || !user.twoFactorSecret) {
+      return res.status(400).json({ message: "La 2FA n'est pas activée sur ce compte" });
+    }
+
+    const valid = tfa.verifyTotp(user.twoFactorSecret, code);
+    if (!valid) {
+      return res.status(401).json({ message: "Code invalide ou expiré" });
+    }
+
+    const { plain, hashed } = await tfa.generateBackupCodes();
+    await User.findByIdAndUpdate(user._id, { twoFactorBackupCodes: hashed });
+
+    await log({
+      action:     "2FA_BACKUP_REGENERATED",
+      origine:    "HUMAIN",
+      utilisateur: req.user,
+      ressource:  { type: "User", id: req.user._id, reference: req.user.email },
+      details:    { message: "Codes de secours 2FA régénérés" },
+    });
+
+    res.json({
+      message:     "Codes de secours régénérés avec succès.",
+      backupCodes: plain,
+      warning:     "Les anciens codes de secours sont désormais invalides. Conservez ces nouveaux codes en lieu sûr.",
+    });
+  } catch (err) {
+    res.status(500).json({ message: safeMsg(err) });
+  }
+};
+
+// ── Exports legacy (compatibilité routes existantes) ──────────────────────────
+// setup2FA  → POST /api/auth/2fa/setup
+// confirm2FA → POST /api/auth/2fa/verify-setup  (renommé verify-setup)
+// verify2FA  → POST /api/auth/2fa/verify-login  (renommé verify-login)
+
+module.exports = {
+  getStatus,
+  setup2FA,
+  verifySetup,
+  verifyLogin,
+  disable2FA,
+  regenerateBackupCodes,
+  // Alias backward-compat (utilisés dans les anciennes routes /2fa/confirm et /2fa/verify)
+  confirm2FA: verifySetup,
+  verify2FA:  verifyLogin,
+};

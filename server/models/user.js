@@ -22,8 +22,19 @@ const userSchema = new mongoose.Schema(
     mustChangePassword: { type: Boolean, default: false },
 
     // ── 2FA (TOTP) ────────────────────────────────────────────────────────────
-    twoFactorSecret: { type: String, select: false },
-    twoFactorEnabled: { type: Boolean, default: false },
+    // Secret actif — chiffré AES-256-GCM, jamais retourné en API
+    twoFactorSecret:         { type: String, select: false },
+    twoFactorEnabled:        { type: Boolean, default: false },
+    // Secret temporaire pendant la phase de configuration (avant confirm)
+    twoFactorTempSecret:     { type: String, select: false },
+    // Backup codes hashés (bcrypt) — null après utilisation
+    twoFactorBackupCodes:    { type: [String], select: false, default: undefined },
+    // Date de la dernière vérification 2FA réussie
+    twoFactorVerifiedAt:     { type: Date, default: null },
+    // true = l'admin DOIT configurer la 2FA à la prochaine connexion
+    twoFactorRequired:       { type: Boolean, default: false },
+    // true = setup terminé (QR scanné + code confirmé)
+    twoFactorSetupCompleted: { type: Boolean, default: false },
 
     // ── Champs patient ────────────────────────────────────────────────────────
     telephone:      { type: String, default: "" },

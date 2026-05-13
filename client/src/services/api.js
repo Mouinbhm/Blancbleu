@@ -78,6 +78,18 @@ export const authService = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
+// 2FA (TOTP)
+// ════════════════════════════════════════════════════════════════════════════
+export const twoFactorService = {
+  getStatus:             ()           => api.get("/auth/2fa/status"),
+  setup:                 ()           => api.post("/auth/2fa/setup"),
+  verifySetup:           (code)       => api.post("/auth/2fa/verify-setup",            { code }),
+  verifyLogin:           (tempToken, code) => api.post("/auth/2fa/verify-login",       { tempToken, code }),
+  disable:               (password, code) => api.post("/auth/2fa/disable",             { password, code }),
+  regenerateBackupCodes: (code)       => api.post("/auth/2fa/regenerate-backup-codes", { code }),
+};
+
+// ════════════════════════════════════════════════════════════════════════════
 // TRANSPORTS (remplace interventions)
 // ════════════════════════════════════════════════════════════════════════════
 export const transportService = {

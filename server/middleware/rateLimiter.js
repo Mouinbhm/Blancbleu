@@ -50,4 +50,15 @@ const globalLimiter = rateLimit({
   skip: (req) => req.path === "/api/health",
 });
 
-module.exports = { authLimiter, registerLimiter, aiLimiter, globalLimiter };
+// ─── 5. 2FA : vérification de codes TOTP ─────────────────────────────────────
+// 5 tentatives / 5 minutes — protection contre le brute force des codes TOTP
+const twoFaLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler,
+  skipSuccessfulRequests: true,
+});
+
+module.exports = { authLimiter, registerLimiter, aiLimiter, globalLimiter, twoFaLimiter };

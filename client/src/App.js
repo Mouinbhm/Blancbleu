@@ -7,6 +7,8 @@ import Layout from "./components/layout/Layout";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import TwoFactorSetup from "./pages/TwoFactorSetup";
+import TwoFactorVerify from "./pages/TwoFactorVerify";
 import Dashboard from "./pages/Dashboard";
 import Transports from "./pages/Transports";
 import NouveauTransport from "./pages/NouveauTransport";
@@ -35,6 +37,8 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/force-change-password" element={<ForceChangePassword />} />
+          <Route path="/2fa/setup" element={<TwoFactorSetup />} />
+          <Route path="/2fa/verify" element={<TwoFactorVerify />} />
 
           {/* Privées sous Layout */}
           <Route

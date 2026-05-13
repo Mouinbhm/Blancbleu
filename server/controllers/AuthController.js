@@ -41,7 +41,10 @@ const userPayload = (user) => ({
   prenom: user.prenom,
   email: user.email,
   role: user.role,
-  mustChangePassword: user.mustChangePassword ?? false,
+  mustChangePassword:      user.mustChangePassword      ?? false,
+  twoFactorEnabled:        user.twoFactorEnabled        ?? false,
+  twoFactorRequired:       user.twoFactorRequired       ?? false,
+  twoFactorSetupCompleted: user.twoFactorSetupCompleted ?? false,
 });
 
 // Crée, persiste et pose le cookie refresh token
@@ -126,7 +129,7 @@ const login = async (req, res) => {
     }
 
     const user = await User.findOne({ email: email.toLowerCase() }).select(
-      "+password +twoFactorEnabled",
+      "+password +twoFactorEnabled +twoFactorRequired +twoFactorSetupCompleted",
     );
     if (!user) {
       // Délai constant pour éviter le timing attack
@@ -150,7 +153,17 @@ const login = async (req, res) => {
         .json({ message: "Email ou mot de passe incorrect" });
     }
 
-    // 2FA required — issue a short-lived temp token instead of full session
+    // Admin with 2FA mandatory but not yet set up → guide to setup
+    if (user.role === "admin" && user.twoFactorRequired && !user.twoFactorSetupCompleted) {
+      const tempToken = jwt.sign(
+        { id: user._id, requires2FASetup: true },
+        process.env.JWT_SECRET,
+        { expiresIn: "5m" },
+      );
+      return res.json({ requiresTwoFactorSetup: true, tempToken });
+    }
+
+    // 2FA already active — issue a short-lived temp token instead of full session
     if (user.twoFactorEnabled) {
       const tempToken = jwt.sign(
         { id: user._id, requires2FA: true },

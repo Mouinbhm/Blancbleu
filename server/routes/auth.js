@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { protect, authorize } = require("../middleware/auth");
-const { authLimiter, registerLimiter } = require("../middleware/rateLimiter");
+const { authLimiter, registerLimiter, twoFaLimiter } = require("../middleware/rateLimiter");
 const {
   register,
   login,
@@ -22,10 +22,14 @@ const {
   resetPassword,
 } = require("../controllers/passwordController");
 const {
+  getStatus,
   setup2FA,
+  verifySetup,
+  verifyLogin,
+  disable2FA,
+  regenerateBackupCodes,
   confirm2FA,
   verify2FA,
-  disable2FA,
 } = require("../controllers/twoFactorController");
 
 // ─── Routes publiques avec rate limiting ──────────────────────────────────────
@@ -46,9 +50,15 @@ router.patch("/profile", protect, updateProfile);
 router.post("/logout-all", protect, logoutAll);
 
 // ─── 2FA (TOTP) ───────────────────────────────────────────────────────────────
-router.post("/2fa/verify", verify2FA);
+router.get("/2fa/status", protect, getStatus);
 router.post("/2fa/setup", protect, authorize("admin", "dispatcher", "superviseur"), setup2FA);
-router.post("/2fa/confirm", protect, confirm2FA);
+router.post("/2fa/verify-setup", protect, twoFaLimiter, verifySetup);
+router.post("/2fa/verify-login", twoFaLimiter, verifyLogin);
+router.post("/2fa/disable", protect, disable2FA);
+router.post("/2fa/regenerate-backup-codes", protect, twoFaLimiter, regenerateBackupCodes);
+// Legacy routes — backward compat
+router.post("/2fa/verify", twoFaLimiter, verify2FA);
+router.post("/2fa/confirm", protect, twoFaLimiter, confirm2FA);
 router.delete("/2fa", protect, disable2FA);
 
 // ─── Admin : création de compte ───────────────────────────────────────────────
