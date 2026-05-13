@@ -9,10 +9,16 @@ const TYPE_CFG = {
 };
 
 const STATUT_CFG = {
-  disponible:   { label: "Disponible",   dot: "bg-green-500",  badge: "bg-green-100 text-green-700"   },
-  en_mission:   { label: "En mission",   dot: "bg-orange-500", badge: "bg-orange-100 text-orange-700" },
-  maintenance:  { label: "Maintenance",  dot: "bg-yellow-500", badge: "bg-yellow-100 text-yellow-700" },
-  hors_service: { label: "Hors service", dot: "bg-red-500",    badge: "bg-red-100 text-red-700"       },
+  // Valeurs canoniques françaises (post-migration)
+  "Disponible":   { label: "Disponible",   dot: "bg-green-500",  badge: "bg-green-100 text-green-700"   },
+  "En service":   { label: "En service",   dot: "bg-orange-500", badge: "bg-orange-100 text-orange-700" },
+  "Maintenance":  { label: "Maintenance",  dot: "bg-yellow-500", badge: "bg-yellow-100 text-yellow-700" },
+  "Hors service": { label: "Hors service", dot: "bg-red-500",    badge: "bg-red-100 text-red-700"       },
+  // Valeurs legacy lowercase (fallback)
+  "disponible":   { label: "Disponible",   dot: "bg-green-500",  badge: "bg-green-100 text-green-700"   },
+  "en_mission":   { label: "En service",   dot: "bg-orange-500", badge: "bg-orange-100 text-orange-700" },
+  "maintenance":  { label: "Maintenance",  dot: "bg-yellow-500", badge: "bg-yellow-100 text-yellow-700" },
+  "hors_service": { label: "Hors service", dot: "bg-red-500",    badge: "bg-red-100 text-red-700"       },
 };
 
 const ENERGIES = ["Diesel", "Essence", "Hybride", "Electrique", "GPL", "Hydrogène"];
@@ -92,7 +98,7 @@ function initForm(v) {
       placesFauteuil: v.capacite?.placesFauteuil ?? 0,
       placesBrancard: v.capacite?.placesBrancard ?? 0,
     },
-    statut: v.statut || "disponible",
+    statut: v.statut || "Disponible",
     notes:  v.notes  || "",
   };
 }
@@ -570,9 +576,9 @@ export default function VehicleDetailPanel({ vehicle, onClose, onUpdate }) {
               <PanelSection title="Statut" icon="toggle_on">
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { v: "disponible",   label: "Disponible",   cls: "border-green-300 bg-green-50 text-green-700"    },
-                    { v: "maintenance",  label: "Maintenance",  cls: "border-yellow-300 bg-yellow-50 text-yellow-700" },
-                    { v: "hors_service", label: "Hors service", cls: "border-red-300 bg-red-50 text-red-700"          },
+                    { v: "Disponible",   label: "Disponible",   cls: "border-green-300 bg-green-50 text-green-700"    },
+                    { v: "Maintenance",  label: "Maintenance",  cls: "border-yellow-300 bg-yellow-50 text-yellow-700" },
+                    { v: "Hors service", label: "Hors service", cls: "border-red-300 bg-red-50 text-red-700"          },
                   ].map((s) => (
                     <label key={s.v}
                       className={`py-2.5 rounded-xl border-2 text-xs font-semibold text-center cursor-pointer transition-all ${
