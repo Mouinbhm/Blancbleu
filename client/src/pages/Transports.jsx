@@ -105,9 +105,11 @@ export default function Transports() {
   useEffect(() => { loadData(); loadPending(); }, [loadData, loadPending]);
 
   useEffect(() => {
-    const u1 = subscribe("transport:statut",        () => { loadData(); loadPending(); });
-    const u2 = subscribe("transport:statut_change", () => { loadData(); loadPending(); });
-    return () => { u1(); u2(); };
+    const reload = () => { loadData(); loadPending(); };
+    const u1 = subscribe("transport:statut",         reload);
+    const u2 = subscribe("transport:statut_change",  reload);
+    const u3 = subscribe("transport:status_updated", reload); // emitted by driver app
+    return () => { u1(); u2(); u3(); };
   }, [subscribe, loadData, loadPending]);
 
   // Nouveau transport créé depuis l'app mobile → recharger + alerte demandes

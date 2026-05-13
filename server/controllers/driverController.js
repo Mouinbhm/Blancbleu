@@ -1,5 +1,6 @@
 const Transport   = require("../models/Transport");
 const DriverShift = require("../models/DriverShift");
+const User        = require("../models/User");
 const multer      = require("multer");
 const path       = require("path");
 const fs         = require("fs");
@@ -117,14 +118,43 @@ const updateStatus = async (req, res) => {
 
     const io = req.app.get("io");
     if (io) {
-      io.to("role:dispatcher").to("role:admin").to("role:superviseur").emit("transport:status_updated", {
+      const payload = {
         transportId: transport._id,
         numero:      transport.numero,
         status,
         driverId:    personnel._id,
         driverNom:   `${personnel.prenom} ${personnel.nom}`,
         timestamp:   ts,
-      });
+      };
+      io.to("role:dispatcher").to("role:admin").to("role:superviseur").emit("transport:status_updated", payload);
+
+      // Notify patient in real time via WebSocket
+      if (transport.patient?.email) {
+        const patientUser = await User.findOne({ email: transport.patient.email, role: "patient" }).select("_id").lean();
+        if (patientUser) {
+          io.to(`patient:${patientUser._id}`).emit("transport:status_updated", payload);
+        }
+      }
+    }
+
+    // Push notification to patient (no-op if FCM not configured)
+    if (transport.patient?.email) {
+      const STATUS_LABELS = {
+        EN_ROUTE_TO_PICKUP:     "Votre chauffeur est en route",
+        ARRIVED_AT_PICKUP:      "Votre chauffeur est arrivé",
+        PATIENT_ON_BOARD:       "Transport en cours",
+        ARRIVED_AT_DESTINATION: "Vous êtes arrivé à destination",
+        COMPLETED:              "Transport terminé",
+      };
+      const label = STATUS_LABELS[status];
+      if (label) {
+        notifyPatientByEmail({
+          email: transport.patient.email,
+          title: "BlancBleu Transport",
+          body:  label,
+          data:  { transportId: String(transport._id), status },
+        }).catch(() => {});
+      }
     }
 
     return res.json({ message: "Statut mis à jour", statut: updated.statut });
@@ -226,6 +256,7 @@ const sosSend = async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 // GET /api/v1/driver/vehicles  — véhicules disponibles pour démarrer un shift
 // ════════════════════════════════════════════════════════════════════════════
+const { notifyPatientByEmail } = require("../services/pushNotification");
 const Vehicle = require("../models/Vehicle");
 
 const getAvailableVehicles = async (req, res) => {

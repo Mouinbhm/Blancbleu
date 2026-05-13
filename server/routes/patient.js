@@ -281,6 +281,20 @@ router.post('/logout', authPatient, async (req, res) => {
   }
 })
 
+// ── ROUTE 2c : POST /api/patient/fcm-token ───────────────────────────────────
+
+router.post('/fcm-token', authPatient, async (req, res) => {
+  try {
+    const { token } = req.body
+    if (!token) return res.status(400).json({ message: 'token requis' })
+    await User.findByIdAndUpdate(req.user._id, { fcmToken: token })
+    res.json({ message: 'Token FCM enregistré' })
+  } catch (err) {
+    logger.error('[patient/fcm-token]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
+  }
+})
+
 // ── ROUTE 3 : GET /api/patient/me ────────────────────────────────────────────
 
 router.get('/me', authPatient, async (req, res) => {

@@ -269,6 +269,20 @@ class ApiService {
     return data;
   }
 
+  // ── FCM Push notifications ─────────────────────────────────────────────────
+
+  static Future<void> registerFcmToken(String token) async {
+    try {
+      await http.post(
+        Uri.parse('$_base/fcm-token'),
+        headers: await _headers(),
+        body: jsonEncode({'token': token}),
+      ).timeout(_timeout);
+    } catch (_) {
+      // Non-bloquant — push notifs optionnelles
+    }
+  }
+
   // ── Mot de passe oublié / réinitialisation ────────────────────────────────
 
   static String get _authBase =>

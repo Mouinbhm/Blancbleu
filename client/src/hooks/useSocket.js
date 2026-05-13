@@ -6,13 +6,8 @@
  *   const { connected, events, stats, alertes } = useSocket();
  */
 import { useState, useEffect, useCallback, useRef } from "react";
-import { io } from "socket.io-client";
 import { useAuth } from "../context/AuthContext";
-
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || "http://localhost:5000";
-
-// Singleton socket
-let _socket = null;
+import { getSocket } from "../services/socketClient";
 
 export default function useSocket() {
   const { user } = useAuth();
@@ -25,17 +20,7 @@ export default function useSocket() {
   useEffect(() => {
     if (!user) return;
 
-    // Créer la connexion si pas encore établie
-    if (!_socket) {
-      _socket = io(SOCKET_URL, {
-        transports: ["websocket", "polling"],
-        reconnection: true,
-        reconnectionDelay: 2000,
-        reconnectionAttempts: 10,
-      });
-    }
-
-    const socket = _socket;
+    const socket = getSocket();
 
     // ── Connexion ──────────────────────────────────────────────────────────
     const onConnect = () => {
@@ -77,7 +62,7 @@ export default function useSocket() {
       addEvent({ type: "unit:assigned", data, color: "purple" });
     };
 
-    // ── transport:statut / transport:statut_change ─────────────────────────
+    // ── transport:statut / transport:statut_change / transport:status_updated ─
     const onStatusUpdated = (data) => {
       addEvent({ type: "status:updated", data, color: "orange" });
     };
@@ -130,8 +115,9 @@ export default function useSocket() {
     socket.on("transport:created", onTransportCreated);
     socket.on("intervention:created", onInterventionCreated);
     socket.on("unit:assigned", onUnitAssigned);
-    socket.on("transport:statut",        onStatusUpdated);
-    socket.on("transport:statut_change", onStatusUpdated);
+    socket.on("transport:statut",         onStatusUpdated);
+    socket.on("transport:statut_change",  onStatusUpdated);
+    socket.on("transport:status_updated", onStatusUpdated);
     socket.on("escalation:triggered", onEscalationTriggered);
     socket.on("dispatch:completed", onDispatchCompleted);
     socket.on("unit:status_changed", onUnitStatusChanged);
@@ -157,8 +143,9 @@ export default function useSocket() {
       socket.off("transport:created", onTransportCreated);
       socket.off("intervention:created", onInterventionCreated);
       socket.off("unit:assigned", onUnitAssigned);
-      socket.off("transport:statut",        onStatusUpdated);
-      socket.off("transport:statut_change", onStatusUpdated);
+      socket.off("transport:statut",         onStatusUpdated);
+      socket.off("transport:statut_change",  onStatusUpdated);
+      socket.off("transport:status_updated", onStatusUpdated);
       socket.off("escalation:triggered", onEscalationTriggered);
       socket.off("dispatch:completed", onDispatchCompleted);
       socket.off("unit:status_changed", onUnitStatusChanged);
@@ -183,9 +170,9 @@ export default function useSocket() {
 
   // Écouter un événement custom depuis un composant
   const subscribe = useCallback((eventName, callback) => {
-    if (!_socket) return () => {};
-    _socket.on(eventName, callback);
-    return () => _socket.off(eventName, callback);
+    const socket = getSocket();
+    socket.on(eventName, callback);
+    return () => socket.off(eventName, callback);
   }, []);
 
   return {

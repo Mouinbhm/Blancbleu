@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { transportService } from "../../services/api";
 import useSocket from "../../hooks/useSocket";
+import DispatcherChat from "./DispatcherChat";
+import api from "../../services/api";
 
 const NAV_OPERATIONS = [
   { path: "/dashboard",      icon: "dashboard",         label: "Tableau de bord"  },
@@ -77,6 +79,8 @@ export default function Layout() {
   const [notifs, setNotifs] = useState([]);
   const [notifCount, setNotifCount] = useState(0);
   const [toasts, setToasts] = useState([]);
+  const [sosAlert, setSosAlert] = useState(null);
+  const [activeDrivers, setActiveDrivers] = useState([]);
   const notifRef = useRef(null);
 
   const { connected, subscribe } = useSocket();
@@ -107,6 +111,48 @@ export default function Layout() {
       setTimeout(() => removeToast(toastId), 6000);
     });
     return unsub;
+  }, [subscribe]);
+
+  // ── Écoute Socket.IO : alerte SOS chauffeur ──────────────────────────────
+  useEffect(() => {
+    const unsub = subscribe("sos:received", (data) => {
+      setSosAlert(data);
+      playNotifSound();
+      playNotifSound(); // double ring for urgency
+    });
+    return unsub;
+  }, [subscribe]);
+
+  // ── Chargement chauffeurs actifs pour messagerie ─────────────────────────
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data } = await api.get("/v1/tracking/live");
+        setActiveDrivers(
+          (data.drivers || []).map((d) => ({
+            driverId:   d.driverId,
+            driverName: d.driverNom || d.driverName,
+          }))
+        );
+      } catch { /* silencieux */ }
+    };
+    load();
+    const iv = setInterval(load, 30000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Keep driver list in sync with live socket updates
+  useEffect(() => {
+    const unsub = subscribe("driver:online", (data) => {
+      setActiveDrivers((prev) => {
+        if (prev.some((d) => d.driverId === data.driverId)) return prev;
+        return [...prev, { driverId: data.driverId, driverName: data.driverNom }];
+      });
+    });
+    const unsub2 = subscribe("driver:offline", (data) => {
+      setActiveDrivers((prev) => prev.filter((d) => d.driverId !== data.driverId));
+    });
+    return () => { unsub(); unsub2(); };
   }, [subscribe]);
 
   // ── Chargement notifications initiales ───────────────────────────────────
@@ -527,6 +573,83 @@ export default function Layout() {
         ))}
       </div>
 
+      {/* ═══════════════ DISPATCHER CHAT ═══════════════ */}
+      <DispatcherChat drivers={activeDrivers} />
+
+      {/* ═══════════════ SOS ALERT MODAL ═══════════════ */}
+      {sosAlert && (
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+               style={{ animation: "slideInRight 0.3s ease-out" }}>
+            {/* Red header */}
+            <div className="bg-red-600 px-6 py-5 flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0"
+                   style={{ animation: "pulse 1s infinite" }}>
+                <span className="material-symbols-outlined text-white" style={{ fontSize: "32px" }}>sos</span>
+              </div>
+              <div>
+                <p className="text-white font-mono text-xs tracking-widest font-bold">ALERTE URGENTE</p>
+                <p className="text-white font-bold text-xl leading-tight">SOS Chauffeur</p>
+              </div>
+            </div>
+            {/* Body */}
+            <div className="px-6 py-5 space-y-3">
+              <div className="flex items-center gap-3 bg-red-50 rounded-xl p-3">
+                <span className="material-symbols-outlined text-red-500">person</span>
+                <div>
+                  <p className="text-xs text-slate-500 font-semibold">CHAUFFEUR</p>
+                  <p className="text-sm font-bold text-navy">
+                    {sosAlert.prenom} {sosAlert.nom}
+                  </p>
+                </div>
+              </div>
+              {(sosAlert.lat || sosAlert.lng) && (
+                <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-3">
+                  <span className="material-symbols-outlined text-slate-500">location_on</span>
+                  <div>
+                    <p className="text-xs text-slate-500 font-semibold">POSITION GPS</p>
+                    <p className="text-sm font-mono text-navy">
+                      {sosAlert.lat?.toFixed(5)}, {sosAlert.lng?.toFixed(5)}
+                    </p>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-3">
+                <span className="material-symbols-outlined text-slate-500">schedule</span>
+                <div>
+                  <p className="text-xs text-slate-500 font-semibold">HEURE</p>
+                  <p className="text-sm font-mono text-navy">
+                    {new Date(sosAlert.timestamp).toLocaleTimeString("fr-FR")}
+                  </p>
+                </div>
+              </div>
+            </div>
+            {/* Actions */}
+            <div className="px-6 pb-6 flex gap-3">
+              {sosAlert.lat && sosAlert.lng && (
+                <a
+                  href={`https://www.google.com/maps?q=${sosAlert.lat},${sosAlert.lng}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex-1 bg-primary text-white text-sm font-bold py-3 rounded-xl text-center hover:bg-blue-700 transition-colors"
+                >
+                  Ouvrir carte
+                </a>
+              )}
+              <button
+                onClick={() => setSosAlert(null)}
+                className="flex-1 bg-red-100 text-red-700 text-sm font-bold py-3 rounded-xl hover:bg-red-200 transition-colors"
+              >
+                Accusé réception
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes slideInRight {
           from { opacity: 0; transform: translateX(100%); }
@@ -535,6 +658,10 @@ export default function Layout() {
         @keyframes shrinkWidth {
           from { width: 100%; }
           to   { width: 0%; }
+        }
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.1); }
         }
       `}</style>
     </div>

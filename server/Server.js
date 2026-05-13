@@ -95,7 +95,7 @@ io.use((socket, next) => {
 
 app.set("io", io);
 require("./services/socketService").init(io);
-require("./sockets/driverSocket").initDriverSocket(io);
+require("./sockets").initSockets(io);
 
 // ─── Swagger ──────────────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== "production") setupSwagger(app);

@@ -40,6 +40,9 @@ const userSchema = new mongoose.Schema(
       nom:       { type: String, default: "" },
       telephone: { type: String, default: "" },
     },
+
+    // FCM token for push notifications (patient app)
+    fcmToken: { type: String, default: null },
   },
   { timestamps: true },
 );
