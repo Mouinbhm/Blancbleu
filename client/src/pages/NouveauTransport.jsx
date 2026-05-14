@@ -1,7 +1,7 @@
 // Fichier : client/src/pages/NouveauTransport.jsx
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { transportService, patientService } from "../services/api";
+import { transportService, patientService, aiService } from "../services/api";
 import AdresseAutocomplete from "../components/forms/AdresseAutocomplete";
 
 // Jours fériés français 2025–2026 (miroir de recurrenceService.js côté backend)
@@ -185,6 +185,7 @@ export default function NouveauTransport() {
   const [loading, setLoading] = useState(false);
   const [erreur, setErreur] = useState(null);
   const [errors, setErrors] = useState({});
+  const [lancerIA, setLancerIA] = useState(false);
   const [patientLie, setPatientLie] = useState(null); // Patient entity sélectionné
 
   // Charger le patient depuis l'URL si fourni (depuis la fiche patient)
@@ -426,7 +427,11 @@ export default function NouveauTransport() {
           ...basePayload,
           recurrence: { active: false, frequence: "", joursSemaine: [] },
         });
-        navigate(`/transports/${String(data.transport?._id || data._id || "")}`);
+        const newId = String(data.transport?._id || data._id || "");
+        if (lancerIA && newId) {
+          try { await aiService.recommanderDispatch(newId); } catch (_) { /* ignore IA errors */ }
+        }
+        navigate(`/transports/${newId}`);
       }
     } catch (err) {
       setErreur(
@@ -856,6 +861,25 @@ export default function NouveauTransport() {
             placeholder="Informations complémentaires, instructions particulières…"
           />
         </Section>
+
+        {/* Option IA — uniquement pour un transport ponctuel */}
+        {!form.recurrenceActive && (
+          <label className="flex items-center gap-3 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={lancerIA}
+              onChange={(e) => setLancerIA(e.target.checked)}
+              className="w-4 h-4 accent-primary"
+            />
+            <span className="material-symbols-outlined text-primary text-lg">psychology</span>
+            <span className="text-sm text-blue-900 font-medium">
+              Lancer la recommandation IA après création
+            </span>
+            <span className="ml-auto text-xs text-blue-500 font-normal">
+              Le dispatcher reste décisionnaire
+            </span>
+          </label>
+        )}
 
         {/* Boutons */}
         <div className="flex gap-3 pt-2">

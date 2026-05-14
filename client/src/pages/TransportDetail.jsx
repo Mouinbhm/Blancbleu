@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import StatutBadge from "../components/transport/StatutBadge";
 import TransportMap from "../components/map/TransportMap";
-import { transportService, vehicleService, factureService, shiftService } from "../services/api";
+import { transportService, vehicleService, factureService, shiftService, aiService } from "../services/api";
 import useSocket from "../hooks/useSocket";
 import { getSocket, getOrCreateSocket } from "../services/socketService";
 
@@ -308,6 +308,285 @@ function Timeline({ transport }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Composant : Recommandation IA Dispatch ──────────────────────────────────
+
+const CRITERE_LABELS = {
+  distance:           "Distance",
+  driverAvailability: "Disponibilité",
+  vehicleTypeMatch:   "Type véhicule",
+  planningLoad:       "Charge planning",
+  traffic:            "Trafic",
+  medicalPriority:    "Priorité médicale",
+  punctualityHistory: "Ponctualité",
+};
+
+const CRITERE_ICONS = {
+  distance:           "near_me",
+  driverAvailability: "person_check",
+  vehicleTypeMatch:   "local_shipping",
+  planningLoad:       "event_available",
+  traffic:            "traffic",
+  medicalPriority:    "monitor_heart",
+  punctualityHistory: "schedule",
+};
+
+function ScoreBar({ label, icon, value }) {
+  const color = value >= 80 ? "#22c55e" : value >= 60 ? "#f59e0b" : "#ef4444";
+  return (
+    <div className="flex items-center gap-2 py-1.5">
+      <span className="material-symbols-outlined text-slate-400 text-sm w-4">{icon}</span>
+      <span className="text-xs text-slate-600 w-28 flex-shrink-0">{label}</span>
+      <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+        <div style={{ width: `${value}%`, backgroundColor: color, height: "100%", borderRadius: "9999px", transition: "width .5s ease" }} />
+      </div>
+      <span className="text-xs font-semibold w-8 text-right" style={{ color }}>{value}</span>
+    </div>
+  );
+}
+
+function SectionDispatchIA({ transportId, aiDispatch, onRefresh }) {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [rejectModal, setRejectModal] = useState(false);
+  const [raison, setRaison] = useState("");
+
+  const showToast = (msg, type = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  const handleGenerer = async () => {
+    setLoading(true);
+    try {
+      const { data } = await aiService.recommanderDispatch(transportId);
+      setResult(data);
+      showToast("Recommandation IA générée avec succès");
+      onRefresh?.();
+    } catch (e) {
+      showToast(e.response?.data?.message || "Erreur lors de la génération", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAccepter = async () => {
+    if (!window.confirm("Confirmer l'acceptation de la recommandation IA ?")) return;
+    setLoading(true);
+    try {
+      await aiService.accepterRecommandation(transportId);
+      showToast("Recommandation acceptée — véhicule assigné");
+      onRefresh?.();
+    } catch (e) {
+      showToast(e.response?.data?.message || "Erreur", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefuser = async () => {
+    if (!raison.trim()) return;
+    setLoading(true);
+    try {
+      await aiService.refuserRecommandation(transportId, raison);
+      showToast("Recommandation refusée — assignation manuelle requise");
+      setRejectModal(false);
+      onRefresh?.();
+    } catch (e) {
+      showToast(e.response?.data?.message || "Erreur", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const rec = result?.bestRecommendation || result?.recommandation;
+  const criteriaScores = rec?.criteriaScores;
+  const hasSaved = aiDispatch?.generatedAt && !result;
+  const savedRec = hasSaved ? aiDispatch : null;
+
+  const scoreColor = (s) => s >= 80 ? "text-green-600 bg-green-50" : s >= 60 ? "text-amber-600 bg-amber-50" : "text-red-600 bg-red-50";
+  const scoreLabel = (s) => s >= 80 ? "Excellent" : s >= 65 ? "Bon" : s >= 50 ? "Acceptable" : "Risqué";
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5">
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow text-sm font-medium ${toast.type === "error" ? "bg-red-600 text-white" : "bg-green-600 text-white"}`}>
+          {toast.msg}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wide flex items-center gap-2">
+          <span className="material-symbols-outlined text-[#1D6EF5]">smart_toy</span>
+          Recommandation IA de dispatch
+        </h2>
+        <button
+          onClick={handleGenerer}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#1D6EF5] hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-60"
+        >
+          <span className="material-symbols-outlined text-sm">auto_awesome</span>
+          {loading ? "Calcul…" : "Générer recommandation"}
+        </button>
+      </div>
+
+      {/* Alerte si fallback */}
+      {result?.fallbackUsed && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 flex items-center gap-2">
+          <span className="material-symbols-outlined text-sm">warning</span>
+          Service IA indisponible — fallback métier utilisé (résultat simplifié)
+        </div>
+      )}
+
+      {/* Aucun candidat */}
+      {result && !rec && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm font-semibold text-red-700 mb-2">Aucun véhicule compatible trouvé</p>
+          <ul className="text-xs text-red-600 list-disc ml-4 space-y-1">
+            {(result.suggestions || []).map((s, i) => <li key={i}>{s}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {/* Recommandation principale */}
+      {(rec || savedRec) && (() => {
+        const r = rec || { vehiculeName: savedRec.vehicleName, driverName: savedRec.driverName, finalScore: savedRec.score, criteriaScores: savedRec.criteriaScores, explanation: savedRec.explanation, risks: savedRec.risks, warnings: savedRec.warnings };
+        const cs = r.criteriaScores;
+        const accepted = savedRec?.acceptedByDispatcher;
+        return (
+          <div>
+            {/* Header recommandation */}
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="material-symbols-outlined text-blue-500">local_shipping</span>
+                  <span className="font-bold text-slate-800">{r.vehiculeName || r.immatriculation || "—"}</span>
+                  {r.vehiculeType && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">{r.vehiculeType}</span>}
+                </div>
+                {r.driverName && (
+                  <div className="flex items-center gap-2 text-sm text-slate-600">
+                    <span className="material-symbols-outlined text-slate-400 text-sm">person</span>
+                    <span>{r.driverName}</span>
+                  </div>
+                )}
+              </div>
+              <div className={`text-right rounded-xl px-3 py-2 ${scoreColor(r.finalScore ?? r.score ?? 0)}`}>
+                <div className="text-2xl font-black">{r.finalScore ?? r.score ?? 0}<span className="text-xs font-normal">/100</span></div>
+                <div className="text-xs font-semibold">{scoreLabel(r.finalScore ?? r.score ?? 0)}</div>
+              </div>
+            </div>
+
+            {/* Statut acceptation */}
+            {accepted === true && <div className="mb-3 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700 font-medium">Recommandation acceptée par le dispatcher</div>}
+            {accepted === false && <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">Recommandation refusée — {savedRec?.rejectedReason}</div>}
+
+            {/* Barres de score */}
+            {cs && (
+              <div className="mb-4 bg-slate-50 rounded-lg p-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Scores par critère</p>
+                {Object.entries(cs).map(([k, v]) => (
+                  <ScoreBar key={k} label={CRITERE_LABELS[k] || k} icon={CRITERE_ICONS[k] || "info"} value={v} />
+                ))}
+              </div>
+            )}
+
+            {/* Explications */}
+            {(r.explanation || []).length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Points positifs</p>
+                <ul className="space-y-1">
+                  {r.explanation.map((e, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-green-700">
+                      <span className="material-symbols-outlined text-green-500 text-sm flex-shrink-0">check_circle</span>
+                      {e}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Risques */}
+            {(r.risks || []).length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Risques identifiés</p>
+                <ul className="space-y-1">
+                  {r.risks.map((r2, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-amber-700">
+                      <span className="material-symbols-outlined text-amber-500 text-sm flex-shrink-0">warning</span>
+                      {r2}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Candidats exclus */}
+            {(result?.excludedCandidates || []).length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Candidats exclus ({result.excludedCandidates.length})</p>
+                <ul className="space-y-1">
+                  {result.excludedCandidates.map((e, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-slate-500">
+                      <span className="material-symbols-outlined text-slate-400 text-sm flex-shrink-0">block</span>
+                      <span><strong>{e.immatriculation}</strong> — {e.raison}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Boutons action (seulement si nouvelle génération non encore acceptée/refusée) */}
+            {rec && accepted == null && (
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={handleAccepter}
+                  disabled={loading}
+                  className="flex-1 py-2 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg"
+                >
+                  Accepter la recommandation
+                </button>
+                <button
+                  onClick={() => setRejectModal(true)}
+                  disabled={loading}
+                  className="flex-1 py-2 text-sm font-semibold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200"
+                >
+                  Refuser
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Modal refus */}
+      {rejectModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="font-bold text-slate-800 mb-3">Refuser la recommandation IA</h3>
+            <textarea
+              value={raison}
+              onChange={(e) => setRaison(e.target.value)}
+              rows={3}
+              placeholder="Motif du refus (obligatoire)…"
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-red-400 resize-none mb-4"
+            />
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setRejectModal(false)} className="px-4 py-2 text-sm text-slate-600">Annuler</button>
+              <button
+                onClick={handleRefuser}
+                disabled={!raison.trim() || loading}
+                className="px-5 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl disabled:opacity-50"
+              >
+                Confirmer le refus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -959,6 +1238,15 @@ export default function TransportDetail() {
               </div>
             </div>
           </SectionCard>
+
+          {/* ── SECTION IA : Recommandation Dispatch ─────────────────────────────── */}
+          {["REQUESTED", "CONFIRMED", "SCHEDULED"].includes(transport.statut) && (
+            <SectionDispatchIA
+              transportId={id}
+              aiDispatch={transport.aiDispatch}
+              onRefresh={loadTransport}
+            />
+          )}
 
           {/* ── SECTION 5: Véhicule & Chauffeur ─────────────────────────────────── */}
           {transport.vehicule && !["REQUESTED", "CONFIRMED", "SCHEDULED"].includes(transport.statut) && (

@@ -135,57 +135,179 @@ const validerPMT = async (req, res) => {
 // MODULE 2 — Dispatch (recommandation véhicule/chauffeur)
 // ════════════════════════════════════════════════════════════════════════════
 
+const planningLoadSvc     = require("../services/planningLoadService");
+const driverPerfSvc       = require("../services/driverPerformanceService");
+
 /**
  * POST /api/ai/dispatch/:transportId
  * Recommande le meilleur véhicule et chauffeur pour un transport.
- *
- * Réponse :
- * {
- *   recommandation: { vehiculeId, chauffeurId, score, justification },
- *   alternatives: [ { vehiculeId, score }, ... ],
- *   source: "ia" | "rules"
- * }
+ * Enrichit les données avec charge planning + ponctualité réelle.
  */
 const recommanderDispatch = async (req, res) => {
   try {
     const Transport = require("../models/Transport");
-    const Vehicle = require("../models/Vehicle");
+    const Vehicle   = require("../models/Vehicle");
     const Personnel = require("../models/Personnel");
 
     const transport = await Transport.findById(req.params.transportId);
-    if (!transport) {
-      return res.status(404).json({ message: "Transport introuvable" });
-    }
+    if (!transport) return res.status(404).json({ message: "Transport introuvable" });
 
-    // Récupérer véhicules et chauffeurs disponibles
+    // Audit — demande IA
+    const userCtx = { id: req.user._id, email: req.user.email, role: req.user.role };
+    await audit.iaDispatchRequis(transport, userCtx);
+
+    const dateTransport = transport.dateTransport || new Date();
     const [vehicules, chauffeurs] = await Promise.all([
-      Vehicle.find({ statut: "Disponible" }),
-      Personnel.find({
-        statut: "Disponible",
-        role: { $in: ["Ambulancier", "Chauffeur"] },
-      }),
+      Vehicle.find({ statut: "Disponible" }).lean(),
+      Personnel.find({ statut: "Disponible", role: { $in: ["Ambulancier", "Chauffeur"] } }).lean(),
     ]);
 
     if (vehicules.length === 0) {
-      return res.status(409).json({ message: "Aucun véhicule disponible" });
+      return res.status(409).json({
+        success: false,
+        message: "Aucun véhicule disponible pour ce transport",
+        recommendations: [],
+        suggestions: [
+          "Reprogrammer le transport",
+          "Libérer un véhicule actuellement en mission",
+          "Changer le type de véhicule demandé",
+        ],
+      });
     }
+
+    // Enrichir charge planning + ponctualité en parallèle
+    await Promise.all([
+      ...vehicules.map(async (v) => {
+        v._planningLoad = await planningLoadSvc.getVehiclePlanningLoad(v._id, dateTransport);
+      }),
+      ...chauffeurs.map(async (c) => {
+        c.tauxPonctualite = await driverPerfSvc.getDriverPunctualityScore(c._id);
+        c._planningLoad   = await planningLoadSvc.getDriverPlanningLoad(c._id, dateTransport);
+      }),
+    ]);
 
     let result;
+    let fallbackUsed = false;
     try {
       result = await aiClient.recommanderDispatch(transport, vehicules, chauffeurs);
-    } catch (aiError) {
-      // Fallback : scoring local basé sur les règles métier
+    } catch (aiErr) {
+      fallbackUsed = true;
       result = _scoringLocalDispatch(transport, vehicules);
+      await audit.iaDispatchFallback(transport, aiErr.message);
     }
 
-    // Journaliser la suggestion IA
-    await audit.iaDispatchSuggestion(
-      transport,
-      result.recommandation,
-      result.recommandation?.score
-    );
+    const best = result.bestRecommendation || result.recommandation;
 
-    return res.json(result);
+    // Sauvegarder la recommandation dans le transport
+    if (best) {
+      await Transport.findByIdAndUpdate(transport._id, {
+        $set: {
+          "aiDispatch.recommendedVehicleId": best.vehiculeId,
+          "aiDispatch.recommendedDriverId":  best.driverId || null,
+          "aiDispatch.vehicleName":          best.vehiculeName || best.immatriculation || "",
+          "aiDispatch.driverName":           best.driverName || "",
+          "aiDispatch.score":                best.finalScore ?? best.score ?? null,
+          "aiDispatch.criteriaScores":       best.criteriaScores || null,
+          "aiDispatch.explanation":          best.explanation || best.justification || [],
+          "aiDispatch.risks":                best.risks || [],
+          "aiDispatch.warnings":             best.warnings || [],
+          "aiDispatch.source":               result.source || (fallbackUsed ? "fallback" : "ia"),
+          "aiDispatch.fallbackUsed":         fallbackUsed,
+          "aiDispatch.generatedAt":          new Date(),
+          "aiDispatch.acceptedByDispatcher": null,
+        },
+      });
+    }
+
+    // Audit recommandation
+    await audit.iaDispatchRecommande(transport, best, result.source || "ia", fallbackUsed);
+
+    return res.json({ ...result, fallbackUsed });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+/**
+ * GET /api/ai/dispatch/:transportId/explanation
+ * Retourne la recommandation IA sauvegardée avec ses explications.
+ */
+const getDispatchExplanation = async (req, res) => {
+  try {
+    const Transport = require("../models/Transport");
+    const transport = await Transport.findById(req.params.transportId)
+      .select("numero aiDispatch vehicule chauffeur")
+      .populate("vehicule", "nom immatriculation type")
+      .populate("chauffeur", "nom prenom");
+    if (!transport) return res.status(404).json({ message: "Transport introuvable" });
+    if (!transport.aiDispatch?.generatedAt) {
+      return res.status(404).json({ message: "Aucune recommandation IA générée pour ce transport" });
+    }
+    return res.json({ numero: transport.numero, aiDispatch: transport.aiDispatch });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+/**
+ * PATCH /api/transports/:id/ai-recommendation/accept
+ * Le dispatcher accepte la recommandation IA et assigne le véhicule.
+ */
+const accepterRecommandationIA = async (req, res) => {
+  try {
+    const Transport = require("../models/Transport");
+    const transport = await Transport.findById(req.params.id);
+    if (!transport) return res.status(404).json({ message: "Transport introuvable" });
+    if (!transport.aiDispatch?.recommendedVehicleId) {
+      return res.status(400).json({ message: "Aucune recommandation IA disponible à accepter" });
+    }
+
+    await Transport.findByIdAndUpdate(transport._id, {
+      $set: {
+        vehicule:                        transport.aiDispatch.recommendedVehicleId,
+        chauffeur:                       transport.aiDispatch.recommendedDriverId || transport.chauffeur,
+        scoreDispatch:                   transport.aiDispatch.score,
+        "aiDispatch.acceptedByDispatcher": true,
+        "aiDispatch.acceptedAt":         new Date(),
+      },
+    });
+
+    const userCtx = { id: req.user._id, email: req.user.email, role: req.user.role };
+    await audit.iaDispatchAccepte(transport, userCtx);
+
+    return res.json({ message: "Recommandation IA acceptée — véhicule assigné" });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+/**
+ * PATCH /api/transports/:id/ai-recommendation/reject
+ * Le dispatcher refuse la recommandation IA avec une raison.
+ */
+const refuserRecommandationIA = async (req, res) => {
+  try {
+    const Transport = require("../models/Transport");
+    const { raison } = req.body;
+    if (!raison) return res.status(400).json({ message: "raison requise" });
+
+    const transport = await Transport.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          "aiDispatch.acceptedByDispatcher": false,
+          "aiDispatch.rejectedReason":       raison,
+          "aiDispatch.acceptedAt":           new Date(),
+        },
+      },
+      { new: true }
+    );
+    if (!transport) return res.status(404).json({ message: "Transport introuvable" });
+
+    const userCtx = { id: req.user._id, email: req.user.email, role: req.user.role };
+    await audit.iaDispatchRefuse(transport, userCtx, raison);
+
+    return res.json({ message: "Recommandation IA refusée — assignation manuelle requise" });
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
@@ -445,4 +567,7 @@ module.exports = {
   recommanderDispatchManuel,
   optimiserTournee,
   getAIStatus,
+  getDispatchExplanation,
+  accepterRecommandationIA,
+  refuserRecommandationIA,
 };

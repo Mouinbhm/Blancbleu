@@ -228,11 +228,14 @@ export const aiService = {
   validerPMT: (transportId, extraction) =>
     api.patch(`/ai/pmt/validate/${transportId}`, { extraction }),
 
-  // Module 2 — Dispatch (recommandation véhicule)
-  recommanderDispatch: (transportId) =>
-    api.post(`/ai/dispatch/${transportId}`),
-  recommanderDispatchManuel: (form) =>
-    api.post("/ai/dispatch/manual", form),
+  // Module 2 — Dispatch intelligent (scoring multicritère explicable)
+  recommanderDispatch:    (transportId)  => api.post(`/ai/dispatch/${transportId}`),
+  recommanderDispatchManuel: (form)      => api.post("/ai/dispatch/manual", form),
+  getDispatchExplanation: (transportId)  => api.get(`/ai/dispatch/${transportId}/explanation`),
+  // accept / reject — montés sur /api/transports/:id pour cohérence métier
+  accepterRecommandation: (transportId)  => api.patch(`/transports/${transportId}/ai-recommendation/accept`),
+  refuserRecommandation:  (transportId, raison) =>
+    api.patch(`/transports/${transportId}/ai-recommendation/reject`, { raison }),
 
   // Module 3 — Optimisation de tournée
   optimiserTournee: (data) => api.post("/ai/routing/optimize", data),

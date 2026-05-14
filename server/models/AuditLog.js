@@ -54,6 +54,11 @@ const auditLogSchema = new mongoose.Schema(
 
         // ── IA ────────────────────────────────────────────────────────────
         "IA_DISPATCH_SUGGESTION",
+        "IA_DISPATCH_REQUESTED",
+        "IA_DISPATCH_RECOMMENDED",
+        "IA_DISPATCH_ACCEPTED",
+        "IA_DISPATCH_REJECTED",
+        "IA_DISPATCH_FALLBACK_USED",
         "IA_ROUTE_OPTIMIZATION",
         "IA_FALLBACK",
 

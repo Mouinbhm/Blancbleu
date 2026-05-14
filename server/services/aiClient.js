@@ -120,43 +120,58 @@ async function extrairePMT(fichier, mimeType = "application/pdf", nomFichier = "
  * const rec = await aiClient.recommanderDispatch(transport, vehicules, chauffeurs);
  * // rec.recommandation.vehiculeId, rec.recommandation.score, rec.alternatives
  */
-async function recommanderDispatch(transport, vehicules, chauffeurs) {
+async function recommanderDispatch(transport, vehicules, chauffeurs, options = {}) {
   try {
+    const mobilite = transport.patient?.mobilite || transport.mobilite;
+    const positionDepart = transport.adresseDepart?.coordonnees
+      ? { lat: transport.adresseDepart.coordonnees.lat, lng: transport.adresseDepart.coordonnees.lng }
+      : null;
+
     const { data } = await client.post("/dispatch/recommend", {
       transport: {
-        // Ne pas envoyer null — Pydantic str ne l'accepte pas, on omet pour garder le défaut ""
         ...(transport._id != null && { _id: String(transport._id) }),
-        motif: transport.motif,
-        mobilite: transport.patient?.mobilite,
-        adresseDepart: transport.adresseDepart,
-        adresseDestination: transport.adresseDestination,
-        dateTransport: transport.dateTransport,
-        heureDepart: transport.heureDepart,
-        oxygene: transport.patient?.oxygene || false,
-        brancardage: transport.patient?.brancardage || false,
+        motif:               transport.motif,
+        mobilite:            mobilite || "ASSIS",
+        adresseDepart:       transport.adresseDepart?.rue
+          ? [transport.adresseDepart.rue, transport.adresseDepart.ville].filter(Boolean).join(", ")
+          : (transport.adresseDepart || ""),
+        adresseDestination:  transport.adresseDestination?.rue
+          ? [transport.adresseDestination.rue, transport.adresseDestination.ville].filter(Boolean).join(", ")
+          : (transport.adresseDestination || ""),
+        positionDepart,
+        dateTransport:       transport.dateTransport,
+        heureDepart:         transport.heureDepart || transport.heureRDV,
+        oxygene:             transport.patient?.oxygene || false,
+        brancardage:         transport.patient?.brancardage || false,
+        prioriteMedicale:    transport.prioriteMedicale || "normal",
+        requiredVehicleType: transport.typeTransport || null,
       },
       vehicules: vehicules.map((v) => ({
-        _id: String(v._id),
-        immatriculation: v.immatriculation,
-        type: v.type,
-        statut: v.statut,
-        position: v.position?.lat ? { lat: v.position.lat, lng: v.position.lng } : null,
+        _id:               String(v._id),
+        immatriculation:   v.immatriculation,
+        nom:               v.nom || v.immatriculation,
+        type:              v.type,
+        statut:            (v.statut || "").toLowerCase().includes("dispon") ? "disponible" : (v.statut || ""),
+        position:          v.position?.lat ? { lat: v.position.lat, lng: v.position.lng } : null,
         capacites: {
-          fauteuil: v.equipeFauteuil ?? false,
-          oxygene: v.equipeOxygene ?? false,
-          brancard: v.equipeBrancard ?? false,
+          fauteuil: v.capacites?.equipeFauteuil ?? v.equipeFauteuil ?? false,
+          oxygene:  v.capacites?.equipeOxygene  ?? v.equipeOxygene  ?? false,
+          brancard: v.capacites?.equipeBrancard  ?? v.equipeBrancard  ?? false,
         },
-        ponctualite: v.tauxPonctualite ?? null,
+        ponctualite:         v.tauxPonctualite ?? null,
+        nbTransportsDuJour:  v._planningLoad?.nbMissions ?? v.nbTransportsDuJour ?? null,
+        chargeScore:         v._planningLoad?.score ?? null,
       })),
       chauffeurs: chauffeurs.map((c) => ({
-        _id: String(c._id),
-        nom: c.nom,
-        prenom: c.prenom,
-        statut: c.statut,
-        certifications: (c.certifications || []).map((cert) =>
+        _id:               String(c._id),
+        nom:               c.nom,
+        prenom:            c.prenom,
+        statut:            (c.statut || "").toLowerCase().includes("dispon") ? "disponible" : (c.statut || ""),
+        certifications:    (c.certifications || []).map((cert) =>
           typeof cert === "string" ? cert : cert.nom
         ),
-        ponctualite: c.tauxPonctualite ?? null,
+        ponctualite:        c.tauxPonctualite ?? null,
+        nbTransportsDuJour: c._planningLoad?.nbMissions ?? null,
       })),
     });
 

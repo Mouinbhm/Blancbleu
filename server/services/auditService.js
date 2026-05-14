@@ -262,6 +262,60 @@ const audit = {
       },
     }),
 
+  iaDispatchRequis: (transport, utilisateur) =>
+    log({
+      action: "IA_DISPATCH_REQUESTED",
+      origine: "HUMAIN",
+      utilisateur,
+      ressource: { type: "Transport", id: transport._id, reference: transport.numero },
+      details: { message: `Recommandation IA demandée pour ${transport.numero}` },
+    }),
+
+  iaDispatchRecommande: (transport, rec, source, fallbackUsed) =>
+    log({
+      action: "IA_DISPATCH_RECOMMENDED",
+      origine: fallbackUsed ? "SYSTÈME" : "IA",
+      utilisateur: { email: "ia@blancbleu.fr", role: "ia" },
+      ressource: { type: "Transport", id: transport._id, reference: transport.numero },
+      details: {
+        apres: { vehicule: rec?.vehiculeName, score: rec?.finalScore, source, fallbackUsed },
+        message: `Dispatch recommandé (score ${rec?.finalScore}/100) — source: ${source}`,
+      },
+    }),
+
+  iaDispatchAccepte: (transport, utilisateur) =>
+    log({
+      action: "IA_DISPATCH_ACCEPTED",
+      origine: "HUMAIN",
+      utilisateur,
+      ressource: { type: "Transport", id: transport._id, reference: transport.numero },
+      details: { message: `Recommandation IA acceptée par dispatcher — ${transport.numero}` },
+    }),
+
+  iaDispatchRefuse: (transport, utilisateur, raison) =>
+    log({
+      action: "IA_DISPATCH_REJECTED",
+      origine: "HUMAIN",
+      utilisateur,
+      ressource: { type: "Transport", id: transport._id, reference: transport.numero },
+      details: {
+        metadata: { raison },
+        message: `Recommandation IA refusée — ${transport.numero} : ${raison}`,
+      },
+    }),
+
+  iaDispatchFallback: (transport, raison) =>
+    log({
+      action: "IA_DISPATCH_FALLBACK_USED",
+      origine: "SYSTÈME",
+      utilisateur: { email: "systeme@blancbleu.fr", role: "système" },
+      ressource: { type: "Transport", id: transport._id, reference: transport.numero },
+      details: {
+        metadata: { raison },
+        message: `Fallback métier utilisé pour ${transport.numero} — ${raison}`,
+      },
+    }),
+
   iaRouteOptimization: (tourneeId, nbTransports, distanceTotale) =>
     log({
       action: "IA_ROUTE_OPTIMIZATION",

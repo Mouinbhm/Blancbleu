@@ -75,4 +75,19 @@ router.delete("/:id/pmt/:docId",  protect, authorize("admin", "dispatcher", "sup
 // ── PART D : Export PDF ───────────────────────────────────────────────────────
 router.get("/:id/pdf", protect, ctrl.exportPdf);
 
+// ── IA Dispatch — accept / reject ────────────────────────────────────────────
+const aiCtrl = require("../controllers/aiController");
+router.patch(
+  "/:id/ai-recommendation/accept",
+  protect,
+  authorize("dispatcher", "superviseur", "admin"),
+  aiCtrl.accepterRecommandationIA,
+);
+router.patch(
+  "/:id/ai-recommendation/reject",
+  protect,
+  authorize("dispatcher", "superviseur", "admin"),
+  aiCtrl.refuserRecommandationIA,
+);
+
 module.exports = router;

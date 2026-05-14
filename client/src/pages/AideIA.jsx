@@ -1663,10 +1663,116 @@ export default function AideIA() {
       </div>
 
       {/* Contenu */}
-      {tab === "dispatch" && <ModuleDispatch aiStatus={aiStatus} />}
+      {tab === "dispatch" && (
+        <>
+          <ModuleDispatch aiStatus={aiStatus} />
+          <SectionPedagogique />
+        </>
+      )}
       {tab === "pmt" && <ModulePMT aiStatus={aiStatus} />}
       {tab === "routing" && <ModuleRouting aiStatus={aiStatus} />}
       {tab === "duration" && <ModuleDuration />}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// BLOC PÉDAGOGIQUE — Comment l'IA choisit un véhicule ?
+// ════════════════════════════════════════════════════════════════════════════
+
+const POIDS = [
+  { critere: "Distance véhicule → patient", poids: "25%", icon: "near_me",         color: "blue",   desc: "Plus le véhicule est proche, meilleur est le score. Score calculé par formule Haversine." },
+  { critere: "Disponibilité chauffeur",     poids: "20%", icon: "person_check",    color: "green",  desc: "Chauffeur disponible → 100 pts. Chauffeur occupé → exclu ou score faible." },
+  { critere: "Compatibilité véhicule",      poids: "20%", icon: "local_shipping",  color: "purple", desc: "Correspondance exacte mobilité/type → 100 pts. Incompatible → candidat exclu." },
+  { critere: "Charge de planning",          poids: "15%", icon: "event_available", color: "amber",  desc: "Moins le véhicule est chargé, meilleur est le score. Évite de toujours sur-solliciter le même." },
+  { critere: "Estimation du trafic",        poids: "10%", icon: "traffic",         color: "orange", desc: "Heures de pointe (7h-9h, 17h-19h) → pénalité. Hors pointe → bonus." },
+  { critere: "Priorité médicale",           poids: "5%",  icon: "monitor_heart",   color: "red",    desc: "Transport prioritaire → favorise le véhicule le plus proche et le mieux équipé." },
+  { critere: "Historique ponctualité",      poids: "5%",  icon: "schedule",        color: "teal",   desc: "Ponctualité ≥ 95% → 100 pts. Retards fréquents → pénalité. Aucune donnée → score neutre (50)." },
+];
+
+function SectionPedagogique() {
+  return (
+    <div className="mt-8 bg-white rounded-2xl border border-slate-200 p-6">
+      <h2 className="font-bold text-slate-800 text-base mb-1 flex items-center gap-2">
+        <span className="material-symbols-outlined text-[#1D6EF5]">school</span>
+        Comment l'IA choisit-elle un véhicule ?
+      </h2>
+      <p className="text-sm text-slate-600 mb-5">
+        L'algorithme évalue chaque couple véhicule/chauffeur selon 7 critères pondérés.
+        Le score final sur 100 permet de classer les candidats. <strong>Le dispatcher conserve toujours la décision finale.</strong>
+      </p>
+
+      {/* Critères */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+        {POIDS.map(({ critere, poids, icon, desc }) => (
+          <div key={critere} className="flex gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+            <span className="material-symbols-outlined text-slate-500 text-xl flex-shrink-0 mt-0.5">{icon}</span>
+            <div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm font-semibold text-slate-800">{critere}</span>
+                <span className="text-xs font-bold text-[#1D6EF5]">{poids}</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Formule */}
+      <div className="bg-slate-900 text-slate-100 rounded-xl p-4 text-sm font-mono mb-5">
+        <p className="text-slate-400 text-xs mb-2">// Formule du score final :</p>
+        <p>Score = (distance × <strong className="text-blue-400">0.25</strong>)</p>
+        <p className="ml-8">+ (disponibilité chauffeur × <strong className="text-green-400">0.20</strong>)</p>
+        <p className="ml-8">+ (compatibilité véhicule × <strong className="text-purple-400">0.20</strong>)</p>
+        <p className="ml-8">+ (charge planning × <strong className="text-amber-400">0.15</strong>)</p>
+        <p className="ml-8">+ (trafic estimé × <strong className="text-orange-400">0.10</strong>)</p>
+        <p className="ml-8">+ (priorité médicale × <strong className="text-red-400">0.05</strong>)</p>
+        <p className="ml-8">+ (ponctualité × <strong className="text-teal-400">0.05</strong>)</p>
+        <p className="mt-2 text-slate-300">= Score final (0 → 100)</p>
+      </div>
+
+      {/* Règles d'exclusion */}
+      <div className="mb-4">
+        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Règles de compatibilité mobilité → véhicule</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="text-left p-2 text-slate-600">Mobilité patient</th>
+                <th className="p-2 text-green-700">VSL</th>
+                <th className="p-2 text-blue-700">TPMR</th>
+                <th className="p-2 text-red-700">Ambulance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ["ASSIS",             "100 (optimal)", "85", "60"],
+                ["FAUTEUIL ROULANT",  "Exclu (0)",     "100 (optimal)", "50"],
+                ["ALLONGÉ",           "Exclu (0)",     "Exclu (0)",     "100 (obligatoire)"],
+                ["CIVIÈRE",           "Exclu (0)",     "Exclu (0)",     "100 (obligatoire)"],
+              ].map(([mob, vsl, tpmr, amb]) => (
+                <tr key={mob} className="border-b border-slate-100">
+                  <td className="p-2 font-semibold text-slate-700">{mob}</td>
+                  <td className={`p-2 text-center ${vsl.includes("Exclu") ? "text-red-500" : "text-green-600"}`}>{vsl}</td>
+                  <td className={`p-2 text-center ${tpmr.includes("Exclu") ? "text-red-500" : "text-blue-600"}`}>{tpmr}</td>
+                  <td className={`p-2 text-center ${amb.includes("Exclu") ? "text-red-500" : "text-orange-600"}`}>{amb}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Limites */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800">
+        <p className="font-semibold mb-1">Limites du modèle</p>
+        <ul className="list-disc ml-4 space-y-0.5">
+          <li>L'IA ne connaît pas les contraintes operationnelles non saisies (panne, embouteillage non signalé)</li>
+          <li>La ponctualité historique se base uniquement sur les données saisies dans la plateforme</li>
+          <li>L'estimation du trafic est basée sur l'heure théorique — pas de données temps réel</li>
+          <li>La décision finale appartient toujours au dispatcher</li>
+        </ul>
+      </div>
     </div>
   );
 }

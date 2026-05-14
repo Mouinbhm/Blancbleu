@@ -184,6 +184,25 @@ const transportSchema = new mongoose.Schema(
     },
     scoreDispatch: { type: Number, default: null },
 
+    // ── Recommandation IA Dispatch ────────────────────────────────────────────
+    aiDispatch: {
+      recommendedVehicleId: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle", default: null },
+      recommendedDriverId:  { type: mongoose.Schema.Types.ObjectId, ref: "Personnel", default: null },
+      vehicleName:          { type: String, default: "" },
+      driverName:           { type: String, default: "" },
+      score:                { type: Number, default: null },          // 0-100
+      criteriaScores:       { type: mongoose.Schema.Types.Mixed, default: null },
+      explanation:          [{ type: String }],
+      risks:                [{ type: String }],
+      warnings:             [{ type: String }],
+      source:               { type: String, default: "ia" },          // "ia" | "fallback"
+      fallbackUsed:         { type: Boolean, default: false },
+      generatedAt:          { type: Date, default: null },
+      acceptedByDispatcher: { type: Boolean, default: null },
+      acceptedAt:           { type: Date, default: null },
+      rejectedReason:       { type: String, default: "" },
+    },
+
     // ── Horodatages ───────────────────────────────────────────────────────────
     heureConfirmation: { type: Date },
     heurePlanification: { type: Date },
