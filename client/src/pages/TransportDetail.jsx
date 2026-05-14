@@ -354,10 +354,12 @@ export default function TransportDetail() {
   const [modalShift, setModalShift]   = useState("");
   const [activeShifts, setActiveShifts] = useState([]);
   const [modalDuree, setModalDuree] = useState("");
-  const [modalFactureId, setModalFactureId] = useState("");
+  const [modalFactureId,       setModalFactureId]       = useState("");
+  const [facturesDisponibles,  setFacturesDisponibles]  = useState([]);
+  const [facturesLoading,      setFacturesLoading]      = useState(false);
   const [modalReprogDate, setModalReprogDate] = useState("");
   const [modalReprogHeure, setModalReprogHeure] = useState("");
-  const closeModal = () => setActiveModal(null);
+  const closeModal = () => { setActiveModal(null); setModalFactureId(""); setFacturesDisponibles([]); };
 
   const loadTransport = useCallback(async () => {
     try {
@@ -412,6 +414,18 @@ export default function TransportDetail() {
     shiftService.getToday()
       .then(({ data }) => setActiveShifts(data?.shifts || []))
       .catch(() => setActiveShifts([]));
+  }, [activeModal]);
+
+  useEffect(() => {
+    if (activeModal !== "facturer") return;
+    setFacturesLoading(true);
+    factureService.getAll({ limit: 200 })
+      .then(({ data }) => {
+        const list = Array.isArray(data) ? data : data?.factures || data?.data || [];
+        setFacturesDisponibles(list.filter((f) => f.statut !== "annulee"));
+      })
+      .catch(() => setFacturesDisponibles([]))
+      .finally(() => setFacturesLoading(false));
   }, [activeModal]);
 
   // ── Section 8: Socket.IO ────────────────────────────────────────────────────
@@ -517,8 +531,8 @@ export default function TransportDetail() {
   };
 
   const handleFacturer = () => {
-    if (!modalFactureId.trim()) return;
-    doAction("facturer", modalFactureId.trim());
+    if (!modalFactureId) return;
+    doAction("facturer", { factureId: modalFactureId });
   };
 
   // PART B — Signature
@@ -1585,22 +1599,80 @@ export default function TransportDetail() {
       {activeModal === "facturer" && (
         <Modal title="Clôture CPAM" onClose={closeModal}>
           <p className="text-sm text-slate-500 mb-4">
-            Renseignez la référence de facture CPAM pour finaliser la clôture administrative.
+            Sélectionnez la facture CPAM enregistrée dans la plateforme pour finaliser la clôture administrative.
           </p>
-          <input
-            type="text"
-            value={modalFactureId}
-            onChange={(e) => setModalFactureId(e.target.value)}
-            placeholder="Référence ou numéro de facture"
-            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm mb-5 outline-none focus:border-primary"
-          />
+
+          {facturesLoading ? (
+            <div className="flex items-center gap-2 text-sm text-slate-400 py-3 mb-5">
+              <div className="w-4 h-4 border-2 border-slate-200 border-t-primary rounded-full animate-spin" />
+              Chargement des factures…
+            </div>
+          ) : facturesDisponibles.length === 0 ? (
+            <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-5">
+              Aucune facture disponible dans la plateforme.
+            </p>
+          ) : (
+            <div className="mb-5 space-y-2">
+              {facturesDisponibles.map((f) => {
+                const label = [
+                  f.numero || "—",
+                  f.patientNom ? `${f.patientNom} ${f.patientPrenom || ""}`.trim() : null,
+                  f.montantTotal != null ? `${f.montantTotal.toFixed(2)} €` : null,
+                ].filter(Boolean).join(" · ");
+                const statutColors = {
+                  brouillon:   "bg-slate-100 text-slate-600",
+                  emise:       "bg-blue-100 text-blue-700",
+                  en_attente:  "bg-yellow-100 text-yellow-700",
+                  payee:       "bg-green-100 text-green-700",
+                };
+                const isSelected = modalFactureId === f._id;
+                return (
+                  <button
+                    key={f._id}
+                    type="button"
+                    onClick={() => setModalFactureId(f._id)}
+                    className={`w-full text-left px-3 py-3 rounded-xl border-2 transition-all flex items-center justify-between gap-2 ${
+                      isSelected
+                        ? "border-purple-500 bg-purple-50"
+                        : "border-slate-200 hover:border-slate-300 bg-white"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className={`text-sm font-semibold truncate ${isSelected ? "text-purple-800" : "text-navy"}`}>
+                        {f.numero || "Sans numéro"}
+                      </p>
+                      {(f.patientNom || f.patientPrenom) && (
+                        <p className="text-xs text-slate-500 truncate">
+                          {`${f.patientNom || ""} ${f.patientPrenom || ""}`.trim()}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {f.montantTotal != null && (
+                        <span className="text-sm font-mono font-bold text-slate-700">
+                          {f.montantTotal.toFixed(2)} €
+                        </span>
+                      )}
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${statutColors[f.statut] || "bg-slate-100 text-slate-600"}`}>
+                        {f.statut}
+                      </span>
+                      {isSelected && (
+                        <span className="material-symbols-outlined text-purple-600 text-base">check_circle</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button onClick={closeModal} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50">
               Annuler
             </button>
             <button
               onClick={handleFacturer}
-              disabled={!modalFactureId.trim() || actionLoading}
+              disabled={!modalFactureId || actionLoading}
               className="flex-1 py-2.5 rounded-xl bg-purple-600 text-white text-sm font-bold hover:bg-purple-700 disabled:opacity-50"
             >
               {actionLoading ? "…" : "Clôturer"}

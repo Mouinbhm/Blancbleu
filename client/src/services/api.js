@@ -116,7 +116,9 @@ export const transportService = {
   accepterDriver: (id) => api.patch(`/transports/${id}/accept-driver`),
   refuserDriver: (id, raison) => api.patch(`/transports/${id}/reject-driver`, { raison }),
   billingPending: (id) => api.patch(`/transports/${id}/billing-pending`),
-  facturer: (id, referenceFacture) => api.patch(`/transports/${id}/bill`, { referenceFacture }),
+  facturer: (id, payload) => api.patch(`/transports/${id}/bill`,
+    typeof payload === "string" ? { referenceFacture: payload } : payload
+  ),
   paid: (id) => api.patch(`/transports/${id}/paid`),
   fail: (id, raison) => api.patch(`/transports/${id}/fail`, { raison }),
   noShow: (id, raison) => api.patch(`/transports/${id}/no-show`, { raison }),
