@@ -68,8 +68,8 @@ const TRANSITIONS = {
   ARRIVED_AT_DESTINATION: ["WAITING_AT_DESTINATION", "RETURN_TO_BASE", "COMPLETED", "CANCELLED", "FAILED"],
   WAITING_AT_DESTINATION: ["RETURN_TO_BASE", "CANCELLED", "FAILED"],
   RETURN_TO_BASE:         ["COMPLETED", "CANCELLED", "FAILED"],
-  // COMPLETED → BILLING_PENDING (flux étendu) ou directement BILLED (rétrocompat)
-  COMPLETED:              ["BILLING_PENDING", "BILLED"],
+  // COMPLETED → BILLING_PENDING (obligatoire) → BILLED → PAID
+  COMPLETED:              ["BILLING_PENDING"],
   BILLING_PENDING:        ["BILLED"],
   BILLED:                 ["PAID"],
   PAID:                   [], // terminal — paiement reçu
@@ -347,26 +347,26 @@ class TransportStateMachine {
   }
 
   static progression(statut) {
-    const ordre = [
-      "REQUESTED",              // 0%
-      "CONFIRMED",              // 7%
-      "SCHEDULED",              // 14%
-      "ASSIGNED",               // 21%
-      "DRIVER_ACCEPTED",        // 28%
-      "EN_ROUTE_TO_PICKUP",     // 35%
-      "ARRIVED_AT_PICKUP",      // 43%
-      "PATIENT_ON_BOARD",       // 50%
-      "ARRIVED_AT_DESTINATION", // 57%
-      "WAITING_AT_DESTINATION", // 64%
-      "RETURN_TO_BASE",         // 71%
-      "COMPLETED",              // 78%
-      "BILLING_PENDING",        // 85%
-      "BILLED",                 // 92%
-      "PAID",                   // 100%
-    ];
-    const idx = ordre.indexOf(statut);
-    if (idx === -1) return null; // CANCELLED, NO_SHOW, RESCHEDULED, FAILED, DRIVER_REJECTED → null
-    return Math.round((idx / (ordre.length - 1)) * 100);
+    // Explicit map — gives precise control over percentages for each lifecycle step.
+    // CANCELLED, NO_SHOW, RESCHEDULED, FAILED, DRIVER_REJECTED → null (hors flux nominal)
+    const MAP = {
+      REQUESTED:              0,
+      CONFIRMED:              7,
+      SCHEDULED:              14,
+      ASSIGNED:               21,
+      DRIVER_ACCEPTED:        28,
+      EN_ROUTE_TO_PICKUP:     36,
+      ARRIVED_AT_PICKUP:      43,
+      PATIENT_ON_BOARD:       50,
+      ARRIVED_AT_DESTINATION: 57,
+      WAITING_AT_DESTINATION: 71,
+      RETURN_TO_BASE:         79,
+      COMPLETED:              84,
+      BILLING_PENDING:        89,
+      BILLED:                 94,
+      PAID:                   100,
+    };
+    return MAP[statut] ?? null;
   }
 
   static estTerminal(statut) {
