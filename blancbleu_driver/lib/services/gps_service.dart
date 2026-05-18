@@ -56,9 +56,6 @@ class GpsService {
 
   @pragma('vm:entry-point')
   static void _bgEntryPoint(ServiceInstance service) async {
-    // Register Flutter plugins in this isolate.
-    DartPluginRegistrant.ensureInitialized();
-
     sio.Socket? socket;
     StreamSubscription<Position>? positionSub;
     DateTime? lastEmit;

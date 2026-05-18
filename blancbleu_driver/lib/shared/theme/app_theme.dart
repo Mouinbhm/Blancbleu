@@ -76,7 +76,6 @@ class AppTheme {
     ).copyWith(
       surface: _darkCard,
       onSurface: _darkText,
-      surfaceContainerHighest: _darkCard,
       outline: _darkBorder,
       outlineVariant: _darkBorder,
     ),
