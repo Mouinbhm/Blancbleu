@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:socket_io_client/socket_io_client.dart' as sio;
+
 import '../cubit/tournee_cubit.dart';
 import '../widgets/transport_card.dart';
 import '../../shift/cubit/shift_cubit.dart';
 import '../../shift/screens/shift_screen.dart';
 import '../../chat/screens/chat_screen.dart';
 import '../../profile/screens/profile_screen.dart';
+import '../../../core/network/api_client.dart';
+import '../../../core/utils/constants.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/offline_banner.dart';
-import '../../../core/network/api_client.dart';
 
 class HomeScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -20,24 +24,116 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   DateTime _selectedDate = DateTime.now();
   int _navIndex = 0;
   int _notifUnread = 0;
 
+  // Socket.IO for real-time events (main isolate)
+  sio.Socket? _socket;
+
+  // Pulsing animation for the "available" indicator
+  late final AnimationController _pulseCtrl;
+  late final Animation<double>   _pulseAnim;
+
+  // ── Lifecycle ───────────────────────────────────────────────────────────────
+
   @override
   void initState() {
     super.initState();
+
     context.read<TourneeCubit>().load(date: _selectedDate);
     context.read<ShiftCubit>().checkActive();
     _fetchUnreadNotifications();
+    _connectSocket();
+
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat(reverse: true);
+    _pulseAnim = CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut);
   }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    _socket?.disconnect();
+    _socket?.dispose();
+    super.dispose();
+  }
+
+  // ── Socket ──────────────────────────────────────────────────────────────────
+
+  Future<void> _connectSocket() async {
+    const storage = FlutterSecureStorage();
+    final token = await storage.read(key: AppConstants.tokenKey);
+
+    _socket = sio.io(
+      AppConstants.wsUrl,
+      sio.OptionBuilder()
+          .setTransports(['websocket'])
+          .setAuth({'token': token ?? ''})
+          .enableAutoConnect()
+          .enableReconnection()
+          .setReconnectionDelay(3000)
+          .build(),
+    );
+
+    _socket!.on('transport:assigned', (raw) {
+      if (!mounted) return;
+      final data = Map<String, dynamic>.from(raw as Map? ?? {});
+
+      // Only handle if assigned to the current driver
+      final targetId = data['driverId']?.toString()
+          ?? data['chauffeurId']?.toString()
+          ?? (data['chauffeur'] is Map ? data['chauffeur']['_id']?.toString() : data['chauffeur']?.toString());
+      final myId = widget.user['_id']?.toString() ?? widget.user['id']?.toString();
+      if (targetId != null && targetId != myId) return;
+
+      // Inject transport into cubit
+      context.read<TourneeCubit>().addTransport(data);
+
+      // In-app notification SnackBar
+      final patient    = data['patient'] as Map? ?? {};
+      final patientNom = [patient['prenom'], patient['nom']]
+          .where((s) => s != null && s.toString().isNotEmpty)
+          .join(' ');
+      final heureRaw = data['heureRDV']?.toString() ?? '';
+      final heure    = heureRaw.length >= 5 ? heureRaw.substring(0, 5) : heureRaw;
+      final label    = [
+        if (patientNom.isNotEmpty) patientNom,
+        if (heure.isNotEmpty) 'à $heure',
+      ].join(' ');
+
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Row(children: [
+          const Icon(Icons.local_shipping, color: Colors.white, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Nouvelle mission assignée${label.isNotEmpty ? ' — $label' : ''}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ]),
+        backgroundColor: AppTheme.success,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      ));
+    });
+
+    _socket!.connect();
+  }
+
+  // ── Notifications ────────────────────────────────────────────────────────────
 
   Future<void> _fetchUnreadNotifications() async {
     try {
       final res = await ApiClient.instance.getNotificationsUnreadCount();
       if (mounted) setState(() => _notifUnread = res);
-    } catch (_) { /* non-bloquant */ }
+    } catch (_) {}
   }
 
   Future<void> _showNotificationsSheet() async {
@@ -60,7 +156,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           child: Column(children: [
             const SizedBox(height: 8),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+            Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+            ),
             const SizedBox(height: 12),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
@@ -79,18 +178,24 @@ class _HomeScreenState extends State<HomeScreen> {
                       itemCount: notifs.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 8),
                       itemBuilder: (_, i) {
-                        final n     = notifs[i];
+                        final n      = notifs[i];
                         final isRead = n['read'] as bool? ?? true;
                         return GestureDetector(
                           onTap: () {
-                            if (!isRead) ApiClient.instance.markNotificationRead(n['_id'] as String? ?? '');
+                            if (!isRead) {
+                              ApiClient.instance.markNotificationRead(n['_id'] as String? ?? '');
+                            }
                           },
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: isRead ? const Color(0xFFF9FAFB) : const Color(0xFFEFF6FF),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: isRead ? const Color(0xFFF0F0F0) : AppTheme.primary.withOpacity(0.3)),
+                              border: Border.all(
+                                color: isRead
+                                    ? const Color(0xFFF0F0F0)
+                                    : AppTheme.primary.withOpacity(0.3),
+                              ),
                             ),
                             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               Container(
@@ -102,17 +207,32 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: const Icon(Icons.notifications_outlined, size: 18, color: AppTheme.primary),
                               ),
                               const SizedBox(width: 10),
-                              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Text(n['title'] as String? ?? '',
-                                    style: TextStyle(fontSize: 13, fontWeight: isRead ? FontWeight.w500 : FontWeight.w700)),
-                                if ((n['message'] as String?)?.isNotEmpty ?? false) ...[
-                                  const SizedBox(height: 2),
-                                  Text(n['message'] as String,
-                                      style: const TextStyle(fontSize: 11, color: Colors.grey), maxLines: 2, overflow: TextOverflow.ellipsis),
-                                ],
-                              ])),
-                              if (!isRead) Container(width: 8, height: 8, margin: const EdgeInsets.only(top: 4),
-                                  decoration: const BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle)),
+                              Expanded(
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  Text(
+                                    n['title'] as String? ?? '',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: isRead ? FontWeight.w500 : FontWeight.w700,
+                                    ),
+                                  ),
+                                  if ((n['message'] as String?)?.isNotEmpty ?? false) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      n['message'] as String,
+                                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ]),
+                              ),
+                              if (!isRead)
+                                Container(
+                                  width: 8, height: 8,
+                                  margin: const EdgeInsets.only(top: 4),
+                                  decoration: const BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle),
+                                ),
                             ]),
                           ),
                         );
@@ -124,6 +244,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  // ── Date navigation ──────────────────────────────────────────────────────────
 
   void _changeDate(int delta) {
     final next = _selectedDate.add(Duration(days: delta));
@@ -148,6 +270,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // ── Build ────────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -165,10 +289,10 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedIndex: _navIndex,
         onDestinationSelected: (i) => setState(() => _navIndex = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.route_outlined),   selectedIcon: Icon(Icons.route),   label: 'Tournée'),
-          NavigationDestination(icon: Icon(Icons.chat_outlined),    selectedIcon: Icon(Icons.chat),    label: 'Messages'),
-          NavigationDestination(icon: Icon(Icons.badge_outlined),   selectedIcon: Icon(Icons.badge),   label: 'Shift'),
-          NavigationDestination(icon: Icon(Icons.person_outlined),  selectedIcon: Icon(Icons.person),  label: 'Profil'),
+          NavigationDestination(icon: Icon(Icons.route_outlined),  selectedIcon: Icon(Icons.route),  label: 'Tournée'),
+          NavigationDestination(icon: Icon(Icons.chat_outlined),   selectedIcon: Icon(Icons.chat),   label: 'Messages'),
+          NavigationDestination(icon: Icon(Icons.badge_outlined),  selectedIcon: Icon(Icons.badge),  label: 'Shift'),
+          NavigationDestination(icon: Icon(Icons.person_outlined), selectedIcon: Icon(Icons.person), label: 'Profil'),
         ],
       ),
     );
@@ -204,6 +328,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ── Header ───────────────────────────────────────────────────────────────────
+
   Widget _buildHeader() {
     return Container(
       color: Colors.white,
@@ -215,25 +341,31 @@ class _HomeScreenState extends State<HomeScreen> {
           child: const Icon(Icons.local_shipping, color: Colors.white, size: 22),
         ),
         const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(
-            '${widget.user['prenom'] ?? ''} ${widget.user['nom'] ?? ''}'.trim(),
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.onSurface),
-          ),
-          BlocBuilder<ShiftCubit, ShiftState>(
-            builder: (context, state) {
-              if (state is ShiftActive) {
-                final v = state.shift['vehicleId'];
-                final plate = v is Map ? v['immatriculation']?.toString() ?? '' : '';
-                return Text(
-                  plate.isNotEmpty ? 'Shift actif — $plate' : 'Shift actif',
-                  style: const TextStyle(fontSize: 11, color: AppTheme.primary),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+              '${widget.user['prenom'] ?? ''} ${widget.user['nom'] ?? ''}'.trim(),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.onSurface),
+            ),
+            BlocBuilder<ShiftCubit, ShiftState>(
+              builder: (context, state) {
+                if (state is ShiftActive) {
+                  final v     = state.shift['vehicleId'];
+                  final plate = v is Map ? v['immatriculation']?.toString() ?? '' : '';
+                  return Text(
+                    plate.isNotEmpty ? 'Shift actif — $plate' : 'Shift actif',
+                    style: const TextStyle(fontSize: 11, color: AppTheme.primary),
+                  );
+                }
+                return const Text(
+                  'Aucun shift actif',
+                  style: TextStyle(fontSize: 11, color: AppTheme.secondary),
                 );
-              }
-              return const Text('Aucun shift actif', style: TextStyle(fontSize: 11, color: AppTheme.secondary));
-            },
-          ),
-        ])),
+              },
+            ),
+          ]),
+        ),
+
         // Cloche notifications
         Stack(children: [
           IconButton(
@@ -250,13 +382,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 width: 16, height: 16,
                 decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
                 alignment: Alignment.center,
-                child: Text('$_notifUnread',
-                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                child: Text(
+                  '$_notifUnread',
+                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
+                ),
               ),
             ),
         ]),
         const SizedBox(width: 4),
-        // Date navigation arrows + label
+
+        // Sélecteur de date
         Row(children: [
           IconButton(
             onPressed: () => _changeDate(-1),
@@ -291,6 +426,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ── Loading shimmer ──────────────────────────────────────────────────────────
+
   Widget _buildShimmer() {
     return Shimmer.fromColors(
       baseColor: Colors.grey.shade200,
@@ -300,12 +437,14 @@ class _HomeScreenState extends State<HomeScreen> {
         itemCount: 4,
         itemBuilder: (_, __) => Container(
           margin: const EdgeInsets.only(bottom: 12),
-          height: 100,
+          height: 110,
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
         ),
       ),
     );
   }
+
+  // ── List / empty states ──────────────────────────────────────────────────────
 
   Widget _buildList(TourneeLoaded state, ShiftState shiftState) {
     if (state.transports.isEmpty) {
@@ -314,48 +453,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       _selectedDate.month == now.month &&
                       _selectedDate.day   == now.day;
 
+      // No shift started yet — prompt to go to Shift tab
       if (isToday && shiftState is ShiftIdle) {
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Container(
-                width: 64, height: 64,
-                decoration: BoxDecoration(color: const Color(0xFFFFF7ED), borderRadius: BorderRadius.circular(16)),
-                child: const Icon(Icons.schedule, size: 32, color: Color(0xFFF97316)),
-              ),
-              const SizedBox(height: 16),
-              const Text('Démarrez votre shift',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.onSurface)),
-              const SizedBox(height: 8),
-              const Text(
-                'Vous devez démarrer votre shift pour voir vos transports assignés.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: AppTheme.secondary),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: () => setState(() => _navIndex = 2),
-                icon: const Icon(Icons.badge_outlined),
-                label: const Text('Aller au Shift'),
-              ),
-              const SizedBox(height: 80),
-            ]),
-          ),
-        );
+        return _buildNoShiftState();
       }
 
-      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          width: 64, height: 64,
-          decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(16)),
-          child: const Icon(Icons.route, size: 32, color: AppTheme.primary),
-        ),
-        const SizedBox(height: 16),
-        const Text('Aucun transport pour cette journée',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.onSurface)),
-        const SizedBox(height: 80),
-      ]));
+      // Shift active but no missions assigned yet — pulsing available card
+      if (isToday && shiftState is ShiftActive) {
+        return _buildAvailableState();
+      }
+
+      // Other day with no transports
+      return _buildEmptyDayState();
     }
 
     return RefreshIndicator(
@@ -369,6 +478,159 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Shown when shift is idle and no transports today.
+  Widget _buildNoShiftState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 64, height: 64,
+            decoration: BoxDecoration(color: const Color(0xFFFFF7ED), borderRadius: BorderRadius.circular(16)),
+            child: const Icon(Icons.schedule, size: 32, color: Color(0xFFF97316)),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Démarrez votre shift',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.onSurface),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Vous devez démarrer votre shift pour voir vos transports assignés.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: AppTheme.secondary),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: () => setState(() => _navIndex = 2),
+            icon: const Icon(Icons.badge_outlined),
+            label: const Text('Aller au Shift'),
+            style: ElevatedButton.styleFrom(minimumSize: const Size(180, 48)),
+          ),
+          const SizedBox(height: 80),
+        ]),
+      ),
+    );
+  }
+
+  /// Shown when shift is active but no missions yet — pulsing GPS available card.
+  Widget _buildAvailableState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // Pulsing GPS indicator
+          AnimatedBuilder(
+            animation: _pulseAnim,
+            builder: (_, child) {
+              final scale = 1.0 + 0.25 * _pulseAnim.value;
+              return Stack(alignment: Alignment.center, children: [
+                // Outer glow ring
+                Transform.scale(
+                  scale: scale,
+                  child: Container(
+                    width: 80, height: 80,
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withOpacity(0.12 * (1 - _pulseAnim.value * 0.5)),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+                // Middle ring
+                Transform.scale(
+                  scale: 0.85 + 0.12 * _pulseAnim.value,
+                  child: Container(
+                    width: 80, height: 80,
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withOpacity(0.18),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+                // Core dot
+                Container(
+                  width: 52, height: 52,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFDCFCE7),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.location_on, color: AppTheme.success, size: 26),
+                ),
+              ]);
+            },
+          ),
+
+          const SizedBox(height: 24),
+
+          // "Vous êtes disponible" card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFBBF7D0)),
+            ),
+            child: Column(children: [
+              const Text(
+                'Vous êtes disponible',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF166534)),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'En attente d\'une mission du dispatcher',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Color(0xFF15803D)),
+              ),
+              const SizedBox(height: 14),
+              // GPS pulse label
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                AnimatedBuilder(
+                  animation: _pulseAnim,
+                  builder: (_, __) => Container(
+                    width: 8, height: 8,
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withOpacity(0.5 + 0.5 * _pulseAnim.value),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Text(
+                  'GPS actif — position transmise',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF16A34A), fontWeight: FontWeight.w600),
+                ),
+              ]),
+            ]),
+          ),
+
+          const SizedBox(height: 80),
+        ]),
+      ),
+    );
+  }
+
+  /// Shown for any non-today date with no transports.
+  Widget _buildEmptyDayState() {
+    return Center(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 64, height: 64,
+          decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(16)),
+          child: const Icon(Icons.route, size: 32, color: AppTheme.primary),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Aucun transport pour cette journée',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.onSurface),
+        ),
+        const SizedBox(height: 80),
+      ]),
+    );
+  }
+
+  // ── Error state ──────────────────────────────────────────────────────────────
+
   Widget _buildError(String msg) {
     return Center(
       child: Padding(
@@ -380,6 +642,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () => context.read<TourneeCubit>().load(date: _selectedDate),
+            style: ElevatedButton.styleFrom(minimumSize: const Size(160, 48)),
             child: const Text('Réessayer'),
           ),
         ]),

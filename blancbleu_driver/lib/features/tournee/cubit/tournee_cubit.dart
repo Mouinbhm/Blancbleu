@@ -42,4 +42,20 @@ class TourneeCubit extends Cubit<TourneeState> {
     }).toList();
     emit(loaded.copyWith(transports: updated));
   }
+
+  /// Inserts a transport received via Socket.IO without reloading everything.
+  void addTransport(Map<String, dynamic> transport) {
+    final dateStr = DateTime.now().toIso8601String().substring(0, 10);
+    if (state is! TourneeLoaded) {
+      emit(TourneeLoaded(transports: [transport], date: dateStr));
+      return;
+    }
+    final loaded = state as TourneeLoaded;
+    final newId  = (transport['_id'] ?? transport['id'])?.toString();
+    final exists = loaded.transports.any(
+      (t) => (t['_id'] ?? t['id'])?.toString() == newId,
+    );
+    if (exists) return;
+    emit(loaded.copyWith(transports: [...loaded.transports, transport]));
+  }
 }
