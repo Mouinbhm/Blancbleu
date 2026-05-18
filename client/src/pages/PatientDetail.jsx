@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { patientService } from "../services/api";
 import StatutBadge from "../components/transport/StatutBadge";
+import ModalNouvellePrescription from "../components/prescription/ModalPrescription";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const fmtDate = (d) =>
@@ -166,18 +167,57 @@ function TabTransports({ transports, patientId }) {
 }
 
 // ── Onglet Prescriptions ──────────────────────────────────────────────────────
-function TabPrescriptions({ prescriptions }) {
+function TabPrescriptions({ prescriptions, patient, patientId, onRefresh }) {
+  const [showModal, setShowModal] = useState(false);
+
   const STATUT_COLOR = {
+    active:                "bg-green-100 text-green-700",
+    en_attente_validation: "bg-amber-100 text-amber-700",
+    incomplet:             "bg-orange-100 text-orange-700",
+    expiree:               "bg-slate-100 text-slate-500",
+    annulee:               "bg-red-100 text-red-600",
+    // legacy
     en_attente: "bg-yellow-100 text-yellow-700",
     validee:    "bg-green-100 text-green-700",
     incomplete: "bg-red-100 text-red-700",
-    expiree:    "bg-slate-100 text-slate-500",
   };
+
+  const STATUT_LABEL = {
+    active:                "Active",
+    en_attente_validation: "À valider",
+    incomplet:             "Incomplet",
+    expiree:               "Expirée",
+    annulee:               "Annulée",
+    en_attente:            "En attente",
+    validee:               "Validée",
+    incomplete:            "Incomplet",
+  };
+
   return (
     <div>
-      <p className="text-sm text-slate-500 mb-4">{prescriptions.length} prescription(s)</p>
+      {showModal && (
+        <ModalNouvellePrescription
+          patientPreset={{ _id: patientId, nom: patient?.nom || "", prenom: patient?.prenom || "", numeroPatient: patient?.numeroPatient || "" }}
+          onClose={() => setShowModal(false)}
+          onSuccess={() => { setShowModal(false); onRefresh(); }}
+        />
+      )}
+
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-slate-500">{prescriptions.length} prescription(s)</p>
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-1.5 bg-primary text-white px-3 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors"
+        >
+          <span className="material-symbols-outlined text-base">add</span>
+          Nouvelle prescription
+        </button>
+      </div>
+
       {prescriptions.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 text-sm">Aucune prescription</div>
+        <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 text-sm">
+          Aucune prescription
+        </div>
       ) : (
         <div className="space-y-2">
           {prescriptions.map((p) => (
@@ -189,7 +229,7 @@ function TabPrescriptions({ prescriptions }) {
                   {p.medecin?.nom && <p className="text-xs text-slate-400">Dr {p.medecin.nom}</p>}
                 </div>
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUT_COLOR[p.statut] || "bg-slate-100 text-slate-500"}`}>
-                  {p.statut}
+                  {STATUT_LABEL[p.statut] || p.statut}
                 </span>
               </div>
             </div>
@@ -741,7 +781,7 @@ export default function PatientDetail() {
       {/* Contenu */}
       {tab === "info"          && <TabInfo          patient={patient} />}
       {tab === "transports"    && <TabTransports    transports={data?.transports || []}    patientId={id} />}
-      {tab === "prescriptions" && <TabPrescriptions prescriptions={data?.prescriptions || []} />}
+      {tab === "prescriptions" && <TabPrescriptions prescriptions={data?.prescriptions || []} patient={patient} patientId={id} onRefresh={load} />}
       {tab === "factures"      && <TabFactures      factures={data?.factures || []} />}
       {tab === "consentements" && <TabConsentements patientId={id} consentements={data?.consentements} onRefresh={load} showToast={showToast} />}
       {tab === "rgpd"          && <TabRgpd          patient={patient} patientId={id} onRefresh={load} showToast={showToast} userRole={data?.patient ? "admin" : ""} />}

@@ -110,14 +110,17 @@
       "Bash(Remove-Item \"c:\\\\Users\\\\MSI\\\\OneDrive\\\\Bureau\\\\PFE\\\\blancbleu\\\\client\\\\src\\\\pages\\\\Notifications.jsx\" -Force)",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\MSI\\\\OneDrive\\\\Bureau\\\\PFE\\\\blancbleu\\\\server\" -Recurse -Directory)",
       "Bash(powershell -Command ' *)",
-      "PowerShell(head -20)"
+      "PowerShell(head -20)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\MSI\\\\OneDrive\\\\Bureau\\\\PFE\\\\blancbleu\\\\client\\\\src\" -Recurse -File)",
+      "Bash(Select-Object -First 50)"
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory",
       "c:\\Users\\MSI\\OneDrive\\Bureau\\PFE\\blancbleu\\ai-service",
       "c:\\Users\\MSI\\OneDrive\\Bureau\\PFE\\blancbleu\\blancbleu_patient\\ios",
       "c:\\Users\\MSI\\OneDrive\\Bureau\\PFE\\blancbleu\\blancbleu_patient\\lib",
-      "C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.5.11-hotspot\\bin"
+      "C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.5.11-hotspot\\bin",
+      "C:\\Users\\MSI\\AppData\\Local\\Pub\\Cache\\hosted\\pub.dev\\open_file-3.3.2\\android"
     ]
   }
 }

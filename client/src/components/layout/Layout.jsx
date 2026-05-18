@@ -18,7 +18,6 @@ const NAV_OPERATIONS = [
   { path: "/suivi-en-direct", icon: "location_on",     label: "Suivi en direct" },
   { path: "/shifts",          icon: "schedule",        label: "Shifts"          },
   { path: "/patients",        icon: "personal_injury", label: "Patients"        },
-  { path: "/prescriptions",   icon: "description",     label: "Prescriptions"   },
 ];
 
 const NAV_GESTION = [
@@ -41,7 +40,6 @@ const pageTitles = {
   "/planning":        "Planning — Organisation journalière",
   "/flotte":          "Flotte — Véhicules sanitaires",
   "/patients":        "Patients — Dossiers patients",
-  "/prescriptions":   "Prescriptions — PMT & ordonnances",
   "/personnel":       "Personnel — Équipes",
   "/equipements":     "Équipements — Matériel médical",
   "/maintenances":    "Maintenances — Suivi véhicules",
