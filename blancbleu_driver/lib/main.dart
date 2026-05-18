@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/date_symbol_data_local.dart';
+
 import 'core/network/sync_service.dart';
+import 'core/notifications/notification_service.dart';
+import 'core/theme/theme_notifier.dart';
 import 'features/auth/cubit/auth_cubit.dart';
 import 'features/tournee/cubit/tournee_cubit.dart';
 import 'features/shift/cubit/shift_cubit.dart';
@@ -13,7 +16,9 @@ import 'shared/theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('fr_FR', null);
-  await GpsService.init(); // configure background service before runApp
+  await GpsService.init();
+  await ThemeNotifier.instance.init();
+  await NotificationService.init();
   runApp(const BlancBleuDriverApp());
 }
 
@@ -28,11 +33,16 @@ class BlancBleuDriverApp extends StatelessWidget {
         BlocProvider(create: (_) => TourneeCubit()),
         BlocProvider(create: (_) => ShiftCubit()),
       ],
-      child: MaterialApp(
-        title: 'BlancBleu Driver',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.theme,
-        home: const _Root(),
+      child: ListenableBuilder(
+        listenable: ThemeNotifier.instance,
+        builder: (_, __) => MaterialApp(
+          title: 'BlancBleu Driver',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.theme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: ThemeNotifier.instance.mode,
+          home: const _Root(),
+        ),
       ),
     );
   }

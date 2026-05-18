@@ -152,4 +152,35 @@ class ApiClient {
     final raw  = body['vehicles'] ?? body['data'] ?? [];
     return (raw as List).cast<dynamic>();
   }
+
+  // ── Profile ───────────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>> getShiftStats(String driverId, {String period = 'month'}) async {
+    final res = await _dio.get('/shifts/stats', queryParameters: {'driverId': driverId, 'period': period});
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<String> uploadAvatar(String filePath) async {
+    final formData = FormData.fromMap({
+      'avatar': await MultipartFile.fromFile(filePath, filename: 'avatar.jpg'),
+    });
+    final res = await _dio.post(
+      '${AppConstants.baseUrl}/api/v1/personnel/auth/avatar',
+      data: formData,
+      options: Options(contentType: 'multipart/form-data'),
+    );
+    return (res.data as Map<String, dynamic>)['url'] as String;
+  }
+
+  Future<String> uploadDocument(String type, String filePath) async {
+    final formData = FormData.fromMap({
+      'document': await MultipartFile.fromFile(filePath, filename: '$type.jpg'),
+      'type': type,
+    });
+    final res = await _dio.post(
+      '${AppConstants.baseUrl}/api/v1/personnel/auth/documents',
+      data: formData,
+      options: Options(contentType: 'multipart/form-data'),
+    );
+    return (res.data as Map<String, dynamic>)['url'] as String;
+  }
 }
