@@ -183,4 +183,30 @@ class ApiClient {
     );
     return (res.data as Map<String, dynamic>)['url'] as String;
   }
+
+  // ── Profile update ────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>> updateProfile({
+    String? nom,
+    String? prenom,
+    String? telephone,
+  }) async {
+    final res = await _dio.patch(
+      '${AppConstants.baseUrl}/api/v1/personnel/auth/profile',
+      data: {
+        if (nom       != null) 'nom':       nom,
+        if (prenom    != null) 'prenom':    prenom,
+        if (telephone != null) 'telephone': telephone,
+      },
+    );
+    return res.data as Map<String, dynamic>;
+  }
+
+  // ── Messages ──────────────────────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> getMessageHistory() async {
+    try {
+      final res = await _dio.get('/messages/history');
+      final list = res.data as List<dynamic>? ?? [];
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (_) { return []; }
+  }
 }

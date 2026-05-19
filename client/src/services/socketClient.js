@@ -11,6 +11,7 @@ let _socket = null;
 export function getSocket() {
   if (!_socket) {
     _socket = io(SOCKET_URL, {
+      withCredentials: true,
       transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionDelay: 2000,

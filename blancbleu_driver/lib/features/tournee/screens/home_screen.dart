@@ -26,11 +26,15 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   DateTime _selectedDate = DateTime.now();
-  int _navIndex = 0;
+  int _navIndex    = 0;
   int _notifUnread = 0;
+  int _msgUnread   = 0;          // badge rouge sur l'onglet Messages
 
   // Socket.IO for real-time events (main isolate)
   sio.Socket? _socket;
+
+  // Bannière in-app pour les messages (overlay slide-in depuis le haut)
+  OverlayEntry? _msgBanner;
 
   // Pulsing animation for the "available" indicator
   late final AnimationController _pulseCtrl;
@@ -57,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void dispose() {
     _pulseCtrl.dispose();
+    _msgBanner?.remove();
     _socket?.disconnect();
     _socket?.dispose();
     super.dispose();
@@ -124,7 +129,44 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ));
     });
 
+    _socket!.on('message:dispatcher', (raw) {
+      if (!mounted) return;
+      final data    = Map<String, dynamic>.from(raw as Map? ?? {});
+      final text    = data['text'] as String? ?? '';
+      final fromNom = data['fromNom'] as String? ?? 'Dispatcher';
+      if (_navIndex != 1) {
+        setState(() => _msgUnread++);
+        _showMessageBanner(fromNom, text);
+      }
+    });
+
     _socket!.connect();
+  }
+
+  void _showMessageBanner(String nom, String text) {
+    _msgBanner?.remove();
+    _msgBanner = null;
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => _MessageBanner(
+        nom: nom,
+        text: text,
+        onTap: () {
+          entry.remove();
+          _msgBanner = null;
+          if (mounted) setState(() { _navIndex = 1; _msgUnread = 0; });
+        },
+        onDismiss: () {
+          if (_msgBanner == entry) {
+            entry.remove();
+            _msgBanner = null;
+          }
+        },
+      ),
+    );
+    _msgBanner = entry;
+    Overlay.of(context).insert(entry);
   }
 
   // ── Notifications ────────────────────────────────────────────────────────────
@@ -287,12 +329,33 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _navIndex,
-        onDestinationSelected: (i) => setState(() => _navIndex = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.route_outlined),  selectedIcon: Icon(Icons.route),  label: 'Tournée'),
-          NavigationDestination(icon: Icon(Icons.chat_outlined),   selectedIcon: Icon(Icons.chat),   label: 'Messages'),
-          NavigationDestination(icon: Icon(Icons.badge_outlined),  selectedIcon: Icon(Icons.badge),  label: 'Shift'),
-          NavigationDestination(icon: Icon(Icons.person_outlined), selectedIcon: Icon(Icons.person), label: 'Profil'),
+        onDestinationSelected: (i) {
+          setState(() {
+            _navIndex = i;
+            if (i == 1) {
+              _msgUnread = 0;
+              _msgBanner?.remove();
+              _msgBanner = null;
+            }
+          });
+        },
+        destinations: [
+          const NavigationDestination(icon: Icon(Icons.route_outlined), selectedIcon: Icon(Icons.route), label: 'Tournée'),
+          NavigationDestination(
+            icon: Badge(
+              isLabelVisible: _msgUnread > 0,
+              label: Text(_msgUnread > 9 ? '9+' : '$_msgUnread'),
+              child: const Icon(Icons.chat_outlined),
+            ),
+            selectedIcon: Badge(
+              isLabelVisible: _msgUnread > 0,
+              label: Text(_msgUnread > 9 ? '9+' : '$_msgUnread'),
+              child: const Icon(Icons.chat),
+            ),
+            label: 'Messages',
+          ),
+          const NavigationDestination(icon: Icon(Icons.badge_outlined),  selectedIcon: Icon(Icons.badge),  label: 'Shift'),
+          const NavigationDestination(icon: Icon(Icons.person_outlined), selectedIcon: Icon(Icons.person), label: 'Profil'),
         ],
       ),
     );
@@ -646,6 +709,129 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: const Text('Réessayer'),
           ),
         ]),
+      ),
+    );
+  }
+}
+
+// ── Bannière in-app message (slide depuis le haut) ───────────────────────────
+
+class _MessageBanner extends StatefulWidget {
+  final String nom;
+  final String text;
+  final VoidCallback onTap;
+  final VoidCallback onDismiss;
+
+  const _MessageBanner({
+    required this.nom,
+    required this.text,
+    required this.onTap,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_MessageBanner> createState() => _MessageBannerState();
+}
+
+class _MessageBannerState extends State<_MessageBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
+    _slide = Tween<Offset>(begin: const Offset(0, -1.5), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+    _ctrl.forward();
+    Future.delayed(const Duration(seconds: 4), _dismiss);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _dismiss() {
+    if (!mounted) return;
+    _ctrl.reverse().then((_) => widget.onDismiss());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final topPad = MediaQuery.of(context).padding.top;
+    return Positioned(
+      top: topPad + 8,
+      left: 12,
+      right: 12,
+      child: SlideTransition(
+        position: _slide,
+        child: Material(
+          color: Colors.transparent,
+          child: GestureDetector(
+            onTap: widget.onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: const Border(
+                  left: BorderSide(color: Color(0xFF1A56DB), width: 4),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(children: [
+                Container(
+                  width: 38, height: 38,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFEFF6FF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.support_agent, color: Color(0xFF1A56DB), size: 20),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.nom,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ),
+                GestureDetector(
+                  onTap: _dismiss,
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: Icon(Icons.close, size: 16, color: Color(0xFF94A3B8)),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -16,6 +16,7 @@
 
 const TrackingPoint = require("../models/TrackingPoint");
 const DriverShift   = require("../models/DriverShift");
+const Message       = require("../models/Message");
 
 /**
  * In-memory snapshot of the latest known position for each vehicle.
@@ -23,6 +24,12 @@ const DriverShift   = require("../models/DriverShift");
  * Used by index.js to push a snapshot to newly connected dispatchers/admins.
  */
 const vehiclePositions = new Map();
+
+// Build a display name from JWT fields; fall back to email or a generic label
+function displayName(user) {
+  const full = `${user.prenom || ""} ${user.nom || ""}`.trim();
+  return full || user.email || `Chauffeur #${String(user.id).slice(-4)}`;
+}
 
 function initDriverSocket(io) {
   io.on("connection", (socket) => {
@@ -34,7 +41,7 @@ function initDriverSocket(io) {
       socket.join(`driver:${user.id}`);
       io.to("role:dispatcher").to("role:admin").emit("driver:online", {
         driverId:  user.id,
-        driverNom: `${user.prenom} ${user.nom}`,
+        driverNom: displayName(user),
         timestamp: new Date(),
       });
 
@@ -60,7 +67,7 @@ function initDriverSocket(io) {
 
           const posPayload = {
             driverId:  user.id,
-            driverNom: `${user.prenom} ${user.nom}`,
+            driverNom: displayName(user),
             vehicleId: vehicleId || null,
             lat, lng, speed,
             shiftId,
@@ -84,37 +91,73 @@ function initDriverSocket(io) {
       socket.on("driver:status", ({ status }) => {
         io.to("role:dispatcher").to("role:admin").emit("driver:status_changed", {
           driverId:  user.id,
-          driverNom: `${user.prenom} ${user.nom}`,
+          driverNom: displayName(user),
           status,
           timestamp: new Date(),
         });
       });
 
       // ── message:driver ────────────────────────────────────────────────────
-      socket.on("message:driver", ({ text, dispatcherId }) => {
-        const payload = {
-          from:      user.id,
-          fromNom:   `${user.prenom} ${user.nom}`,
-          text,
-          timestamp: new Date(),
-        };
-        if (dispatcherId) {
-          io.to(`driver:${dispatcherId}`).emit("message:driver", payload);
-        } else {
-          io.to("role:dispatcher").emit("message:driver", payload);
+      socket.on("message:driver", async ({ text, dispatcherId, localId }) => {
+        try {
+          const saved = await Message.create({
+            driverId:     user.id,
+            dispatcherId: dispatcherId || null,
+            fromDriver:   true,
+            text:         String(text || "").trim().slice(0, 1000),
+          });
+
+          const payload = {
+            messageId: saved._id.toString(),
+            from:      user.id,
+            fromNom:   displayName(user),
+            text:      saved.text,
+            timestamp: saved.createdAt,
+          };
+
+          if (dispatcherId) {
+            // Target a specific dispatcher by their personal room
+            io.to(`user:${dispatcherId}`).emit("message:driver", payload);
+          } else {
+            io.to("role:dispatcher").emit("message:driver", payload);
+          }
+
+          // Confirm delivery to the driver
+          socket.emit("message:delivered", {
+            messageId: saved._id.toString(),
+            localId:   localId || null,
+          });
+        } catch {
+          socket.emit("message:delivered", { error: true, localId: localId || null });
         }
       });
     }
 
     // ── Dispatcher sends message to driver ───────────────────────────────────
     if (["dispatcher", "admin", "superviseur"].includes(user.role)) {
-      socket.on("message:dispatcher", ({ text, driverId }) => {
-        io.to(`driver:${driverId}`).emit("message:dispatcher", {
-          from:      user.id,
-          fromNom:   `${user.prenom} ${user.nom}`,
-          text,
-          timestamp: new Date(),
-        });
+      socket.on("message:dispatcher", async ({ text, driverId }) => {
+        try {
+          const saved = await Message.create({
+            driverId:     driverId,
+            dispatcherId: user.id,
+            fromDriver:   false,
+            text:         String(text || "").trim().slice(0, 1000),
+          });
+          io.to(`driver:${driverId}`).emit("message:dispatcher", {
+            messageId: saved._id.toString(),
+            from:      user.id,
+            fromNom:   displayName(user),
+            text:      saved.text,
+            timestamp: saved.createdAt,
+          });
+        } catch {
+          io.to(`driver:${driverId}`).emit("message:dispatcher", {
+            from:      user.id,
+            fromNom:   displayName(user),
+            text:      String(text || ""),
+            timestamp: new Date(),
+          });
+        }
       });
 
       socket.on("shift:force_end", async ({ driverId }) => {

@@ -33,6 +33,22 @@ function initSockets(io) {
     // Room spéciale chauffeur (personnel)
     if (user.type === "personnel" || user.role === "driver" || user.role === "ambulancier") {
       socket.join(`driver:${user.id}`);
+      socket.join("role:driver");
+
+      // Tell driver whether a dispatcher is already online
+      const dispRoom = io.sockets.adapter.rooms.get("role:dispatcher");
+      socket.emit("dispatcher:status", { online: dispRoom ? dispRoom.size > 0 : false });
+    }
+
+    // Notify drivers when a dispatcher connects or disconnects
+    if (["dispatcher", "admin", "superviseur"].includes(user.role)) {
+      io.to("role:driver").emit("dispatcher:status", { online: true });
+
+      socket.on("disconnect", () => {
+        const dispRoom = io.sockets.adapter.rooms.get("role:dispatcher");
+        const remaining = dispRoom ? dispRoom.size : 0;
+        io.to("role:driver").emit("dispatcher:status", { online: remaining > 0 });
+      });
     }
 
     // Push current vehicle positions snapshot to newly connected staff

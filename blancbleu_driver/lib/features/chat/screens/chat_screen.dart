@@ -54,6 +54,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _showQuickReplies = true;
   bool _appInForeground  = true;
 
+  // Pending messages when socket is disconnected
+  final _offlineQueue = <Map<String, dynamic>>[];
+
   // ── Lifecycle ───────────────────────────────────────────────────────────────
 
   @override
@@ -111,6 +114,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           .build(),
     );
 
+    // Flush offline queue on reconnect
+    _socket!.on('connect', (_) => _flushOfflineQueue());
+
+    // Server confirmed message delivered
+    _socket!.on('message:delivered', (raw) {
+      if (!mounted) return;
+      final data    = Map<String, dynamic>.from(raw as Map? ?? {});
+      final localId = data['localId']?.toString();
+      final hasError = data['error'] == true;
+      if (localId == null) return;
+      setState(() {
+        for (final m in _msgs) {
+          if (m.id == localId) {
+            m.status = hasError ? _MsgStatus.sending : _MsgStatus.received;
+            break;
+          }
+        }
+      });
+    });
+
     // Incoming message from dispatcher
     _socket!.on('message:dispatcher', (raw) {
       if (!mounted) return;
@@ -159,6 +182,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _socket!.connect();
   }
 
+  // ── Offline queue ────────────────────────────────────────────────────────────
+
+  void _flushOfflineQueue() {
+    if (_offlineQueue.isEmpty) return;
+    final toSend = List<Map<String, dynamic>>.from(_offlineQueue);
+    _offlineQueue.clear();
+    for (final item in toSend) {
+      _socket?.emit('message:driver', item);
+    }
+  }
+
   // ── Send ────────────────────────────────────────────────────────────────────
 
   void _send(String text) {
@@ -178,15 +212,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
     _ctrl.clear();
 
-    _socket?.emit('message:driver', {'text': text});
+    final payload = {'text': text, 'localId': msg.id};
+    if (_socket?.connected == true) {
+      _socket!.emit('message:driver', payload);
+    } else {
+      _offlineQueue.add(payload);
+    }
     LocalDatabase.instance.saveMessage({
       'id': msg.id, 'text': text, 'from': 'driver',
       'timestamp': msg.time.toIso8601String(),
-    });
-
-    // Optimistic delivery confirmation after short delay
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) setState(() => msg.status = _MsgStatus.received);
     });
 
     _scrollToTop();

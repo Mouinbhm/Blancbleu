@@ -25,9 +25,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _uploadingAvatar = false;
   bool _notifEnabled    = true;
 
+  // Locally editable profile fields (override widget.user after a save)
+  late String _nom;
+  late String _prenom;
+  late String _telephone;
+
   @override
   void initState() {
     super.initState();
+    _nom       = widget.user['nom']       as String? ?? '';
+    _prenom    = widget.user['prenom']    as String? ?? '';
+    _telephone = widget.user['telephone'] as String? ?? '';
     _loadPrefs();
     _loadStats();
   }
@@ -109,10 +117,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final cs     = Theme.of(context).colorScheme;
-    final nom    = widget.user['nom']       as String? ?? '';
-    final prenom = widget.user['prenom']    as String? ?? '';
+    final nom    = _nom;
+    final prenom = _prenom;
     final email  = widget.user['email']     as String? ?? '';
-    final phone  = widget.user['telephone'] as String? ?? '';
+    final phone  = _telephone;
     final role   = widget.user['role']      as String? ?? '';
     final initials = [
       prenom.isNotEmpty ? prenom[0] : '',
@@ -177,19 +185,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 24),
 
           // ── Mon profil ───────────────────────────────────────────────────────
-          _sectionTitle('Mon profil', cs),
+          _sectionTitleWithAction('Mon profil', 'Modifier',
+              () => _showEditProfile(context), cs),
           _card(cs, [
-            _infoRow(Icons.person_outline,  '$prenom $nom'.trim(), cs),
+            _infoRow(Icons.person_outline,
+                '$prenom $nom'.trim().isNotEmpty ? '$prenom $nom'.trim() : '—', cs),
             const Divider(height: 20),
             _infoRow(Icons.badge_outlined,   _roleLabel(role), cs),
             if (email.isNotEmpty) ...[
               const Divider(height: 20),
               _infoRow(Icons.email_outlined, email, cs),
             ],
-            if (phone.isNotEmpty) ...[
-              const Divider(height: 20),
-              _infoRow(Icons.phone_outlined, phone, cs),
-            ],
+            _infoRow(Icons.phone_outlined,
+                phone.isNotEmpty ? phone : '—', cs),
           ]),
 
           const SizedBox(height: 12),
@@ -378,6 +386,119 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     ),
   );
+
+  Widget _sectionTitleWithAction(
+      String title, String action, VoidCallback onTap, ColorScheme cs) =>
+    Padding(
+      padding: const EdgeInsets.only(bottom: 8, left: 2, right: 2),
+      child: Row(children: [
+        Text(
+          title.toUpperCase(),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+            color: cs.onSurface.withOpacity(0.45),
+          ),
+        ),
+        const Spacer(),
+        GestureDetector(
+          onTap: onTap,
+          child: Text(
+            action,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.primary,
+            ),
+          ),
+        ),
+      ]),
+    );
+
+  void _showEditProfile(BuildContext context) {
+    final prenomCtrl = TextEditingController(text: _prenom);
+    final nomCtrl    = TextEditingController(text: _nom);
+    final telCtrl    = TextEditingController(text: _telephone);
+    bool saving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => Padding(
+          padding: EdgeInsets.fromLTRB(
+              24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 32),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('Modifier le profil',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 20),
+            TextField(
+              controller: prenomCtrl,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Prénom'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: nomCtrl,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Nom'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: telCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'Téléphone'),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: saving ? null : () async {
+                  setSt(() => saving = true);
+                  try {
+                    await ApiClient.instance.updateProfile(
+                      prenom:    prenomCtrl.text.trim(),
+                      nom:       nomCtrl.text.trim(),
+                      telephone: telCtrl.text.trim(),
+                    );
+                    if (mounted) {
+                      setState(() {
+                        _prenom    = prenomCtrl.text.trim();
+                        _nom       = nomCtrl.text.trim();
+                        _telephone = telCtrl.text.trim();
+                      });
+                    }
+                    if (ctx.mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Profil mis à jour ✓'),
+                        backgroundColor: AppTheme.success,
+                      ));
+                    }
+                  } catch (e) {
+                    setSt(() => saving = false);
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text('Erreur: $e'),
+                        backgroundColor: AppTheme.error,
+                      ));
+                    }
+                  }
+                },
+                child: saving
+                    ? const Text('Enregistrement...')
+                    : const Text('Enregistrer'),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
 
   Widget _card(ColorScheme cs, List<Widget> children) => Container(
     width: double.infinity,

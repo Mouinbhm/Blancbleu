@@ -4,7 +4,14 @@ const Personnel = require("../models/Personnel");
 
 const sign = (personnel) =>
   jwt.sign(
-    { id: personnel._id, email: personnel.email, role: personnel.role, type: "personnel" },
+    {
+      id:     personnel._id,
+      email:  personnel.email,
+      role:   personnel.role,
+      type:   "personnel",
+      nom:    personnel.nom    || "",
+      prenom: personnel.prenom || "",
+    },
     process.env.JWT_SECRET,
     { expiresIn: "24h" },
   );
@@ -83,6 +90,32 @@ const me = async (req, res) => {
   return res.json({ personnel: personnelPayload(req.personnel) });
 };
 
+// PATCH /api/v1/personnel/auth/profile
+const updateProfile = async (req, res) => {
+  try {
+    const { nom, prenom, telephone } = req.body;
+
+    const updates = {};
+    if (nom      !== undefined) updates.nom       = String(nom).trim();
+    if (prenom   !== undefined) updates.prenom    = String(prenom).trim();
+    if (telephone !== undefined) updates.telephone = String(telephone).trim();
+
+    if (Object.keys(updates).length === 0)
+      return res.status(400).json({ message: "Aucune donnée à mettre à jour" });
+
+    const personnel = await Personnel.findByIdAndUpdate(
+      req.personnel._id,
+      { $set: updates },
+      { new: true, runValidators: false },
+    );
+
+    const token = sign(personnel); // refresh token with updated nom/prenom
+    return res.json({ message: "Profil mis à jour", token, personnel: personnelPayload(personnel) });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
 // POST /api/v1/personnel/auth/logout
 const logout = async (req, res) => {
   try {
@@ -93,4 +126,4 @@ const logout = async (req, res) => {
   }
 };
 
-module.exports = { login, changePassword, me, logout };
+module.exports = { login, changePassword, me, logout, updateProfile };

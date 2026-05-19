@@ -37,8 +37,12 @@ const safeMsg = (err) =>
 
 // ── Helpers partagés ─────────────────────────────────────────────────────────
 
-const generateAccessToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "15m" });
+const generateAccessToken = (user) =>
+  jwt.sign(
+    { id: user._id, role: user.role, nom: user.nom || "", prenom: user.prenom || "" },
+    process.env.JWT_SECRET,
+    { expiresIn: "15m" },
+  );
 
 const issueRefreshToken = async (userId, res, req) => {
   const raw  = crypto.randomBytes(40).toString("hex");
@@ -234,14 +238,14 @@ const verifyLogin = async (req, res) => {
     await User.findByIdAndUpdate(user._id, { twoFactorVerifiedAt: new Date() });
 
     // Émettre les tokens définitifs
-    const accessToken = generateAccessToken(user._id);
+    const accessToken = generateAccessToken(user);
     await issueRefreshToken(user._id, res, req);
     res.cookie("bb_access", accessToken, {
       httpOnly: true,
       secure:   process.env.NODE_ENV === "production",
       sameSite: "strict",
       maxAge:   15 * 60 * 1000,
-      path:     "/api",
+      path:     "/",
     });
 
     await log({

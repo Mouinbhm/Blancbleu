@@ -26,12 +26,16 @@ const ACCESS_COOKIE_OPTS = {
   secure: process.env.NODE_ENV === "production",
   sameSite: "strict",
   maxAge: 15 * 60 * 1000, // 15 minutes en ms
-  path: "/api",
+  path: "/", // "/" so the cookie is also sent on /socket.io/* handshakes
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const generateAccessToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
+const generateAccessToken = (user) =>
+  jwt.sign(
+    { id: user._id, role: user.role, nom: user.nom || "", prenom: user.prenom || "" },
+    process.env.JWT_SECRET,
+    { expiresIn: ACCESS_TOKEN_TTL },
+  );
 
 const generateRawRefreshToken = () => crypto.randomBytes(40).toString("hex");
 
@@ -173,7 +177,7 @@ const login = async (req, res) => {
       return res.json({ requiresTwoFactor: true, tempToken });
     }
 
-    const accessToken = generateAccessToken(user._id);
+    const accessToken = generateAccessToken(user);
     await issueRefreshToken(user._id, res, req);
     res.cookie(ACCESS_COOKIE_NAME, accessToken, ACCESS_COOKIE_OPTS);
 
@@ -226,7 +230,7 @@ const refresh = async (req, res) => {
     });
     await issueRefreshToken(user._id, res, req);
 
-    const accessToken = generateAccessToken(user._id);
+    const accessToken = generateAccessToken(user);
     res.cookie(ACCESS_COOKIE_NAME, accessToken, ACCESS_COOKIE_OPTS);
 
     res.json({ user: userPayload(user) });
@@ -332,7 +336,7 @@ const updatePassword = async (req, res) => {
     res.clearCookie(REFRESH_COOKIE_NAME, { path: "/api/auth" });
 
     // Émettre un nouvel access token pour la session courante
-    const accessToken = generateAccessToken(user._id);
+    const accessToken = generateAccessToken(user);
     await issueRefreshToken(user._id, res, req);
     res.cookie(ACCESS_COOKIE_NAME, accessToken, ACCESS_COOKIE_OPTS);
 
