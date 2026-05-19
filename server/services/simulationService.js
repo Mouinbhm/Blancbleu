@@ -86,7 +86,14 @@ async function simulerDeplacement() {
   }
 }
 
+// ── SIMULATION DÉSACTIVÉE — mettre true pour réactiver (démos PFE) ───────────
+const SIMULATION_ACTIVE = false;
+
 function demarrer() {
+  if (!SIMULATION_ACTIVE) {
+    console.log("🔒 Simulation véhicules désactivée (SIMULATION_ACTIVE = false)");
+    return;
+  }
   if (_actif) return;
   _actif = true;
   _interval = setInterval(simulerDeplacement, INTERVAL_MS);

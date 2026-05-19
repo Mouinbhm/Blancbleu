@@ -28,8 +28,14 @@ const logger = (() => {
   }
 })();
 
-// ── Helper : lancer la simulation GPS (désactivé en test) ────────────────────
+// ── SIMULATION GPS AUTO DÉSACTIVÉE ───────────────────────────────────────────
+// Mettre SIMULATION_GPS_ACTIVE = true pour réactiver (démos PFE).
+// Quand actif : 5s après l'assignation d'un véhicule, la simulation GPS
+// démarre et fait évoluer le transport automatiquement jusqu'à COMPLETED.
+const SIMULATION_GPS_ACTIVE = false;
+
 function scheduleGpsSimulation(transportId) {
+  if (!SIMULATION_GPS_ACTIVE) return; // désactivé — contrôle manuel uniquement
   if (process.env.NODE_ENV === "test") return;
   setTimeout(() => {
     require("./simulationGPS")

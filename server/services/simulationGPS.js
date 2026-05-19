@@ -56,6 +56,11 @@ const PHASES = {
 
 const simulationsActives = new Map();
 
+// ── SIMULATION GPS DÉSACTIVÉE ─────────────────────────────────────────────────
+// Mettre true pour réactiver (démos PFE).
+// Quand actif : simule le parcours complet du transport (5 phases, x10 vitesse).
+const SIMULATION_GPS_ACTIVE = false;
+
 // ── Geo helpers ───────────────────────────────────────────────────────────────
 function distanceEntrePoints(p1, p2) {
   const R  = 6371000;
@@ -142,6 +147,11 @@ async function _transition(fnName, ...args) {
 
 // ── Simulation principale ─────────────────────────────────────────────────────
 async function demarrerSimulation(transportId) {
+  if (!SIMULATION_GPS_ACTIVE) {
+    logger.info("[simulationGPS] Simulation désactivée (SIMULATION_GPS_ACTIVE = false) — statuts manuels uniquement");
+    return;
+  }
+
   const key = String(transportId);
   if (simulationsActives.has(key)) {
     logger.warn("[simulationGPS] Simulation déjà active", { transportId: key });

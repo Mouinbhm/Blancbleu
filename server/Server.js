@@ -253,7 +253,11 @@ if (require.main === module) {
       process.exit(1);
     });
 
-  if (process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "test") {
+  // ── SIMULATION AUTO DÉSACTIVÉE ────────────────────────────────────────────
+  // Mettre SIMULATION_ACTIVE = true pour réactiver (démos PFE).
+  // La simulation déplace les véhicules toutes les 8s dans la zone Nice.
+  const SIMULATION_ACTIVE = false;
+  if (SIMULATION_ACTIVE && process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "test") {
     const sim = require("./services/simulationService");
     setTimeout(() => sim.demarrer(), 5000);
   }
