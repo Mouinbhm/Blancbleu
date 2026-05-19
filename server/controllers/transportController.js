@@ -702,11 +702,29 @@ const facturer = async (req, res, next) => {
       factureIdValide = factureIdBody;
     }
 
+    // ── Résoudre patientId si absent du transport ─────────────────────────────
+    // Ordre de résolution :
+    //   1. transport.patientId (lien ObjectId direct)
+    //   2. Patient lié au créateur (transport créé depuis l'app patient)
+    //   3. Patient trouvé par email dénormalisé (transport créé par le dispatcher)
+    let resolvedPatientId = transport.patientId || null;
+    if (!resolvedPatientId) {
+      const PatientModel = require("../models/Patient");
+      if (transport.createdBy) {
+        const p = await PatientModel.findOne({ userId: transport.createdBy, deletedAt: null }).select("_id").lean();
+        if (p) resolvedPatientId = p._id;
+      }
+      if (!resolvedPatientId && transport.patient?.email) {
+        const p = await PatientModel.findOne({ email: transport.patient.email, deletedAt: null }).select("_id").lean();
+        if (p) resolvedPatientId = p._id;
+      }
+    }
+
     if (!factureIdValide) {
       // Créer la facture avec les vrais montants calculés
       const nouvelleFacture = await Facture.create({
         transportId:       transport._id,
-        patientId:         transport.patientId || null,
+        patientId:         resolvedPatientId,
         patientNom:        transport.patient?.nom   || "",
         patientPrenom:     transport.patient?.prenom || "",
         motif:             transport.motif    || "",
@@ -741,7 +759,7 @@ const facturer = async (req, res, next) => {
     } else {
       // Mettre à jour les montants de la facture existante
       // findByIdAndUpdate ne déclenche pas le hook pre-save → setter tous les champs
-      await Facture.findByIdAndUpdate(factureIdValide, {
+      const updateExistante = {
         distanceKm:        tarif.distanceFacturee,
         montantBase,
         majoration:        tarif.supplements,
@@ -755,7 +773,15 @@ const facturer = async (req, res, next) => {
           bareme:         tarif.bareme,
           lignes:         tarif.details,
         },
-      });
+      };
+      // Compléter patientId si absent sur la facture existante
+      if (resolvedPatientId) {
+        const factureExistante = await Facture.findById(factureIdValide).select("patientId").lean();
+        if (!factureExistante?.patientId) {
+          updateExistante.patientId = resolvedPatientId;
+        }
+      }
+      await Facture.findByIdAndUpdate(factureIdValide, updateExistante);
 
       logger.info("Facture existante mise à jour — clôture BILLED", {
         transport:    transport.numero,

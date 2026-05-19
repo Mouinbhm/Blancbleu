@@ -94,12 +94,37 @@ async function getOwnPatientDoc(userId) {
   return Patient.findOne({ userId, deletedAt: null }).select('_id').lean()
 }
 
-// Construit le filtre Facture strictement par patientId du dossier lié.
-// Retourne null si aucun dossier trouvé → 0 factures affichées.
-async function buildFactureFilter(userId) {
+// Construit le filtre Facture pour un patient mobile.
+// Cherche les factures via deux critères (union OR) :
+//   1. patientId = dossier Patient lié à ce compte (lien ObjectId direct)
+//   2. transportId IN [transports de ce patient] — couvre les factures CPAM créées
+//      par le dispatcher où patientId est null mais le transport est bien lié
+// L'email de l'utilisateur authentifié est unique → matching safe.
+async function buildFactureFilter(userId, userEmail) {
   const patientDoc = await getOwnPatientDoc(userId)
-  if (!patientDoc) return null
-  return { patientId: patientDoc._id }
+
+  // Critères pour trouver les transports appartenant à ce patient
+  const transportOrConditions = [
+    { createdBy: userId, deletedAt: null },
+  ]
+  if (userEmail) {
+    // Transport créé par le dispatcher en renseignant cet email patient
+    transportOrConditions.push({ 'patient.email': userEmail, deletedAt: null })
+  }
+  if (patientDoc) {
+    transportOrConditions.push({ patientId: patientDoc._id, deletedAt: null })
+  }
+
+  const transports = await Transport.find({ $or: transportOrConditions })
+    .select('_id').lean()
+  const transportIds = transports.map(t => t._id)
+
+  const orConditions = []
+  if (patientDoc) orConditions.push({ patientId: patientDoc._id })
+  if (transportIds.length > 0) orConditions.push({ transportId: { $in: transportIds } })
+
+  if (orConditions.length === 0) return null
+  return orConditions.length === 1 ? orConditions[0] : { $or: orConditions }
 }
 
 function signToken(id) {
@@ -527,7 +552,7 @@ router.get('/transports/:id/tracking', authPatient, async (req, res) => {
 
 router.get('/factures', authPatient, async (req, res) => {
   try {
-    const factureFilter = await buildFactureFilter(req.user._id)
+    const factureFilter = await buildFactureFilter(req.user._id, req.user.email)
     if (!factureFilter) return res.json({ factures: [] })
     const factures = await Facture.find(factureFilter).sort({ dateEmission: -1 })
     res.json({ factures })
@@ -542,7 +567,7 @@ router.get('/factures', authPatient, async (req, res) => {
 
 router.post('/factures/:id/paiement-intent', authPatient, async (req, res) => {
   try {
-    const factureFilter = await buildFactureFilter(req.user._id)
+    const factureFilter = await buildFactureFilter(req.user._id, req.user.email)
     if (!factureFilter) return res.status(404).json({ message: 'Facture introuvable' })
 
     const facture = await Facture.findOne({ _id: req.params.id, ...factureFilter })
@@ -597,7 +622,7 @@ router.post('/factures/:id/confirmer-paiement', authPatient, async (req, res) =>
       return res.status(400).json({ message: 'PaymentIntent ne correspond pas à cette facture' })
     }
 
-    const factureFilter = await buildFactureFilter(req.user._id)
+    const factureFilter = await buildFactureFilter(req.user._id, req.user.email)
     if (!factureFilter) return res.status(404).json({ message: 'Facture introuvable' })
 
     const facture = await Facture.findOneAndUpdate(
@@ -620,7 +645,7 @@ router.post('/factures/:id/confirmer-paiement', authPatient, async (req, res) =>
 router.get('/stats', authPatient, async (req, res) => {
   try {
     const baseFilter   = buildTransportFilter(req.user)
-    const factureFilter = await buildFactureFilter(req.user._id)
+    const factureFilter = await buildFactureFilter(req.user._id, req.user.email)
     const now = new Date()
 
     const [totalTransports, transportsTermines, transportsAVenir, totalFactures] =
@@ -647,7 +672,7 @@ router.get('/stats', authPatient, async (req, res) => {
 router.get('/dashboard', authPatient, async (req, res) => {
   try {
     const patientFilter = buildTransportFilter(req.user)
-    const factureFilter = await buildFactureFilter(req.user._id)
+    const factureFilter = await buildFactureFilter(req.user._id, req.user.email)
     const now = new Date()
 
     const [prochainTransport, derniersTransports, counts] = await Promise.all([
