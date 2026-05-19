@@ -58,6 +58,24 @@ const patientSchema = new mongoose.Schema(
     preferences: { type: String, default: "" },
     notes: { type: String, default: "" },
 
+    // ── Origine du dossier ────────────────────────────────────────────────────
+    // "web" = créé par le dispatcher/admin, "app_mobile" = auto-créé lors de
+    // l'inscription via l'app patient Flutter, "papier" = import manuel
+    source: {
+      type: String,
+      enum: ["web", "app_mobile", "papier"],
+      default: "web",
+      index: true,
+    },
+
+    // Lien vers le compte User (auth) — null pour les dossiers créés côté web
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+
     // ── Statut ────────────────────────────────────────────────────────────────
     actif: { type: Boolean, default: true, index: true },
     deletedAt: { type: Date, default: null },

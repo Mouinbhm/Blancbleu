@@ -38,16 +38,17 @@ function userCtx(req) {
 // ── GET /api/patients/stats ───────────────────────────────────────────────────
 exports.getStats = async (req, res) => {
   try {
-    const [total, actifs, mobilite] = await Promise.all([
+    const [total, actifs, appMobile, mobilite] = await Promise.all([
       Patient.countDocuments({ deletedAt: null }),
       Patient.countDocuments({ deletedAt: null, actif: true }),
+      Patient.countDocuments({ deletedAt: null, source: "app_mobile" }),
       Patient.aggregate([
         { $match: { deletedAt: null } },
         { $group: { _id: "$mobilite", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
       ]),
     ]);
-    res.json({ total, actifs, inactifs: total - actifs, parMobilite: mobilite });
+    res.json({ total, actifs, inactifs: total - actifs, appMobile, parMobilite: mobilite });
   } catch (err) {
     _err(res, err);
   }

@@ -382,9 +382,11 @@ const getAllUsers = async (req, res) => {
     const page  = Math.max(1, parseInt(req.query.page)  || 1);
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
     const skip  = (page - 1) * limit;
+    // Exclure les patients : ils sont gérés dans la collection "patients" (page Patients)
+    const filtre = { role: { $ne: "patient" } };
     const [users, total] = await Promise.all([
-      User.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
-      User.countDocuments(),
+      User.find(filtre).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      User.countDocuments(filtre),
     ]);
     res.json({ users, total, page, pages: Math.ceil(total / limit) });
   } catch (err) {

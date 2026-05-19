@@ -44,7 +44,8 @@ const safeMsg = (err) =>
 // Crée ou met à jour le dossier Patient de la plateforme web à partir d'un User patient.
 // findOneAndUpdate avec upsert ne déclenche pas le pre('save') qui génère numeroPatient,
 // donc on crée manuellement avec .save() si le document est nouveau.
-async function syncPatientRecord(user) {
+// source : "app_mobile" lors de l'inscription, "web" par défaut (dispatcher)
+async function syncPatientRecord(user, { source = 'app_mobile' } = {}) {
   // User.adresse est une String ; Patient.adresse est { rue, ville, codePostal }
   const adresseStr = typeof user.adresse === 'string' ? user.adresse.trim() : ''
   const data = {
@@ -55,6 +56,7 @@ async function syncPatientRecord(user) {
     mobilite:  user.mobilite  || 'ASSIS',
     mutuelle:  user.mutuelle  || '',
     actif:     true,
+    userId:    user._id,
     adresse: {
       rue:        adresseStr,
       ville:      '',
@@ -68,13 +70,37 @@ async function syncPatientRecord(user) {
 
   const existing = await Patient.findOne({ email: user.email })
   if (existing) {
+    // Ne pas écraser la source si le dossier existait déjà (créé par le dispatcher)
     Object.assign(existing, data)
+    if (!existing.source || existing.source === 'web') existing.source = source
     return existing.save()
   }
-  return new Patient(data).save()
+  return new Patient({ ...data, source }).save()
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Construit le filtre Transport strict pour un utilisateur patient.
+// Seuls les transports créés DEPUIS L'APP par cet utilisateur sont visibles.
+// Le filtre email/nom+prenom est absent : trop permissif, il exposerait
+// les données d'un autre patient homonyme ou d'un ancien compte de test.
+function buildTransportFilter(user) {
+  return { deletedAt: null, createdBy: user._id }
+}
+
+// Retourne le dossier Patient exclusivement lié à ce compte mobile (userId).
+// Si le dossier n'est pas encore lié (compte tout neuf), retourne null.
+async function getOwnPatientDoc(userId) {
+  return Patient.findOne({ userId, deletedAt: null }).select('_id').lean()
+}
+
+// Construit le filtre Facture strictement par patientId du dossier lié.
+// Retourne null si aucun dossier trouvé → 0 factures affichées.
+async function buildFactureFilter(userId) {
+  const patientDoc = await getOwnPatientDoc(userId)
+  if (!patientDoc) return null
+  return { patientId: patientDoc._id }
+}
 
 function signToken(id) {
   return jwt.sign(
@@ -206,7 +232,7 @@ router.post('/register', async (req, res) => {
     // Si le sync échoue, on rollback le User pour ne pas laisser d'orphelin
     let patientDoc
     try {
-      patientDoc = await syncPatientRecord(user)
+      patientDoc = await syncPatientRecord(user, { source: 'app_mobile' })
     } catch (syncErr) {
       await User.findByIdAndDelete(user._id).catch(() => {})
       logger.warn('[patient/register] sync Patient échoué — User rollback', { err: syncErr.message })
@@ -250,7 +276,7 @@ router.post('/login', async (req, res) => {
     }
 
     // Auto-sync : crée le dossier Patient si absent (comptes anciens)
-    syncPatientRecord(user).catch((e) =>
+    syncPatientRecord(user, { source: 'app_mobile' }).catch((e) =>
       logger.warn('[patient/login] auto-sync Patient échoué', { err: e.message })
     )
 
@@ -319,7 +345,7 @@ router.put('/profil', authPatient, async (req, res) => {
     ).select('-password')
 
     // Synchroniser avec le dossier Patient de la plateforme web
-    await syncPatientRecord(updated)
+    await syncPatientRecord(updated, { source: 'app_mobile' })
 
     res.json({ message: 'Profil mis à jour', patient: patientPayload(updated) })
   } catch (err) {
@@ -332,12 +358,7 @@ router.put('/profil', authPatient, async (req, res) => {
 
 router.get('/transports', authPatient, async (req, res) => {
   try {
-    const orConditions = []
-    if (req.user.email)                orConditions.push({ 'patient.email': req.user.email })
-    if (req.user.telephone?.trim())    orConditions.push({ 'patient.telephone': req.user.telephone })
-    orConditions.push({ 'patient.nom': req.user.nom, 'patient.prenom': req.user.prenom })
-
-    const filter = { deletedAt: null, $or: orConditions }
+    const filter = buildTransportFilter(req.user)
     if (req.query.statut) filter.statut = req.query.statut
 
     const transports = await Transport.find(filter)
@@ -506,15 +527,9 @@ router.get('/transports/:id/tracking', authPatient, async (req, res) => {
 
 router.get('/factures', authPatient, async (req, res) => {
   try {
-    const patientDoc = await Patient.findOne({ email: req.user.email }).select('_id')
-    const conditions = [
-      {
-        patientNom:    { $regex: new RegExp(`^${req.user.nom}$`,    'i') },
-        patientPrenom: { $regex: new RegExp(`^${req.user.prenom}$`, 'i') },
-      },
-    ]
-    if (patientDoc) conditions.push({ patientId: patientDoc._id })
-    const factures = await Facture.find({ $or: conditions }).sort({ dateEmission: -1 })
+    const factureFilter = await buildFactureFilter(req.user._id)
+    if (!factureFilter) return res.json({ factures: [] })
+    const factures = await Facture.find(factureFilter).sort({ dateEmission: -1 })
     res.json({ factures })
   } catch (err) {
     logger.error('[patient/factures]', { err: err.message })
@@ -527,13 +542,10 @@ router.get('/factures', authPatient, async (req, res) => {
 
 router.post('/factures/:id/paiement-intent', authPatient, async (req, res) => {
   try {
-    const patientDoc = await Patient.findOne({ email: req.user.email }).select('_id')
-    const conditions = [
-      { patientNom: { $regex: new RegExp(`^${req.user.nom}$`, 'i') }, patientPrenom: { $regex: new RegExp(`^${req.user.prenom}$`, 'i') } },
-    ]
-    if (patientDoc) conditions.push({ patientId: patientDoc._id })
+    const factureFilter = await buildFactureFilter(req.user._id)
+    if (!factureFilter) return res.status(404).json({ message: 'Facture introuvable' })
 
-    const facture = await Facture.findOne({ _id: req.params.id, $or: conditions })
+    const facture = await Facture.findOne({ _id: req.params.id, ...factureFilter })
     if (!facture) return res.status(404).json({ message: 'Facture introuvable' })
     if (facture.statut === 'payee')    return res.status(400).json({ message: 'Facture déjà payée' })
     if (facture.statut === 'annulee')  return res.status(400).json({ message: 'Facture annulée' })
@@ -585,14 +597,11 @@ router.post('/factures/:id/confirmer-paiement', authPatient, async (req, res) =>
       return res.status(400).json({ message: 'PaymentIntent ne correspond pas à cette facture' })
     }
 
-    const patientDoc = await Patient.findOne({ email: req.user.email }).select('_id')
-    const conditions = [
-      { patientNom: { $regex: new RegExp(`^${req.user.nom}$`, 'i') }, patientPrenom: { $regex: new RegExp(`^${req.user.prenom}$`, 'i') } },
-    ]
-    if (patientDoc) conditions.push({ patientId: patientDoc._id })
+    const factureFilter = await buildFactureFilter(req.user._id)
+    if (!factureFilter) return res.status(404).json({ message: 'Facture introuvable' })
 
     const facture = await Facture.findOneAndUpdate(
-      { _id: req.params.id, $or: conditions, statut: { $ne: 'payee' } },
+      { _id: req.params.id, ...factureFilter, statut: { $ne: 'payee' } },
       { statut: 'payee', datePaiement: new Date(), modePaiement: 'cb', referenceExterne: paymentIntentId },
       { new: true },
     )
@@ -610,18 +619,8 @@ router.post('/factures/:id/confirmer-paiement', authPatient, async (req, res) =>
 
 router.get('/stats', authPatient, async (req, res) => {
   try {
-    const orCond = []
-    if (req.user.email)             orCond.push({ 'patient.email': req.user.email })
-    if (req.user.telephone?.trim()) orCond.push({ 'patient.telephone': req.user.telephone })
-    orCond.push({ 'patient.nom': req.user.nom, 'patient.prenom': req.user.prenom })
-    const baseFilter = { deletedAt: null, $or: orCond }
-
-    const factureFilter = {
-      $or: [
-        { patientNom: req.user.nom, patientPrenom: req.user.prenom },
-      ],
-    }
-
+    const baseFilter   = buildTransportFilter(req.user)
+    const factureFilter = await buildFactureFilter(req.user._id)
     const now = new Date()
 
     const [totalTransports, transportsTermines, transportsAVenir, totalFactures] =
@@ -633,7 +632,7 @@ router.get('/stats', authPatient, async (req, res) => {
           dateTransport: { $gt: now },
           statut: { $nin: ['CANCELLED', 'NO_SHOW'] },
         }),
-        Facture.countDocuments(factureFilter),
+        factureFilter ? Facture.countDocuments(factureFilter) : Promise.resolve(0),
       ])
 
     res.json({ totalTransports, transportsTermines, transportsAVenir, totalFactures })
@@ -647,14 +646,8 @@ router.get('/stats', authPatient, async (req, res) => {
 
 router.get('/dashboard', authPatient, async (req, res) => {
   try {
-    const orDash = []
-    if (req.user.email)             orDash.push({ 'patient.email': req.user.email })
-    if (req.user.telephone?.trim()) orDash.push({ 'patient.telephone': req.user.telephone })
-    orDash.push({ 'patient.nom': req.user.nom, 'patient.prenom': req.user.prenom })
-    const patientFilter = { deletedAt: null, $or: orDash }
-    const factureFilter = {
-      $or: [{ patientNom: req.user.nom, patientPrenom: req.user.prenom }],
-    }
+    const patientFilter = buildTransportFilter(req.user)
+    const factureFilter = await buildFactureFilter(req.user._id)
     const now = new Date()
 
     const [prochainTransport, derniersTransports, counts] = await Promise.all([
@@ -680,7 +673,7 @@ router.get('/dashboard', authPatient, async (req, res) => {
           dateTransport: { $gt: now },
           statut: { $nin: ['CANCELLED', 'NO_SHOW'] },
         }),
-        Facture.countDocuments(factureFilter),
+        factureFilter ? Facture.countDocuments(factureFilter) : Promise.resolve(0),
       ]),
     ])
 
@@ -702,7 +695,8 @@ router.get('/dashboard', authPatient, async (req, res) => {
 
 router.get('/prescriptions', authPatient, async (req, res) => {
   try {
-    const patientDoc = await Patient.findOne({ email: req.user.email }).select('_id')
+    // Utilise userId pour isoler strictement les ordonnances de ce compte
+    const patientDoc = await getOwnPatientDoc(req.user._id)
     if (!patientDoc) return res.json({ prescriptions: [] })
 
     const prescriptions = await Prescription.find({
@@ -742,9 +736,10 @@ router.post('/prescriptions', authPatient, (req, res, next) => {
       else if (req.body.medecin) medecin = req.body.medecin
     } catch { medecin = {} }
 
-    const patientDoc = await Patient.findOne({ email: req.user.email }).select('_id')
+    // Utilise userId pour isoler strictement les ordonnances de ce compte
+    const patientDoc = await getOwnPatientDoc(req.user._id)
     if (!patientDoc) {
-      return res.status(404).json({ message: 'Dossier patient introuvable — contactez votre transporteur' })
+      return res.status(404).json({ message: 'Dossier patient introuvable — réessayez après connexion' })
     }
 
     const fichierUrl = req.file ? `/uploads/prescriptions/${req.file.filename}` : ''
@@ -809,7 +804,7 @@ router.post('/consent', authPatient, async (req, res) => {
     if (!consentType || accepted === undefined) {
       return res.status(400).json({ message: 'consentType et accepted sont requis' })
     }
-    const patient = await Patient.findOne({ email: req.user.email })
+    const patient = await Patient.findOne({ userId: req.user._id, deletedAt: null })
     if (!patient) return res.status(404).json({ message: 'Dossier patient introuvable' })
 
     await gdprSvc.recordPatientConsent(patient._id, { consentType, accepted, version, source }, req.user, req)
@@ -822,7 +817,7 @@ router.post('/consent', authPatient, async (req, res) => {
 // GET /api/patient/consent-history — historique des consentements du patient connecté
 router.get('/consent-history', authPatient, async (req, res) => {
   try {
-    const patient = await Patient.findOne({ email: req.user.email })
+    const patient = await Patient.findOne({ userId: req.user._id, deletedAt: null })
     if (!patient) return res.status(404).json({ message: 'Dossier patient introuvable' })
     const data = await gdprSvc.getConsentHistory(patient._id)
     res.json(data)
@@ -835,7 +830,7 @@ router.get('/consent-history', authPatient, async (req, res) => {
 router.post('/request-deletion', authPatient, async (req, res) => {
   try {
     const { reason } = req.body
-    const patient = await Patient.findOne({ email: req.user.email })
+    const patient = await Patient.findOne({ userId: req.user._id, deletedAt: null })
     if (!patient) return res.status(404).json({ message: 'Dossier patient introuvable' })
 
     await gdprSvc.requestPatientDeletion(patient._id, req.user, reason, req)

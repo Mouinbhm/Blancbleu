@@ -208,7 +208,7 @@ export default function Patients() {
           {[
             { label: "Total", val: stats.total, icon: "group", color: "text-navy" },
             { label: "Actifs", val: stats.actifs, icon: "check_circle", color: "text-green-600" },
-            { label: "Inactifs", val: stats.inactifs, icon: "block", color: "text-slate-400" },
+            { label: "App Mobile", val: stats.appMobile || 0, icon: "smartphone", color: "text-violet-600" },
             { label: "Fauteuil", val: stats.parMobilite?.find(m => m._id === "FAUTEUIL_ROULANT")?.count || 0, icon: "accessible", color: "text-blue-600" },
           ].map(({ label, val, icon, color }) => (
             <div key={label} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
@@ -280,11 +280,19 @@ export default function Patients() {
                             {p.telephone || p.numeroPatient || "—"}
                           </p>
                         </div>
-                        {p.mobilite && p.mobilite !== "ASSIS" && (
-                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${MOBILITE_BADGE_COLOR[p.mobilite] || "bg-slate-100 text-slate-600"}`}>
-                            {MOBILITE_LABEL[p.mobilite]}
-                          </span>
-                        )}
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          {p.source === "app_mobile" && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-violet-100 text-violet-700 flex items-center gap-0.5">
+                              <span className="material-symbols-outlined" style={{ fontSize: 10 }}>smartphone</span>
+                              App
+                            </span>
+                          )}
+                          {p.mobilite && p.mobilite !== "ASSIS" && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${MOBILITE_BADGE_COLOR[p.mobilite] || "bg-slate-100 text-slate-600"}`}>
+                              {MOBILITE_LABEL[p.mobilite]}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -342,6 +350,12 @@ function PatientDetail({ patient, onNavigate, onEdit }) {
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-brand font-bold text-navy text-lg">{p.nom} {p.prenom}</h2>
               <span className="text-xs font-mono text-slate-400">{p.numeroPatient}</span>
+              {p.source === "app_mobile" && (
+                <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-violet-100 text-violet-700 flex items-center gap-1">
+                  <span className="material-symbols-outlined" style={{ fontSize: 12 }}>smartphone</span>
+                  App Mobile
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               {p.telephone && (
