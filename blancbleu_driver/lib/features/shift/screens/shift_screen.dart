@@ -22,6 +22,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
   String? _vehicleId;
   List<dynamic> _vehicles = [];
   bool _loadingVehicles = true;
+  String? _vehiclesError;
 
   // End shift dialog
   final _kmController    = TextEditingController();
@@ -98,12 +99,18 @@ class _ShiftScreenState extends State<ShiftScreen> {
   }
 
   Future<void> _loadVehicles() async {
-    setState(() => _loadingVehicles = true);
+    setState(() { _loadingVehicles = true; _vehiclesError = null; });
     try {
       final data = await ApiClient.instance.getAvailableVehicles();
-      if (mounted) setState(() { _vehicles = data; _loadingVehicles = false; });
-    } catch (_) {
-      if (mounted) setState(() => _loadingVehicles = false);
+      if (mounted) setState(() { _vehicles = data; _loadingVehicles = false; _vehiclesError = null; });
+    } catch (e) {
+      String? msg;
+      final dynamic err = e;
+      if (err?.response?.data is Map) {
+        msg = (err.response.data as Map)['message']?.toString();
+      }
+      msg ??= e.toString();
+      if (mounted) setState(() { _loadingVehicles = false; _vehiclesError = msg; });
     }
   }
 
@@ -518,6 +525,31 @@ class _ShiftScreenState extends State<ShiftScreen> {
             padding: EdgeInsets.symmetric(vertical: 16),
             child: CircularProgressIndicator(color: AppTheme.primary),
           ))
+        else if (_vehiclesError != null)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF2F2),
+              border: Border.all(color: const Color(0xFFFCA5A5)),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Row(children: [
+                Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 20),
+                SizedBox(width: 8),
+                Text('Erreur de chargement', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFDC2626))),
+              ]),
+              const SizedBox(height: 6),
+              Text(_vehiclesError!, style: const TextStyle(fontSize: 12, color: Color(0xFF7F1D1D))),
+              const SizedBox(height: 10),
+              TextButton.icon(
+                onPressed: _loadVehicles,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Réessayer', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626), padding: EdgeInsets.zero),
+              ),
+            ]),
+          )
         else if (_vehicles.isEmpty)
           Container(
             padding: const EdgeInsets.all(16),
@@ -570,7 +602,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
           width: double.infinity,
           child: BlocBuilder<ShiftCubit, ShiftState>(
             builder: (context, st) => ElevatedButton.icon(
-              onPressed: (_vehicles.isEmpty || st is ShiftLoading) ? null : _start,
+              onPressed: (_vehicles.isEmpty || _vehiclesError != null || st is ShiftLoading) ? null : _start,
               icon: st is ShiftLoading
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                 : const Icon(Icons.play_arrow),

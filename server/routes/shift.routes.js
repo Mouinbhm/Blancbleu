@@ -13,4 +13,7 @@ router.post("/incident", requirePersonnel, ctrl.addIncident);
 router.get("/today", protect, authorize("dispatcher", "admin", "superviseur"), ctrl.getTodayShifts);
 router.get("/", protect, authorize("dispatcher", "admin", "superviseur"), ctrl.listShifts);
 
+// Force-close a ghost / abandoned shift (admin only)
+router.patch("/:id/force-end", protect, authorize("admin", "superviseur", "dispatcher"), ctrl.forceEndShift);
+
 module.exports = router;

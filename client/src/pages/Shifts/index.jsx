@@ -27,13 +27,14 @@ function fmtDate(iso) {
 }
 
 export default function Shifts() {
-  const [shifts, setShifts]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
-  const [page, setPage]       = useState(1);
-  const [total, setTotal]     = useState(0);
-  const [filter, setFilter]   = useState("ALL");
-  const [expanded, setExpanded] = useState(null);
+  const [shifts, setShifts]       = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
+  const [page, setPage]           = useState(1);
+  const [total, setTotal]         = useState(0);
+  const [filter, setFilter]       = useState("ALL");
+  const [expanded, setExpanded]   = useState(null);
+  const [forceEnding, setForceEnding] = useState(null);
 
   const LIMIT = 20;
 
@@ -54,6 +55,23 @@ export default function Shifts() {
   }, [page, filter]);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleForceEnd = async (shift) => {
+    const driverName = shift.personnelId && typeof shift.personnelId === "object"
+      ? [shift.personnelId.prenom, shift.personnelId.nom].filter(Boolean).join(" ")
+      : "ce chauffeur";
+    if (!window.confirm(`Clôturer de force le shift de ${driverName} ?\nLe véhicule sera remis "Disponible" et le chauffeur "Disponible". Cette action est irréversible.`)) return;
+    setForceEnding(shift._id);
+    try {
+      await api.patch(`/v1/shifts/${shift._id}/force-end`);
+      load();
+    } catch (e) {
+      const msg = e?.response?.data?.message || "Erreur lors de la clôture forcée.";
+      alert(msg);
+    } finally {
+      setForceEnding(null);
+    }
+  };
 
   const pages = Math.ceil(total / LIMIT);
 
@@ -213,6 +231,27 @@ export default function Shifts() {
                             )}
                           </div>
                         </div>
+
+                        {/* Force-end button for ghost / abandoned active shifts */}
+                        {s.status === "ACTIVE" && (
+                          <div className="mt-4 pt-3 border-t border-slate-200 flex items-center gap-3">
+                            <span className="material-symbols-outlined text-orange-400 text-sm">warning</span>
+                            <p className="text-xs text-slate-500 flex-1">
+                              Shift actif depuis {fmtDuration(s.startTime, null)}. Si le chauffeur n'est plus disponible, clôturez ce shift pour libérer le véhicule.
+                            </p>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleForceEnd(s); }}
+                              disabled={forceEnding === s._id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 text-xs font-semibold transition-colors disabled:opacity-50"
+                            >
+                              {forceEnding === s._id
+                                ? <span className="w-3 h-3 border border-red-400 border-t-transparent rounded-full animate-spin" />
+                                : <span className="material-symbols-outlined text-sm">stop_circle</span>
+                              }
+                              Clôturer le shift
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ),

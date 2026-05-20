@@ -385,6 +385,7 @@ const getAvailableVehicles = async (req, res) => {
     const vehicles = await Vehicle.find({
       statut:    "Disponible",
       deletedAt: null,
+      actif:     { $ne: false },
     }).select("nom immatriculation type marque modele carburant");
     return res.json({ vehicles });
   } catch (err) {

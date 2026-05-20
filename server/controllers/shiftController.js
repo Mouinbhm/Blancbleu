@@ -212,4 +212,52 @@ const listShifts = async (req, res) => {
   }
 };
 
-module.exports = { startShift, endShift, getActiveShift, addIncident, getTodayShifts, listShifts };
+// PATCH /api/v1/shifts/:id/force-end  (admin / dispatcher)
+const forceEndShift = async (req, res) => {
+  try {
+    const shift = await DriverShift.findById(req.params.id);
+    if (!shift) return res.status(404).json({ message: "Shift introuvable" });
+    if (shift.status !== "ACTIVE") return res.status(400).json({ message: "Ce shift n'est pas actif" });
+
+    const { notes = "" } = req.body;
+
+    const transports = await Transport.find({ shiftId: shift._id });
+    const completed  = transports.filter((t) => ["COMPLETED", "BILLED"].includes(t.statut)).length;
+
+    shift.status              = "ABANDONED";
+    shift.endTime             = new Date();
+    shift.totalTransports     = transports.length;
+    shift.completedTransports = completed;
+    if (notes) shift.incidents.push({ time: new Date(), description: `Clôture forcée par admin : ${notes}` });
+    else shift.incidents.push({ time: new Date(), description: "Clôture forcée par administrateur" });
+    await shift.save();
+
+    await Vehicle.findByIdAndUpdate(shift.vehicleId, {
+      statut:             "Disponible",
+      currentShiftId:     null,
+      currentPersonnelId: null,
+    });
+
+    await Personnel.findByIdAndUpdate(shift.personnelId, {
+      statut:         "Disponible",
+      currentShiftId: null,
+    });
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to("role:dispatcher").to("role:admin").emit("shift:ended", {
+        shiftId:     shift._id,
+        personnelId: shift.personnelId,
+        vehicleId:   shift.vehicleId,
+        forced:      true,
+        endTime:     shift.endTime,
+      });
+    }
+
+    return res.json({ message: "Shift clôturé de force", shift });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { startShift, endShift, getActiveShift, addIncident, getTodayShifts, listShifts, forceEndShift };
