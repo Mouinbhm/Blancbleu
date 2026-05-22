@@ -9,14 +9,29 @@ const Transport = require("../models/Transport");
 const Vehicle = require("../models/Vehicle");
 const AuditLog = require("../models/AuditLog");
 const predictionService = require("../services/predictionService");
+const { getJSON, setJSON } = require("../utils/redis");
 
 function plage(jours = 30) {
   return new Date(Date.now() - jours * 24 * 60 * 60 * 1000);
 }
 
+// Clé de cache par jour (auto-invalidation au passage minuit)
+function dashboardCacheKey() {
+  const day = new Date().toISOString().slice(0, 10);
+  return `analytics:dashboard:${day}`;
+}
+
 // ── GET /api/analytics/dashboard ─────────────────────────────────────────────
 router.get("/dashboard", protect, async (req, res) => {
   try {
+    // Cache 60s — invalidé manuellement par transportLifecycle sur completer/billing
+    const cacheKey = dashboardCacheKey();
+    const cached = await getJSON(cacheKey);
+    if (cached) {
+      res.setHeader("X-Cache", "HIT");
+      return res.json(cached);
+    }
+
     const depuis = plage(30);
 
     const [
@@ -97,7 +112,7 @@ router.get("/dashboard", protect, async (req, res) => {
         ? Math.round((noShows30j / (completes30j + noShows30j)) * 100)
         : 0;
 
-    res.json({
+    const payload = {
       timestamp: new Date(),
       periode: "30 derniers jours",
       transports: {
@@ -122,7 +137,12 @@ router.get("/dashboard", protect, async (req, res) => {
           : null,
       },
       parMotif,
-    });
+    };
+
+    // Cache 60s — best-effort, n'échoue jamais
+    await setJSON(cacheKey, payload, 60);
+    res.setHeader("X-Cache", "MISS");
+    res.json(payload);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

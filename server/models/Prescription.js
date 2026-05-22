@@ -4,6 +4,7 @@
  * Une prescription peut couvrir plusieurs transports (ex: dialyse hebdomadaire).
  */
 const mongoose = require("mongoose");
+const Counter = require("./Counter");
 
 const medecinSchema = new mongoose.Schema(
   {
@@ -160,12 +161,17 @@ prescriptionSchema.index({ deletedAt: 1 });
 prescriptionSchema.index({ "ocr.statut": 1 });
 prescriptionSchema.index({ "validation.statut": 1 });
 
-// ── Numéro automatique ────────────────────────────────────────────────────────
+// ── Numéro atomique : PMT-YYYYMMDD-XXXX ──────────────────────────────────────
+// Counter MongoDB atomique ($inc + upsert) → pas de race condition multi-instance.
 prescriptionSchema.pre("save", async function (next) {
   if (!this.numero) {
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const count = await mongoose.model("Prescription").countDocuments();
-    this.numero = `PMT-${date}-${String(count + 1).padStart(4, "0")}`;
+    const counter = await Counter.findOneAndUpdate(
+      { _id: "prescription" },
+      { $inc: { seq: 1 } },
+      { upsert: true, new: true },
+    );
+    this.numero = `PMT-${date}-${String(counter.seq).padStart(4, "0")}`;
   }
   next();
 });

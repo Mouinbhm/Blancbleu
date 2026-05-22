@@ -20,6 +20,8 @@ const { audit, log } = require("./auditService");
 const { haversine } = require("../utils/geoUtils");
 const tarifService = require("./tarifService");
 const transportNotif = require("./transportNotificationService");
+const { withTransactionOrFallback } = require("../utils/withTransaction");
+const { delPattern } = require("../utils/redis");
 const logger = (() => {
   try {
     return require("../utils/logger");
@@ -45,8 +47,11 @@ function scheduleGpsSimulation(transportId) {
 }
 
 // ── Helper : effectuer une transition et sauvegarder ──────────────────────────
-async function _transition(transportId, nouveauStatut, metadata = {}) {
+// session : passer une ClientSession Mongoose pour exécuter les writes dans une
+// transaction ; null/undefined pour un comportement non-transactionnel (legacy).
+async function _transition(transportId, nouveauStatut, metadata = {}, session = null) {
   const transport = await Transport.findById(transportId)
+    .session(session)
     .populate("vehicule", "nom type statut position kilometrage carburant")
     .populate("chauffeur", "nom prenom email");
 
@@ -77,27 +82,31 @@ async function _transition(transportId, nouveauStatut, metadata = {}) {
     metadata:      metadata.extra || {},
   });
 
-  await transport.save();
+  await transport.save({ session: session || undefined });
 
   // ── Garde-fou : libération automatique du véhicule ────────────────────────
   // Garantit que le véhicule est libéré dès que la transition est persistée,
   // même si la fonction appelante (completerTransport, annulerTransport…) échoue
   // après ce point. Idempotent : re-libérer un véhicule déjà disponible est sans effet.
+  // Dans une transaction, le write est inclus dans la même session.
   if (["COMPLETED", "CANCELLED", "NO_SHOW", "PAID", "FAILED"].includes(nouveauStatut)) {
     const vehiculeId = transport.vehicule?._id ?? transport.vehicule;
     if (vehiculeId) {
       try {
-        await Vehicle.findByIdAndUpdate(vehiculeId, {
-          statut: "Disponible",
-          transportEnCours: null,
-        });
+        await Vehicle.findByIdAndUpdate(
+          vehiculeId,
+          { statut: "Disponible", transportEnCours: null },
+          { session: session || undefined },
+        );
         logger.info("Véhicule libéré (garde-fou lifecycle)", {
           vehiculeId,
           transport: transport.numero,
           nouveauStatut,
         });
       } catch (errLiberation) {
-        // Non bloquant — la transition est déjà sauvegardée
+        // Dans une transaction, on doit propager pour rollback. Hors transaction,
+        // on reste best-effort comme avant.
+        if (session) throw errLiberation;
         logger.warn("Garde-fou : échec libération véhicule", {
           vehiculeId,
           transport: transport.numero,
@@ -290,23 +299,31 @@ async function assignerVehicule(
     }
   }
 
-  // Mettre à jour avant la transition
-  await Transport.findByIdAndUpdate(transportId, {
-    vehicule: vehiculeIdFinal,
-    chauffeur: chauffeurIdFinal,
-    shiftId: shiftIdFinal,
-    scoreDispatch,
-  });
+  // Writes critiques (Transport + Vehicle + transition) dans une transaction
+  // pour garantir un état cohérent en cas d'échec en cours de processus.
+  const transportUpdated = await withTransactionOrFallback(async (session) => {
+    await Transport.findByIdAndUpdate(
+      transportId,
+      {
+        vehicule: vehiculeIdFinal,
+        chauffeur: chauffeurIdFinal,
+        shiftId: shiftIdFinal,
+        scoreDispatch,
+      },
+      { session: session || undefined },
+    );
 
-  // Vehicle stays En service during the shift — just track the current transport
-  await Vehicle.findByIdAndUpdate(vehiculeIdFinal, {
-    statut: "En service",
-    transportEnCours: transportId,
-  });
+    // Vehicle stays En service during the shift — just track the current transport
+    await Vehicle.findByIdAndUpdate(
+      vehiculeIdFinal,
+      { statut: "En service", transportEnCours: transportId },
+      { session: session || undefined },
+    );
 
-  const transportUpdated = await _transition(transportId, "ASSIGNED", _meta(utilisateur, {
-    notes: auto ? `Auto-dispatch : ${justification[0]}` : "Assignation manuelle",
-  }));
+    return _transition(transportId, "ASSIGNED", _meta(utilisateur, {
+      notes: auto ? `Auto-dispatch : ${justification[0]}` : "Assignation manuelle",
+    }), session);
+  });
 
   socketService.emitUnitAssigned?.({
     intervention: { _id: transport._id, numero: transport.numero },
@@ -404,16 +421,28 @@ async function marquerArriveeDestination(
 // 8. COMPLÉTER LE TRANSPORT
 // ══════════════════════════════════════════════════════════════════════════════
 async function completerTransport(transportId, utilisateur) {
-  const transport = await _transition(transportId, "COMPLETED", _meta(utilisateur));
+  // _transition('COMPLETED') déclenche déjà la libération du véhicule via le
+  // garde-fou. On enveloppe les deux writes (transition + libération) dans
+  // une transaction pour garantir l'atomicité.
+  const transport = await withTransactionOrFallback(async (session) => {
+    const updated = await _transition(transportId, "COMPLETED", _meta(utilisateur), session);
+    // Le garde-fou de _transition a déjà libéré le véhicule dans la même session.
+    // La libération double ci-dessous est idempotente (au cas où le garde-fou
+    // n'aurait pas trouvé la version peuplée).
+    if (updated.vehicule) {
+      await Vehicle.findByIdAndUpdate(
+        updated.vehicule._id || updated.vehicule,
+        { statut: "Disponible", transportEnCours: null },
+        { session: session || undefined },
+      );
+    }
+    return updated;
+  });
 
-  // Libérer le véhicule
+  // Side effects post-commit
   if (transport.vehicule) {
-    await Vehicle.findByIdAndUpdate(transport.vehicule, {
-      statut: "Disponible",
-      transportEnCours: null,
-    });
     socketService.emitUnitStatusChanged?.({
-      unite: { _id: transport.vehicule, nom: "" },
+      unite: { _id: transport.vehicule._id || transport.vehicule, nom: "" },
       ancienStatut: "En service",
       nouveauStatut: "Disponible",
     });
@@ -498,6 +527,9 @@ async function completerTransport(transportId, utilisateur) {
     duree: transport.dureeReelleMinutes,
   });
 
+  // Invalider le cache analytics (best-effort)
+  delPattern("analytics:dashboard:*").catch(() => {});
+
   return { transport };
 }
 
@@ -576,26 +608,32 @@ async function demarrerRetourBase(transportId, positionActuelle, utilisateur) {
 // 9. NO-SHOW (patient absent)
 // ══════════════════════════════════════════════════════════════════════════════
 async function marquerNoShow(transportId, raison, utilisateur) {
-  const transport = await Transport.findById(transportId);
-  if (!transport) throw new Error("Transport introuvable");
+  const raisonFinale = raison || "Patient absent à l'heure prévue";
 
-  transport.raisonNoShow = raison || "Patient absent à l'heure prévue";
-  await transport.save();
+  // Transition + raison + libération véhicule dans la même transaction
+  const updated = await withTransactionOrFallback(async (session) => {
+    const transport = await Transport.findById(transportId).session(session);
+    if (!transport) throw new Error("Transport introuvable");
 
-  const updated = await _transition(transportId, "NO_SHOW", _meta(utilisateur, {
-    notes: transport.raisonNoShow,
-    reason: transport.raisonNoShow,
-  }));
+    transport.raisonNoShow = raisonFinale;
+    await transport.save({ session: session || undefined });
 
-  // Libérer le véhicule
-  if (updated.vehicule) {
-    await Vehicle.findByIdAndUpdate(updated.vehicule, {
-      statut: "Disponible",
-      transportEnCours: null,
-    });
-  }
+    const updatedDoc = await _transition(transportId, "NO_SHOW", _meta(utilisateur, {
+      notes: raisonFinale,
+      reason: raisonFinale,
+    }), session);
 
-  logger.info("No-show enregistré", { numero: transport.numero, raison });
+    if (updatedDoc.vehicule) {
+      await Vehicle.findByIdAndUpdate(
+        updatedDoc.vehicule._id || updatedDoc.vehicule,
+        { statut: "Disponible", transportEnCours: null },
+        { session: session || undefined },
+      );
+    }
+    return updatedDoc;
+  });
+
+  logger.info("No-show enregistré", { numero: updated.numero, raison: raisonFinale });
   return { transport: updated };
 }
 
@@ -603,26 +641,32 @@ async function marquerNoShow(transportId, raison, utilisateur) {
 // 10. ANNULER
 // ══════════════════════════════════════════════════════════════════════════════
 async function annulerTransport(transportId, raison, utilisateur) {
-  const transport = await Transport.findById(transportId);
-  if (!transport) throw new Error("Transport introuvable");
+  const raisonFinale = raison || "Annulé par l'opérateur";
 
-  transport.raisonAnnulation = raison || "Annulé par l'opérateur";
-  await transport.save();
+  // Transition + raison + libération véhicule dans la même transaction
+  const updated = await withTransactionOrFallback(async (session) => {
+    const transport = await Transport.findById(transportId).session(session);
+    if (!transport) throw new Error("Transport introuvable");
 
-  const updated = await _transition(transportId, "CANCELLED", _meta(utilisateur, {
-    raisonAnnulation: transport.raisonAnnulation,
-    reason: transport.raisonAnnulation,
-  }));
+    transport.raisonAnnulation = raisonFinale;
+    await transport.save({ session: session || undefined });
 
-  // Libérer le véhicule si assigné
-  if (updated.vehicule) {
-    await Vehicle.findByIdAndUpdate(updated.vehicule, {
-      statut: "Disponible",
-      transportEnCours: null,
-    });
-  }
+    const updatedDoc = await _transition(transportId, "CANCELLED", _meta(utilisateur, {
+      raisonAnnulation: raisonFinale,
+      reason: raisonFinale,
+    }), session);
 
-  logger.info("Transport annulé", { numero: transport.numero, raison });
+    if (updatedDoc.vehicule) {
+      await Vehicle.findByIdAndUpdate(
+        updatedDoc.vehicule._id || updatedDoc.vehicule,
+        { statut: "Disponible", transportEnCours: null },
+        { session: session || undefined },
+      );
+    }
+    return updatedDoc;
+  });
+
+  logger.info("Transport annulé", { numero: updated.numero, raison: raisonFinale });
   return { transport: updated };
 }
 
@@ -775,6 +819,7 @@ async function marquerPaid(transportId, utilisateur) {
   });
 
   logger.info("Transport marqué payé", { numero: transport.numero });
+  delPattern("analytics:dashboard:*").catch(() => {});
   return { transport };
 }
 

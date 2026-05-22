@@ -1,19 +1,4 @@
-/**
- * BlancBleu — Script de création du premier compte administrateur
- *
- * Usage :
- *   node server/scripts/create-admin.js
- *
- * Variables d'environnement requises dans server/.env :
- *   MONGO_URI=mongodb+srv://...
- *   ADMIN_EMAIL=admin@blancbleu.fr
- *   ADMIN_PASSWORD=VotreMotDePasse123
- *   ADMIN_NOM=Admin
- *   ADMIN_PRENOM=BlancBleu
- *
- * Ce script doit être exécuté UNE SEULE FOIS après le déploiement initial.
- * Il est idempotent : relancer ne crée pas de doublon.
- */
+
 
 require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
 const mongoose = require("mongoose");

@@ -6,11 +6,24 @@ version: "3.9"
 # ══════════════════════════════════════════════════════════════════════════════
 
 services:
-  # ─── MongoDB ────────────────────────────────────────────────────────────────
+  # ─── MongoDB (replica set single-node pour support transactions) ───────────
   mongo:
     image: mongo:7.0
     container_name: blancbleu-mongo
     restart: unless-stopped
+    # Génère un keyfile à la 1ère création puis démarre mongod en replica set.
+    # Le keyfile est requis dès que --auth + --replSet sont actifs ensemble.
+    command:
+      - bash
+      - -c
+      - |
+        if [ ! -f /data/keyfile/mongo-keyfile ]; then
+          mkdir -p /data/keyfile
+          openssl rand -base64 756 > /data/keyfile/mongo-keyfile
+          chmod 400 /data/keyfile/mongo-keyfile
+          chown mongodb:mongodb /data/keyfile/mongo-keyfile
+        fi
+        exec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /data/keyfile/mongo-keyfile
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?MONGO_USER must be set in .env}
       # MONGO_PASSWORD must be set in .env — no default to avoid committing credentials
@@ -18,6 +31,7 @@ services:
       MONGO_INITDB_DATABASE: blancbleu
     volumes:
       - mongo_data:/data/db
+      - mongo_keyfile:/data/keyfile
     ports:
       - "127.0.0.1:27017:27017"
     healthcheck:
@@ -26,6 +40,50 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    networks:
+      - blancbleu-net
+
+  # ─── Redis (cache + rate limiter distribué) ───────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: blancbleu-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - blancbleu-net
+
+  # ─── Initialisation one-shot du replica set ────────────────────────────────
+  # Exécute rs.initiate() au premier démarrage. Idempotent : si rs.status()
+  # répond déjà OK, ne fait rien.
+  mongo-init:
+    image: mongo:7.0
+    container_name: blancbleu-mongo-init
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+      - |
+        sleep 3
+        mongosh --host mongo:27017 \
+          --username "${MONGO_USER}" \
+          --password "${MONGO_PASSWORD}" \
+          --authenticationDatabase admin \
+          --eval 'try { rs.status() } catch(e) { rs.initiate({_id:"rs0", members:[{_id:0, host:"mongo:27017"}]}) }'
+    environment:
+      MONGO_USER:     ${MONGO_USER:?MONGO_USER must be set in .env}
+      MONGO_PASSWORD: ${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}
     networks:
       - blancbleu-net
 
@@ -39,12 +97,19 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
       ia:
         condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 5000
-      MONGO_URI: mongodb://${MONGO_USER:?MONGO_USER must be set in .env}:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}@mongo:27017/blancbleu?authSource=admin
+      # ?replicaSet=rs0 obligatoire pour que le driver négocie une session
+      # transactionnelle (utilisé par withTransactionOrFallback).
+      MONGO_URI: mongodb://${MONGO_USER:?MONGO_USER must be set in .env}:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}@mongo:27017/blancbleu?replicaSet=rs0&authSource=admin&directConnection=true
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       AI_API_URL: http://ia:5002
       CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
@@ -62,6 +127,37 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    networks:
+      - blancbleu-net
+
+  # ─── Worker BullMQ (jobs async : email, OCR, PDF, cleanup) ────────────────
+  worker:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: blancbleu-worker
+    restart: unless-stopped
+    command: ["node", "workers/start.js"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      ia:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://${MONGO_USER:?MONGO_USER must be set in .env}:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}@mongo:27017/blancbleu?replicaSet=rs0&authSource=admin&directConnection=true
+      REDIS_URL: redis://redis:6379
+      AI_API_URL: http://ia:5002
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASS: ${EMAIL_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@blancbleu.fr}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
     networks:
       - blancbleu-net
 
@@ -104,6 +200,10 @@ services:
 
 volumes:
   mongo_data:
+    driver: local
+  mongo_keyfile:
+    driver: local
+  redis_data:
     driver: local
 
 networks:

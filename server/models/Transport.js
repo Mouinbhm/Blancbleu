@@ -58,6 +58,14 @@ const adresseSchema = new mongoose.Schema(
       lat: { type: Number },
       lng: { type: Number },
     },
+    // GeoJSON Point pour requêtes $near + index 2dsphere. Synchronisé depuis
+    // coordonnees par le hook pre('validate') du transportSchema. Pas de default
+    // sur `type` ni `coordinates` (default Mongoose Array = [] → GeoJSON invalide
+    // rejeté par l'index 2dsphere).
+    location: {
+      type: { type: String, enum: ["Point"] },
+      coordinates: { type: [Number], default: undefined }, // [lng, lat]
+    },
   },
   { _id: false },
 );
@@ -185,6 +193,8 @@ const transportSchema = new mongoose.Schema(
     scoreDispatch: { type: Number, default: null },
 
     // ── Recommandation IA Dispatch ────────────────────────────────────────────
+    // Sous-doc dénormalisé conservé pour rétrocompat (frontend, anciens callers).
+    // L'historique complet est désormais dans la collection DispatchRecommendation.
     aiDispatch: {
       recommendedVehicleId: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle", default: null },
       recommendedDriverId:  { type: mongoose.Schema.Types.ObjectId, ref: "Personnel", default: null },
@@ -201,6 +211,8 @@ const transportSchema = new mongoose.Schema(
       acceptedByDispatcher: { type: Boolean, default: null },
       acceptedAt:           { type: Date, default: null },
       rejectedReason:       { type: String, default: "" },
+      // Référence vers le document DispatchRecommendation correspondant
+      lastRecommendationId: { type: mongoose.Schema.Types.ObjectId, ref: "DispatchRecommendation", default: null },
     },
 
     // ── Horodatages ───────────────────────────────────────────────────────────
@@ -337,6 +349,25 @@ transportSchema.index({ statut: 1, dateTransport: 1 });
 transportSchema.index({ "patient.nom": 1 });
 transportSchema.index({ vehicule: 1, dateTransport: 1 });
 transportSchema.index({ createdAt: -1 });
+// 2dsphere sur les adresses pour les requêtes géospatiales (calcul ETA, dispatch)
+transportSchema.index({ "adresseDepart.location": "2dsphere" });
+transportSchema.index({ "adresseDestination.location": "2dsphere" });
+
+// Dual-write coords → GeoJSON sur les deux sous-docs adresse.
+// Le hook s'exécute à chaque validate (donc avant save) — couvre create + update.
+function syncAdresseLocation(adresse) {
+  if (!adresse) return;
+  const lat = adresse.coordonnees?.lat;
+  const lng = adresse.coordonnees?.lng;
+  if (typeof lat === "number" && typeof lng === "number") {
+    adresse.location = { type: "Point", coordinates: [lng, lat] };
+  }
+}
+transportSchema.pre("validate", function (next) {
+  syncAdresseLocation(this.adresseDepart);
+  syncAdresseLocation(this.adresseDestination);
+  next();
+});
 
 // ── Règle métier : mobilité patient → type véhicule ──────────────────────────
 // Bug corrigé : la mobilité est portée par patient.mobilite, pas this.mobilite
