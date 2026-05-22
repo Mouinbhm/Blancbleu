@@ -127,7 +127,8 @@
       "PowerShell(Set-Location \"c:\\\\Users\\\\MSI\\\\OneDrive\\\\Bureau\\\\PFE\\\\blancbleu\\\\blancbleu_driver\"; $env:Path += \";$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\"; adb logcat -c; Write-Host \"Cleared logcat\")",
       "PowerShell($env:Path += \";$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\"; adb devices -l 2>&1)",
       "PowerShell(cmd /c \"dir /s /b `\"c:\\\\Users\\\\MSI\\\\OneDrive\\\\Bureau\\\\PFE\\\\blancbleu\\\\blancbleu_driver\\\\android\\\\app`\" 2>&1\")",
-      "Bash(Get-ChildItem -Path . -Directory)"
+      "Bash(Get-ChildItem -Path . -Directory)",
+      "Bash(grep -E \"\\\\.js$\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\MSI\\.claude\\projects\\c--Users-MSI-OneDrive-Bureau-PFE-blancbleu\\memory",

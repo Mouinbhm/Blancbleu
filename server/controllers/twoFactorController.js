@@ -33,7 +33,9 @@ const TWO_FACTOR_ELIGIBLE_ROLES = ["admin", "superviseur", "dispatcher"];
 const TWO_FACTOR_REQUIRED_ROLES = ["admin"];
 
 const safeMsg = (err) =>
-  process.env.NODE_ENV === "production" ? "Erreur interne du serveur" : err.message;
+  process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test"
+    ? err.message
+    : "Erreur interne du serveur";
 
 // ── Helpers partagés ─────────────────────────────────────────────────────────
 

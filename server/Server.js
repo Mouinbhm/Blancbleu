@@ -45,8 +45,11 @@ app.use(
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Flutter mobile n'envoie pas d'Origin header (origin === undefined) → autorisé
-    if (!origin) return callback(null, true);
+    if (!origin) {
+      // Pas de validation possible côté CORS — laisser passer pour Flutter.
+      // La protection se fait dans le middleware mobileGuard ci-dessous.
+      return callback(null, true);
+    }
     if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
     callback(new Error(`CORS: origine non autorisée — ${origin}`));
   },
@@ -67,6 +70,7 @@ app.post(
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ limit: "5mb", extended: false }));
 app.use(cookieParser());
+app.use(require("./middleware/mobileGuard"));
 app.use(noSqlSanitize);
 app.use(xssSanitize);
 app.use(globalLimiter);
@@ -147,8 +151,8 @@ app.use("/api/v1/shifts",         require("./routes/shift.routes"));
 app.use("/api/v1/tracking",       require("./routes/tracking.routes"));
 app.use("/api/v1/messages",       require("./routes/messages.routes"));
 
-// ── Fichiers statiques (photos PMT) ───────────────────────────────────────────
-app.use("/uploads", require("express").static(require("path").join(__dirname, "uploads")));
+// ── Fichiers uploads protégés (PMT, signatures, avatars) ─────────────────────
+app.use("/uploads", require("./routes/uploads"));
 
 // ─── Admin one-shot migration (dev only) ─────────────────────────────────────
 if (process.env.NODE_ENV !== "production") {
