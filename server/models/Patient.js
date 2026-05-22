@@ -4,6 +4,7 @@
  * Un patient peut avoir plusieurs transports, prescriptions et factures.
  */
 const mongoose = require("mongoose");
+const Counter = require("./Counter");
 const { encrypt, decrypt } = require("../utils/encryption");
 const { hashDeterministic } = require("../utils/hashing");
 
@@ -156,24 +157,17 @@ patientSchema.post("init", function (doc) {
   }
 });
 
-// ── Numéro patient automatique : PAT-YYYYMMDD-XXXX ───────────────────────────
-// Utilise le MAX existant au lieu de countDocuments() pour éviter les doublons
-// en cas de suppressions ou d'insertions concurrentes.
+// ── Numéro patient atomique : PAT-YYYYMMDD-XXXX ──────────────────────────────
+// Counter MongoDB atomique ($inc + upsert) → pas de race condition multi-instance.
 patientSchema.pre("save", async function (next) {
   if (!this.numeroPatient) {
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const last = await mongoose.model("Patient")
-      .findOne({ numeroPatient: { $exists: true, $ne: null } })
-      .sort({ numeroPatient: -1 })
-      .select("numeroPatient")
-      .lean();
-    let seq = 1;
-    if (last?.numeroPatient) {
-      const parts = last.numeroPatient.split("-");
-      const n = parseInt(parts[parts.length - 1], 10);
-      if (!isNaN(n)) seq = n + 1;
-    }
-    this.numeroPatient = `PAT-${date}-${String(seq).padStart(4, "0")}`;
+    const counter = await Counter.findOneAndUpdate(
+      { _id: "patient" },
+      { $inc: { seq: 1 } },
+      { upsert: true, new: true },
+    );
+    this.numeroPatient = `PAT-${date}-${String(counter.seq).padStart(4, "0")}`;
   }
   next();
 });
