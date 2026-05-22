@@ -35,11 +35,10 @@ const _prescriptionUpload = multer({
   },
 }).single('fichier')
 
-// Masque les détails d'erreur en production
 const safeMsg = (err) =>
-  process.env.NODE_ENV === 'production'
-    ? 'Erreur interne du serveur'
-    : err.message
+  process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test"
+    ? err.message
+    : "Erreur interne du serveur";
 
 // Crée ou met à jour le dossier Patient de la plateforme web à partir d'un User patient.
 // findOneAndUpdate avec upsert ne déclenche pas le pre('save') qui génère numeroPatient,

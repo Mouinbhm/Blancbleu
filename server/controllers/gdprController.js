@@ -7,7 +7,9 @@ const Facture = require("../models/Facture");
 const RefreshToken = require("../models/RefreshToken");
 
 const safeMsg = (err) =>
-  process.env.NODE_ENV === "production" ? "Erreur interne du serveur" : err.message;
+  process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test"
+    ? err.message
+    : "Erreur interne du serveur";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // @desc    Exporter toutes les données personnelles (RGPD Art. 20)

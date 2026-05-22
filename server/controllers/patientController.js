@@ -10,9 +10,9 @@ const privacySvc   = require("../services/patientPrivacyService");
 const { audit }    = require("../services/auditService");
 
 const safeMsg = (err) =>
-  process.env.NODE_ENV === "production"
-    ? "Erreur interne du serveur"
-    : err.message;
+  process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test"
+    ? err.message
+    : "Erreur interne du serveur";
 
 const errStd = (res, err, status = 500) => {
   logger.error("patientController", { err: err.message });
