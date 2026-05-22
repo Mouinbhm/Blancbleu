@@ -19,7 +19,7 @@ beforeAll(async () => {
   process.env.MONGO_URI = uri;
   process.env.JWT_SECRET = "test-secret-blancbleu-jest";
   process.env.NODE_ENV = "test";
-  process.env.AI_API_URL = "http://localhost:5001";
+  process.env.AI_API_URL = "http://localhost:5002";
 
   // 3. Se connecter directement — on contrôle la connexion
   await mongoose.connect(uri);

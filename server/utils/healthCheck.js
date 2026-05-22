@@ -8,7 +8,7 @@ const mongoose = require("mongoose");
 const axios = require("axios");
 const logger = require("./logger");
 
-const AI_URL = process.env.AI_API_URL || "http://localhost:5001";
+const AI_URL = process.env.AI_API_URL || "http://localhost:5002";
 const AI_TIMEOUT = 2000;
 
 /**
