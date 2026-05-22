@@ -158,8 +158,24 @@ const recommanderDispatch = async (req, res) => {
     await audit.iaDispatchRequis(transport, userCtx);
 
     const dateTransport = transport.dateTransport || new Date();
+
+    // Pré-filtre géospatial $near sur Vehicle.location si on connaît le départ —
+    // ramène en priorité 15 véhicules proches au lieu de toute la flotte.
+    const candidatesQuery = { statut: "Disponible" };
+    const depart = transport.adresseDepart?.coordonnees;
+    let limitVehicules = 30;
+    if (depart?.lat != null && depart?.lng != null) {
+      candidatesQuery.location = {
+        $near: {
+          $geometry:     { type: "Point", coordinates: [depart.lng, depart.lat] },
+          $maxDistance:  30000, // 30 km
+        },
+      };
+      limitVehicules = 15;
+    }
+
     const [vehicules, chauffeurs] = await Promise.all([
-      Vehicle.find({ statut: "Disponible" }).lean(),
+      Vehicle.find(candidatesQuery).limit(limitVehicules).lean(),
       Personnel.find({ statut: "Disponible", role: { $in: ["Ambulancier", "Chauffeur"] } }).lean(),
     ]);
 
