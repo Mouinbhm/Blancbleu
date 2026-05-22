@@ -15,7 +15,10 @@ const router  = express.Router();
 const multer  = require("multer");
 
 const { protect, authorize } = require("../middleware/auth");
+const { aiLimiter } = require("../middleware/rateLimiter");
 const ctrl = require("../controllers/aiController");
+
+router.use(aiLimiter);
 
 const STAFF = ["dispatcher", "superviseur", "admin"];
 
