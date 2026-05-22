@@ -5,6 +5,7 @@
  */
 const mongoose = require("mongoose");
 const { encrypt, decrypt } = require("../utils/encryption");
+const { hashDeterministic } = require("../utils/hashing");
 
 const contactUrgenceSchema = new mongoose.Schema(
   {
@@ -35,6 +36,9 @@ const patientSchema = new mongoose.Schema(
 
     // ── Informations médicales / administratives ──────────────────────────────
     numeroSecu: { type: String, default: "", trim: true },
+    // Hash HMAC-SHA256 déterministe du numéro de sécu en clair — utilisé pour la recherche
+    // car le champ numeroSecu stocke un ciphertext AES-GCM (IV aléatoire, non recherchable).
+    numeroSecuHash: { type: String, sparse: true, index: true, select: false },
     caisse: { type: String, default: "" }, // CPAM, MSA, RSI…
     exoneration: { type: Boolean, default: false }, // ALD / 100%
     mutuelle: { type: String, default: "" },
@@ -128,7 +132,8 @@ const patientSchema = new mongoose.Schema(
 
 // ── Index ─────────────────────────────────────────────────────────────────────
 patientSchema.index({ nom: 1, prenom: 1 });
-patientSchema.index({ numeroSecu: 1 }, { sparse: true });
+// Index sur numeroSecu supprimé — le ciphertext AES-GCM (IV aléatoire) est non-déterministe.
+// La recherche se fait via numeroSecuHash (HMAC-SHA256, défini dans le schéma ci-dessus).
 patientSchema.index({ telephone: 1 }, { sparse: true });
 patientSchema.index({ email: 1 }, { sparse: true });
 patientSchema.index({ deletedAt: 1 });
@@ -138,6 +143,8 @@ patientSchema.index({ "gdpr.deletionRequested": 1 });
 // ── Chiffrement du numéro de sécurité sociale (AES-256-GCM) ──────────────────
 patientSchema.pre("save", function (next) {
   if (this.isModified("numeroSecu") && this.numeroSecu) {
+    // Hash calculé sur la valeur EN CLAIR avant chiffrement (HMAC-SHA256 déterministe)
+    this.numeroSecuHash = hashDeterministic(this.numeroSecu);
     this.numeroSecu = encrypt(this.numeroSecu);
   }
   next();

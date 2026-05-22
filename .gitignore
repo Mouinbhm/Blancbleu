@@ -51,3 +51,6 @@ ai-model/data_clean.csv
 
 # ── VS Code ───────────────────────────────────────────
 .vscode/
+
+# ── Claude Code (local settings) ──────────────────────
+.claude/

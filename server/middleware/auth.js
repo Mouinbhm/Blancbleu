@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const RevokedToken = require("../models/RevokedToken");
 
 // ─── Protège les routes avec JWT ──────────────────────────────────────────────
 const protect = async (req, res, next) => {
@@ -17,6 +18,12 @@ const protect = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (decoded.jti) {
+      const revoked = await RevokedToken.exists({ jti: decoded.jti });
+      if (revoked) return res.status(401).json({ message: "Token révoqué" });
+    }
+
     req.user = await User.findById(decoded.id).select("-password");
 
     if (!req.user || !req.user.actif) {

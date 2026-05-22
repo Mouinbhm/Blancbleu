@@ -49,6 +49,7 @@ services:
       AI_API_URL: http://ia:5002
       CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
       ALLOWED_ORIGINS: ${CLIENT_URL:-http://localhost:3000}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env}
       EMAIL_HOST: ${EMAIL_HOST:-}
       EMAIL_USER: ${EMAIL_USER:-}
       EMAIL_PASS: ${EMAIL_PASS:-}
