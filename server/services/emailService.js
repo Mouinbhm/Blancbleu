@@ -1,4 +1,5 @@
 const nodemailer = require("nodemailer");
+const { queues, QUEUES } = require("../queues");
 
 // ─── Créer le transporteur SMTP ───────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
@@ -11,8 +12,8 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// ─── Envoyer l'email de réinitialisation ──────────────────────────────────────
-const sendResetEmail = async (to, nom, resetUrl) => {
+// ─── Envoyer l'email de réinitialisation (doer — appelé par le worker) ────────
+const _sendResetEmailNow = async (to, nom, resetUrl) => {
   const html = `
     <!DOCTYPE html>
     <html lang="fr">
@@ -82,7 +83,8 @@ const sendResetEmail = async (to, nom, resetUrl) => {
   });
 };
 
-const sendWelcomeEmail = async (to, prenom, nom, email, motDePasse, role) => {
+// ─── Envoyer l'email de bienvenue (doer — appelé par le worker) ──────────────
+const _sendWelcomeEmailNow = async (to, prenom, nom, email, motDePasse, role) => {
   const roleLabels = {
     dispatcher: "Dispatcher",
     superviseur: "Superviseur",
@@ -169,4 +171,29 @@ const sendWelcomeEmail = async (to, prenom, nom, email, motDePasse, role) => {
   });
 };
 
-module.exports = { sendResetEmail, sendWelcomeEmail };
+// ─── Wrappers publics : enqueue dans BullMQ ──────────────────────────────────
+// Comportement legacy préservé : si la queue n'est pas dispo (test, démarrage),
+// on retombe sur l'exécution synchrone.
+async function sendResetEmail(to, nom, resetUrl) {
+  try {
+    await queues[QUEUES.EMAIL].add("reset", { to, nom, resetUrl });
+  } catch {
+    await _sendResetEmailNow(to, nom, resetUrl);
+  }
+}
+
+async function sendWelcomeEmail(to, prenom, nom, email, motDePasse, role) {
+  try {
+    await queues[QUEUES.EMAIL].add("welcome", { to, prenom, nom, email, motDePasse, role });
+  } catch {
+    await _sendWelcomeEmailNow(to, prenom, nom, email, motDePasse, role);
+  }
+}
+
+module.exports = {
+  sendResetEmail,
+  sendWelcomeEmail,
+  // exposés pour les workers
+  _sendResetEmailNow,
+  _sendWelcomeEmailNow,
+};

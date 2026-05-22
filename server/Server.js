@@ -154,6 +154,27 @@ app.use("/api/v1/messages",       require("./routes/messages.routes"));
 // ── Fichiers uploads protégés (PMT, signatures, avatars) ─────────────────────
 app.use("/uploads", require("./routes/uploads"));
 
+// ── Bull Board (admin UI BullMQ) — réservé admin ─────────────────────────────
+if (process.env.NODE_ENV !== "test") {
+  try {
+    const { createBullBoard }     = require("@bull-board/api");
+    const { BullMQAdapter }       = require("@bull-board/api/bullMQAdapter");
+    const { ExpressAdapter }      = require("@bull-board/express");
+    const { queues }              = require("./queues");
+    const { protect, authorize }  = require("./middleware/auth");
+
+    const serverAdapter = new ExpressAdapter();
+    serverAdapter.setBasePath("/api/admin/queues");
+    createBullBoard({
+      queues:        Object.values(queues).map((q) => new BullMQAdapter(q)),
+      serverAdapter,
+    });
+    app.use("/api/admin/queues", protect, authorize("admin"), serverAdapter.getRouter());
+  } catch (err) {
+    logger.warn("[BullBoard] non monté", { err: err.message });
+  }
+}
+
 // ─── Admin one-shot migration (dev only) ─────────────────────────────────────
 if (process.env.NODE_ENV !== "production") {
   app.post("/api/admin/migrate-statuts", async (req, res) => {
@@ -222,28 +243,13 @@ if (require.main === module) {
         logger.warn("Migration statuts échouée", { err: err.message }),
       );
 
-      // Nettoyage immédiat au démarrage (non bloquant)
+      // Nettoyage immédiat au démarrage (non bloquant) — le récurrent est géré
+      // par le worker BullMQ (cf. server/workers/start.js).
       nettoyerVehiculesBloqués().catch((err) =>
         logger.warn("Nettoyage initial des véhicules échoué", {
           err: err.message,
         }),
       );
-
-      // Nettoyage périodique toutes les heures
-      setInterval(() => {
-        nettoyerVehiculesBloqués().catch((err) =>
-          logger.warn("Nettoyage périodique des véhicules échoué", {
-            err: err.message,
-          }),
-        );
-      }, 60 * 60 * 1000);
-
-      // Nettoyage notifications 1x/jour
-      setInterval(() => {
-        notifCleanup().catch((err) =>
-          logger.warn("Nettoyage notifications échoué", { err: err.message }),
-        );
-      }, 24 * 60 * 60 * 1000);
 
       server.listen(PORT, () => {
         logger.info(`BlancBleu Transport démarré`, { port: PORT });

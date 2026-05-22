@@ -130,6 +130,37 @@ services:
     networks:
       - blancbleu-net
 
+  # ─── Worker BullMQ (jobs async : email, OCR, PDF, cleanup) ────────────────
+  worker:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: blancbleu-worker
+    restart: unless-stopped
+    command: ["node", "workers/start.js"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      ia:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://${MONGO_USER:?MONGO_USER must be set in .env}:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}@mongo:27017/blancbleu?replicaSet=rs0&authSource=admin&directConnection=true
+      REDIS_URL: redis://redis:6379
+      AI_API_URL: http://ia:5002
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASS: ${EMAIL_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@blancbleu.fr}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
+    networks:
+      - blancbleu-net
+
   # ─── Module IA Python / FastAPI ──────────────────────────────────────────────
   ia:
     build:
