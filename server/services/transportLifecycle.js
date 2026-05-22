@@ -21,6 +21,7 @@ const { haversine } = require("../utils/geoUtils");
 const tarifService = require("./tarifService");
 const transportNotif = require("./transportNotificationService");
 const { withTransactionOrFallback } = require("../utils/withTransaction");
+const { delPattern } = require("../utils/redis");
 const logger = (() => {
   try {
     return require("../utils/logger");
@@ -526,6 +527,9 @@ async function completerTransport(transportId, utilisateur) {
     duree: transport.dureeReelleMinutes,
   });
 
+  // Invalider le cache analytics (best-effort)
+  delPattern("analytics:dashboard:*").catch(() => {});
+
   return { transport };
 }
 
@@ -815,6 +819,7 @@ async function marquerPaid(transportId, utilisateur) {
   });
 
   logger.info("Transport marqué payé", { numero: transport.numero });
+  delPattern("analytics:dashboard:*").catch(() => {});
   return { transport };
 }
 

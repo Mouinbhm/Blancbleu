@@ -43,6 +43,24 @@ services:
     networks:
       - blancbleu-net
 
+  # ─── Redis (cache + rate limiter distribué) ───────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: blancbleu-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - blancbleu-net
+
   # ─── Initialisation one-shot du replica set ────────────────────────────────
   # Exécute rs.initiate() au premier démarrage. Idempotent : si rs.status()
   # répond déjà OK, ne fait rien.
@@ -81,6 +99,8 @@ services:
         condition: service_healthy
       mongo-init:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
       ia:
         condition: service_healthy
     environment:
@@ -89,6 +109,7 @@ services:
       # ?replicaSet=rs0 obligatoire pour que le driver négocie une session
       # transactionnelle (utilisé par withTransactionOrFallback).
       MONGO_URI: mongodb://${MONGO_USER:?MONGO_USER must be set in .env}:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}@mongo:27017/blancbleu?replicaSet=rs0&authSource=admin&directConnection=true
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       AI_API_URL: http://ia:5002
       CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
@@ -150,6 +171,8 @@ volumes:
   mongo_data:
     driver: local
   mongo_keyfile:
+    driver: local
+  redis_data:
     driver: local
 
 networks:

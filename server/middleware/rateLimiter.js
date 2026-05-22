@@ -1,4 +1,6 @@
 const rateLimit = require("express-rate-limit");
+const { RedisStore } = require("rate-limit-redis");
+const { redis } = require("../utils/redis");
 
 // ─── Formateur de réponse uniforme ────────────────────────────────────────────
 const handler = (req, res) => {
@@ -7,6 +9,17 @@ const handler = (req, res) => {
     retryAfter: res.getHeader("Retry-After"),
   });
 };
+
+// ─── Store partagé Redis pour le rate limiting multi-instance ────────────────
+// En test, Redis n'est pas démarré → on retombe sur le store mémoire par défaut
+// (suffisant car chaque test démarre un Node isolé).
+function makeStore(prefix) {
+  if (process.env.NODE_ENV === "test") return undefined;
+  return new RedisStore({
+    sendCommand: (...args) => redis.call(...args),
+    prefix: `bb:rl:${prefix}:`,
+  });
+}
 
 // ─── 1. Auth : login + forgot-password ───────────────────────────────────────
 // 10 tentatives / 15 minutes par IP — bloque le brute force
@@ -17,6 +30,7 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   handler,
   skipSuccessfulRequests: false,
+  store: makeStore("auth"),
 });
 
 // ─── 2. Register : création de compte ────────────────────────────────────────
@@ -27,6 +41,7 @@ const registerLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler,
+  store: makeStore("register"),
 });
 
 // ─── 3. Module IA : prédictions coûteuses ────────────────────────────────────
@@ -37,6 +52,7 @@ const aiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler,
+  store: makeStore("ai"),
 });
 
 // ─── 4. Global : toutes les autres routes ────────────────────────────────────
@@ -48,6 +64,7 @@ const globalLimiter = rateLimit({
   legacyHeaders: false,
   handler,
   skip: (req) => req.path === "/api/health",
+  store: makeStore("global"),
 });
 
 // ─── 5. 2FA : vérification de codes TOTP ─────────────────────────────────────
@@ -59,6 +76,7 @@ const twoFaLimiter = rateLimit({
   legacyHeaders: false,
   handler,
   skipSuccessfulRequests: true,
+  store: makeStore("2fa"),
 });
 
 module.exports = { authLimiter, registerLimiter, aiLimiter, globalLimiter, twoFaLimiter };
