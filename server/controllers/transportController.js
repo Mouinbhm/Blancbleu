@@ -13,6 +13,7 @@ const lifecycle = require("../services/transportLifecycle");
 const { audit } = require("../services/auditService");
 const { TransportStateMachine } = require("../services/transportStateMachine");
 const recurrenceService = require("../services/recurrenceService");
+const { hashDeterministic } = require("../utils/hashing");
 const tarifService      = require("../services/tarifService");
 const { geocodeTransport } = require("../utils/geocodeUtils");
 const { generateMissionPdf } = require("../services/missionPdfService");
@@ -319,7 +320,8 @@ const createTransport = async (req, res, next) => {
       try {
         const conditions = [];
         if (patientData.numeroSecu?.trim()) {
-          conditions.push({ numeroSecu: patientData.numeroSecu.trim() });
+          // Chercher par hash déterministe — numeroSecu est chiffré (AES-GCM non-déterministe)
+          conditions.push({ numeroSecuHash: hashDeterministic(patientData.numeroSecu) });
         }
         const nomEsc    = patientData.nom.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const prenomEsc = (patientData.prenom || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

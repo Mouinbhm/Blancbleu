@@ -8,6 +8,7 @@ const logger       = require("../utils/logger");
 const gdprSvc      = require("../services/patientGdprService");
 const privacySvc   = require("../services/patientPrivacyService");
 const { audit }    = require("../services/auditService");
+const { hashDeterministic } = require("../utils/hashing");
 
 const safeMsg = (err) =>
   process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test"
@@ -63,7 +64,13 @@ exports.getPatients = async (req, res) => {
     if (mobilite) filtre.mobilite = mobilite;
     if (recherche) {
       const re = new RegExp(recherche.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      filtre.$or = [{ nom: re }, { prenom: re }, { telephone: re }, { numeroSecu: re }];
+      // numeroSecu stocké chiffré (AES-GCM) → recherche via hash HMAC déterministe
+      filtre.$or = [
+        { nom: re },
+        { prenom: re },
+        { telephone: re },
+        { numeroSecuHash: hashDeterministic(recherche) },
+      ];
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
