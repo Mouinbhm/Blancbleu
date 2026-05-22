@@ -48,7 +48,12 @@
       "Bash(node --check routes/transports.js)",
       "Bash(node --check \"c:\\\\Users\\\\MSI\\\\OneDrive\\\\Bureau\\\\PFE\\\\blancbleu\\\\server\\\\scripts\\\\fix-vehicles.js\")",
       "Bash(node --check \"c:\\\\Users\\\\MSI\\\\OneDrive\\\\Bureau\\\\PFE\\\\blancbleu\\\\server\\\\services\\\\aiClient.js\")",
-      "Bash(node --check \"c:\\\\Users\\\\MSI\\\\OneDrive\\\\Bureau\\\\PFE\\\\blancbleu\\\\server\\\\controllers\\\\aiController.js\")"
+      "Bash(node --check \"c:\\\\Users\\\\MSI\\\\OneDrive\\\\Bureau\\\\PFE\\\\blancbleu\\\\server\\\\controllers\\\\aiController.js\")",
+      "Bash(git commit -m ' *)",
+      "Bash(npm test *)",
+      "Bash(git mv *)",
+      "Bash(git commit *)",
+      "Bash(git rm *)"
     ]
   }
 }
