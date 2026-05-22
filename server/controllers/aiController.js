@@ -14,6 +14,7 @@ const aiClient = require("../services/aiClient");
 const { audit } = require("../services/auditService");
 const socketService = require("../services/socketService");
 const { geocodeTransport } = require("../utils/geocodeUtils");
+const DispatchRecommendation = require("../models/DispatchRecommendation");
 
 // ════════════════════════════════════════════════════════════════════════════
 // MODULE 1 — PMT (Prescription Médicale de Transport)
@@ -198,8 +199,28 @@ const recommanderDispatch = async (req, res) => {
 
     const best = result.bestRecommendation || result.recommandation;
 
-    // Sauvegarder la recommandation dans le transport
+    // Persister un document DispatchRecommendation (historique complet)
+    let dispatchRec = null;
     if (best) {
+      dispatchRec = await DispatchRecommendation.create({
+        transportId: transport._id,
+        source: fallbackUsed ? "fallback_node" : "ia",
+        weights: result.weights || null,
+        recommendations: Array.isArray(result.recommendations)
+          ? result.recommendations
+          : Array.isArray(result.alternatives)
+            ? [best, ...result.alternatives]
+            : [best],
+        bestRecommendation: best,
+        excludedCandidates: result.excludedCandidates || [],
+        summary: result.summary || {
+          totalCandidates:    vehicules.length,
+          eligibleCandidates: Array.isArray(result.recommendations) ? result.recommendations.length : 1,
+          excludedCandidates: Array.isArray(result.excludedCandidates) ? result.excludedCandidates.length : 0,
+        },
+      });
+
+      // Sous-doc dénormalisé (rétrocompat frontend) + référence
       await Transport.findByIdAndUpdate(transport._id, {
         $set: {
           "aiDispatch.recommendedVehicleId": best.vehiculeId,
@@ -215,6 +236,7 @@ const recommanderDispatch = async (req, res) => {
           "aiDispatch.fallbackUsed":         fallbackUsed,
           "aiDispatch.generatedAt":          new Date(),
           "aiDispatch.acceptedByDispatcher": null,
+          "aiDispatch.lastRecommendationId": dispatchRec._id,
         },
       });
     }
@@ -222,7 +244,7 @@ const recommanderDispatch = async (req, res) => {
     // Audit recommandation
     await audit.iaDispatchRecommande(transport, best, result.source || "ia", fallbackUsed);
 
-    return res.json({ ...result, fallbackUsed });
+    return res.json({ ...result, fallbackUsed, recommendationId: dispatchRec?._id || null });
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
@@ -272,6 +294,20 @@ const accepterRecommandationIA = async (req, res) => {
       },
     });
 
+    // Tracer la décision dans la collection DispatchRecommendation
+    const recId = transport.aiDispatch.lastRecommendationId;
+    if (recId) {
+      await DispatchRecommendation.findByIdAndUpdate(recId, {
+        $set: {
+          "decision.status":           "accepted",
+          "decision.decidedAt":        new Date(),
+          "decision.decidedBy":        req.user._id,
+          "decision.finalVehiculeId":  transport.aiDispatch.recommendedVehicleId,
+          "decision.finalChauffeurId": transport.aiDispatch.recommendedDriverId || null,
+        },
+      });
+    }
+
     const userCtx = { id: req.user._id, email: req.user.email, role: req.user.role };
     await audit.iaDispatchAccepte(transport, userCtx);
 
@@ -303,6 +339,19 @@ const refuserRecommandationIA = async (req, res) => {
       { new: true }
     );
     if (!transport) return res.status(404).json({ message: "Transport introuvable" });
+
+    // Tracer la décision dans la collection DispatchRecommendation
+    const recId = transport.aiDispatch?.lastRecommendationId;
+    if (recId) {
+      await DispatchRecommendation.findByIdAndUpdate(recId, {
+        $set: {
+          "decision.status":          "rejected",
+          "decision.decidedAt":       new Date(),
+          "decision.decidedBy":       req.user._id,
+          "decision.rejectionReason": raison,
+        },
+      });
+    }
 
     const userCtx = { id: req.user._id, email: req.user.email, role: req.user.role };
     await audit.iaDispatchRefuse(transport, userCtx, raison);
@@ -551,6 +600,66 @@ const optimiserTournee = async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
+ * GET /api/ai/dispatch/history?days=30
+ * Retourne les stats agrégées sur les recommandations IA des N derniers jours :
+ *   - taux d'acceptation / rejet / pending
+ *   - score moyen global
+ *   - top raisons de rejet
+ *   - répartition par source (ia vs fallback_node)
+ *
+ * @access  admin | superviseur
+ */
+const getDispatchHistory = async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(365, parseInt(req.query.days, 10) || 30));
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const [statusBreakdown, sourceBreakdown, avgScore, topRejections] = await Promise.all([
+      DispatchRecommendation.aggregate([
+        { $match: { generatedAt: { $gte: since } } },
+        { $group: { _id: "$decision.status", count: { $sum: 1 } } },
+      ]),
+      DispatchRecommendation.aggregate([
+        { $match: { generatedAt: { $gte: since } } },
+        { $group: { _id: "$source", count: { $sum: 1 } } },
+      ]),
+      DispatchRecommendation.aggregate([
+        { $match: { generatedAt: { $gte: since }, "bestRecommendation.score": { $ne: null } } },
+        { $group: { _id: null, avg: { $avg: "$bestRecommendation.score" }, n: { $sum: 1 } } },
+      ]),
+      DispatchRecommendation.aggregate([
+        { $match: { generatedAt: { $gte: since }, "decision.status": "rejected", "decision.rejectionReason": { $ne: null, $ne: "" } } },
+        { $group: { _id: "$decision.rejectionReason", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 5 },
+      ]),
+    ]);
+
+    const total = statusBreakdown.reduce((s, x) => s + x.count, 0);
+    const byStatus = Object.fromEntries(statusBreakdown.map((x) => [x._id || "unknown", x.count]));
+    const accepted = byStatus.accepted || 0;
+    const rejected = byStatus.rejected || 0;
+    const pending  = byStatus.pending  || 0;
+
+    return res.json({
+      days,
+      since,
+      total,
+      accepted,
+      rejected,
+      pending,
+      acceptanceRate: total ? +(100 * accepted / total).toFixed(1) : 0,
+      rejectionRate:  total ? +(100 * rejected / total).toFixed(1) : 0,
+      averageScore: avgScore[0]?.avg != null ? +avgScore[0].avg.toFixed(1) : null,
+      bySource: Object.fromEntries(sourceBreakdown.map((x) => [x._id || "unknown", x.count])),
+      topRejectionReasons: topRejections.map((x) => ({ reason: x._id, count: x.count })),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+/**
  * GET /api/ai/status
  * Vérifie la disponibilité du microservice IA Python.
  */
@@ -568,6 +677,7 @@ module.exports = {
   optimiserTournee,
   getAIStatus,
   getDispatchExplanation,
+  getDispatchHistory,
   accepterRecommandationIA,
   refuserRecommandationIA,
 };

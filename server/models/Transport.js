@@ -193,6 +193,8 @@ const transportSchema = new mongoose.Schema(
     scoreDispatch: { type: Number, default: null },
 
     // ── Recommandation IA Dispatch ────────────────────────────────────────────
+    // Sous-doc dénormalisé conservé pour rétrocompat (frontend, anciens callers).
+    // L'historique complet est désormais dans la collection DispatchRecommendation.
     aiDispatch: {
       recommendedVehicleId: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle", default: null },
       recommendedDriverId:  { type: mongoose.Schema.Types.ObjectId, ref: "Personnel", default: null },
@@ -209,6 +211,8 @@ const transportSchema = new mongoose.Schema(
       acceptedByDispatcher: { type: Boolean, default: null },
       acceptedAt:           { type: Date, default: null },
       rejectedReason:       { type: String, default: "" },
+      // Référence vers le document DispatchRecommendation correspondant
+      lastRecommendationId: { type: mongoose.Schema.Types.ObjectId, ref: "DispatchRecommendation", default: null },
     },
 
     // ── Horodatages ───────────────────────────────────────────────────────────

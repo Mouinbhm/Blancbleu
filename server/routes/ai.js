@@ -40,6 +40,7 @@ router.patch("/pmt/validate/:transportId", protect, authorize(...STAFF), ctrl.va
 
 // ── Dispatch — routes statiques avant /:id ────────────────────────────────────
 router.post("/dispatch/manual",        protect, authorize(...STAFF), ctrl.recommanderDispatchManuel);
+router.get( "/dispatch/history",       protect, authorize("admin", "superviseur"), ctrl.getDispatchHistory);
 router.post("/dispatch/:transportId",  protect, authorize(...STAFF), ctrl.recommanderDispatch);
 router.get( "/dispatch/:transportId/explanation", protect, authorize(...STAFF), ctrl.getDispatchExplanation);
 
