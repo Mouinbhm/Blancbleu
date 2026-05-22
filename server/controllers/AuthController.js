@@ -3,12 +3,13 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const RefreshToken = require("../models/RefreshToken");
+const RevokedToken = require("../models/RevokedToken");
 const { sendWelcomeEmail } = require("../services/emailService");
 
 const safeMsg = (err) =>
-  process.env.NODE_ENV === "production"
-    ? "Erreur interne du serveur"
-    : err.message;
+  process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test"
+    ? err.message
+    : "Erreur interne du serveur";
 
 // ─── Config tokens ────────────────────────────────────────────────────────────
 const ACCESS_TOKEN_TTL = "15m";
@@ -32,10 +33,34 @@ const ACCESS_COOKIE_OPTS = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const generateAccessToken = (user) =>
   jwt.sign(
-    { id: user._id, role: user.role, nom: user.nom || "", prenom: user.prenom || "" },
+    {
+      id: user._id,
+      role: user.role,
+      nom: user.nom || "",
+      prenom: user.prenom || "",
+      jti: crypto.randomUUID(),
+    },
     process.env.JWT_SECRET,
     { expiresIn: ACCESS_TOKEN_TTL },
   );
+
+// Révoque le jti de l'access token courant (best-effort — ne fait pas échouer le logout)
+async function revokeCurrentAccessJti(req) {
+  const raw = req.cookies?.[ACCESS_COOKIE_NAME];
+  if (!raw) return;
+  try {
+    const decoded = jwt.decode(raw);
+    if (decoded?.jti) {
+      await RevokedToken.updateOne(
+        { jti: decoded.jti },
+        { $setOnInsert: { jti: decoded.jti, expiresAt: new Date((decoded.exp || 0) * 1000) } },
+        { upsert: true },
+      );
+    }
+  } catch {
+    // best-effort
+  }
+}
 
 const generateRawRefreshToken = () => crypto.randomBytes(40).toString("hex");
 
@@ -246,8 +271,9 @@ const refresh = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 const logout = async (req, res) => {
   try {
-    const raw = req.cookies?.[REFRESH_COOKIE_NAME];
+    await revokeCurrentAccessJti(req);
 
+    const raw = req.cookies?.[REFRESH_COOKIE_NAME];
     if (raw) {
       const hash = RefreshToken.hashToken(raw);
       await RefreshToken.findOneAndUpdate(
@@ -271,6 +297,7 @@ const logout = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 const logoutAll = async (req, res) => {
   try {
+    await revokeCurrentAccessJti(req);
     await RefreshToken.revokeAllForUser(req.user._id, "logout-all");
     res.clearCookie(REFRESH_COOKIE_NAME, { path: "/api/auth" });
     res.clearCookie(ACCESS_COOKIE_NAME, { path: "/api" });
