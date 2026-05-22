@@ -254,6 +254,41 @@ describe("GET /api/auth/me", () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
+// SUITE 3b — Révocation de token (jti)
+// ══════════════════════════════════════════════════════════════════════════════
+describe("Révocation de token via logout", () => {
+  test("401 après logout — le jti est révoqué", async () => {
+    const app = getApp();
+    await creerUtilisateur({ email: "disp@test.fr", password: "pass1234" });
+
+    // Login → récupérer le token et le cookie bb_access
+    const loginRes = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "disp@test.fr", password: "pass1234" });
+
+    const token = loginRes.body.token;
+    const cookies = loginRes.headers["set-cookie"] || [];
+    const accessCookieHeader = cookies.find((c) => c.startsWith("bb_access="));
+    const cookieVal = accessCookieHeader?.split(";")[0]; // "bb_access=<value>"
+
+    expect(token).toBeTruthy();
+
+    // Logout en envoyant le cookie bb_access (pour que le serveur révoque le jti)
+    await request(app)
+      .post("/api/auth/logout")
+      .set("Cookie", cookieVal || "");
+
+    // Tenter d'utiliser le token révoqué → 401
+    const res = await request(app)
+      .get("/api/auth/me")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(res.status).toBe(401);
+    expect(res.body.message).toBe("Token révoqué");
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 // SUITE 4 — Health check
 // ══════════════════════════════════════════════════════════════════════════════
 describe("GET /api/health", () => {
