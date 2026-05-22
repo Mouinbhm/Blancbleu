@@ -78,7 +78,7 @@ const vehicleSchema = new mongoose.Schema(
     // sans coordonnées (rejeté par l'index 2dsphere). Le hook pre('save') le remplit.
     location: {
       type: { type: String, enum: ["Point"] },
-      coordinates: { type: [Number] }, // [lng, lat] — ordre GeoJSON
+      coordinates: { type: [Number], default: undefined }, // [lng, lat] — ordre GeoJSON
     },
     baseAdresse: { type: String, default: "59 Bd Madeleine, Nice" },
     basePosition: {
