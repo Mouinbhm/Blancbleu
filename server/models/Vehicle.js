@@ -70,7 +70,16 @@ const vehicleSchema = new mongoose.Schema(
     },
 
     // ── Position GPS ─────────────────────────────────────────────────────────
+    // position : ancien format { lat, lng, adresse, updatedAt } — gardé pour
+    // compatibilité frontend Leaflet (réponse JSON). La recherche géospatiale
+    // utilise désormais le champ `location` (GeoJSON Point + index 2dsphere).
     position: { type: locationSchema, default: () => ({}) },
+    // GeoJSON Point — pas de default sur `type` pour éviter un sous-doc invalide
+    // sans coordonnées (rejeté par l'index 2dsphere). Le hook pre('save') le remplit.
+    location: {
+      type: { type: String, enum: ["Point"] },
+      coordinates: { type: [Number] }, // [lng, lat] — ordre GeoJSON
+    },
     baseAdresse: { type: String, default: "59 Bd Madeleine, Nice" },
     basePosition: {
       lat: { type: Number, default: 43.7102 },
@@ -206,7 +215,8 @@ const vehicleSchema = new mongoose.Schema(
 );
 
 vehicleSchema.index({ statut: 1, type: 1 });
-vehicleSchema.index({ "position.lat": 1, "position.lng": 1 });
+// Ancien index sur position.lat/lng remplacé par 2dsphere sur location (GeoJSON).
+vehicleSchema.index({ location: "2dsphere" });
 vehicleSchema.index({ "maintenanceInfo.nextMaintenanceDate": 1 });
 vehicleSchema.index({ "availability.currentTransportId": 1 });
 
@@ -216,6 +226,18 @@ vehicleSchema.pre("validate", function (next) {
     const normalized = normalizeStatut(this.statut);
     if (normalized) this.statut = normalized;
     // If not recognized, leave it unchanged so Mongoose enum validation produces the right error
+  }
+  next();
+});
+
+// Dual-write : synchroniser position {lat,lng} → location GeoJSON {type:"Point", coordinates:[lng,lat]}
+// Le frontend continue de consommer `position`; les requêtes $near utilisent `location`.
+vehicleSchema.pre("save", function (next) {
+  if (this.position?.lat != null && this.position?.lng != null) {
+    this.location = {
+      type: "Point",
+      coordinates: [this.position.lng, this.position.lat],
+    };
   }
   next();
 });
