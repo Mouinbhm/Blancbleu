@@ -112,6 +112,7 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       AI_API_URL: http://ia:5002
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?AI_SERVICE_TOKEN must be set in .env}
       CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
       ALLOWED_ORIGINS: ${CLIENT_URL:-http://localhost:3000}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env}
@@ -152,6 +153,7 @@ services:
       MONGO_URI: mongodb://${MONGO_USER:?MONGO_USER must be set in .env}:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}@mongo:27017/blancbleu?replicaSet=rs0&authSource=admin&directConnection=true
       REDIS_URL: redis://redis:6379
       AI_API_URL: http://ia:5002
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?AI_SERVICE_TOKEN must be set in .env}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env}
       EMAIL_HOST: ${EMAIL_HOST:-}
       EMAIL_USER: ${EMAIL_USER:-}
@@ -171,6 +173,9 @@ services:
     environment:
       NODE_ORIGIN: http://server:5000
       ALLOWED_ORIGINS: http://server:5000,http://localhost:3000
+      # Service-to-service (pour pull du dataset d'entraînement)
+      NODE_API_URL: http://server:5000
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?AI_SERVICE_TOKEN must be set in .env}
     ports:
       - "5002:5002"
     # Port 5002 aligné avec uvicorn dans ai-service/main.py

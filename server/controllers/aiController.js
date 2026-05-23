@@ -685,6 +685,64 @@ const getAIStatus = async (req, res) => {
   return res.status(statusCode).json(sante);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// SERVICE-TO-SERVICE — Export du dataset d'entraînement DurationPredictor
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/ai/training-data?since=YYYY-MM-DD&limit=10000
+ *
+ * Appelé par le microservice IA Python pour réentraîner le DurationPredictor.
+ * Renvoie les TransportFeature en JSON, projeté pour matcher exactement le
+ * preprocessing attendu côté Python.
+ *
+ * Garde service-to-service via X-Service-Token (middleware serviceToken).
+ * @access  service (AI_SERVICE_TOKEN)
+ */
+const MIN_REAL_FEATURES = 200; // seuil "données suffisantes"
+
+const getTrainingData = async (req, res) => {
+  try {
+    const TransportFeature = require("../models/TransportFeature");
+    const since = req.query.since ? new Date(req.query.since) : null;
+    const limit = Math.min(50_000, parseInt(req.query.limit, 10) || 10_000);
+
+    const filter = {};
+    if (since && !isNaN(since.getTime())) filter.completedAt = { $gte: since };
+
+    // Sortie projetée — champs attendus par train_real.py
+    const rows = await TransportFeature.find(filter)
+      .sort({ completedAt: 1 })
+      .limit(limit)
+      .select("-__v -createdAt -updatedAt -_id -transportId")
+      .lean();
+
+    const features = rows.map((r) => ({
+      distanceKm:         r.distanceKm,
+      heureDepart:        r.heureDepart,
+      jourSemaine:        r.jourSemaine,
+      mobilite:           r.mobilite,
+      typeVehicule:       r.typeVehicule,
+      motif:              r.motif,
+      allerRetour:        r.allerRetour,
+      oxygene:            r.oxygene,
+      brancardage:        r.brancardage,
+      dureeReelleMinutes: r.dureeReelleMinutes,
+      completedAt:        r.completedAt,
+      source:             r.source || "real",
+    }));
+
+    const payload = { count: features.length, features };
+    if (features.length < MIN_REAL_FEATURES) {
+      payload.warning = "insufficient_real_data";
+      payload.threshold = MIN_REAL_FEATURES;
+    }
+    return res.json(payload);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
 module.exports = {
   extrairePMT,
   validerPMT,
@@ -696,4 +754,5 @@ module.exports = {
   getDispatchHistory,
   accepterRecommandationIA,
   refuserRecommandationIA,
+  getTrainingData,
 };

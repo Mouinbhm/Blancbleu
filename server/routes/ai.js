@@ -16,6 +16,7 @@ const multer  = require("multer");
 
 const { protect, authorize } = require("../middleware/auth");
 const { aiLimiter } = require("../middleware/rateLimiter");
+const serviceToken  = require("../middleware/serviceToken");
 const ctrl = require("../controllers/aiController");
 
 router.use(aiLimiter);
@@ -49,5 +50,9 @@ router.post("/routing/optimize", protect, authorize("superviseur", "admin"), ctr
 
 // ── Statut ────────────────────────────────────────────────────────────────────
 router.get("/status", ctrl.getAIStatus);
+
+// ── Service-to-service (appelé par le microservice IA Python) ────────────────
+// X-Service-Token requis ; pas de JWT utilisateur.
+router.get("/training-data", serviceToken, ctrl.getTrainingData);
 
 module.exports = router;
