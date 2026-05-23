@@ -11,10 +11,11 @@
  */
 
 const aiClient = require("../services/aiClient");
-const { audit } = require("../services/auditService");
+const { audit, log } = require("../services/auditService");
 const socketService = require("../services/socketService");
 const { geocodeTransport } = require("../utils/geocodeUtils");
 const DispatchRecommendation = require("../models/DispatchRecommendation");
+const { queues, QUEUES } = require("../queues");
 
 // ════════════════════════════════════════════════════════════════════════════
 // MODULE 1 — PMT (Prescription Médicale de Transport)
@@ -743,6 +744,60 @@ const getTrainingData = async (req, res) => {
   }
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// ADMIN — Réentraînement du DurationPredictor
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/ai/model/retrain
+ * Déclenche un réentraînement async du DurationPredictor (admin only).
+ * Pousse un job BullMQ ; le worker appelle Python /optimizer/model/retrain.
+ * @access  admin
+ */
+const triggerModelRetrain = async (req, res) => {
+  try {
+    const { since } = req.body || {};
+    const queue = queues[QUEUES.AI] || queues[QUEUES.OCR]; // fallback si queue AI absente
+    const job = await queue.add("model_retrain", { since: since || null, requestedBy: req.user._id });
+
+    await log({
+      action:    "AI_MODEL_RETRAIN",
+      origine:   "HUMAIN",
+      utilisateur: req.user,
+      ressource: { type: "Model", reference: "DurationPredictor" },
+      details: {
+        metadata: { since: since || null, jobId: job?.id || null },
+        message:  "Réentraînement du modèle de durée demandé",
+      },
+    });
+
+    return res.status(202).json({
+      message: "Réentraînement programmé",
+      jobId:   job?.id || null,
+      since:   since || null,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+/**
+ * GET /api/ai/model/status
+ * Renvoie l'état du dernier job + les metrics courantes (depuis Python).
+ * @access  admin | superviseur
+ */
+const getModelStatus = async (req, res) => {
+  try {
+    const data = await aiClient.statutModele();
+    return res.json(data);
+  } catch (err) {
+    return res.status(503).json({
+      message: "Microservice IA indisponible",
+      error:   err.message,
+    });
+  }
+};
+
 module.exports = {
   extrairePMT,
   validerPMT,
@@ -755,4 +810,6 @@ module.exports = {
   accepterRecommandationIA,
   refuserRecommandationIA,
   getTrainingData,
+  triggerModelRetrain,
+  getModelStatus,
 };

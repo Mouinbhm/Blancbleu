@@ -17,6 +17,7 @@ const QUEUES = {
   OCR:     "ocr",
   PDF:     "pdf",
   CLEANUP: "cleanup",
+  AI:      "ai",
 };
 
 let connection;

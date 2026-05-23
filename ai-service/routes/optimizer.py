@@ -12,12 +12,34 @@ Endpoints :
 
 import json
 import logging
-from fastapi import APIRouter, HTTPException, Request
+import os
+from datetime import datetime, timezone
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 
 from schemas.optimizer_schemas import TransportInput, OptimisationInput
 
 router = APIRouter()
 logger = logging.getLogger("blancbleu.ai.optimizer.route")
+
+
+def _service_token_guard(x_service_token: str | None) -> None:
+    """Garde service-to-service. Rejette si AI_SERVICE_TOKEN n'est pas fourni
+    OU ne matche pas celui configuré côté Python."""
+    expected = os.getenv("AI_SERVICE_TOKEN")
+    if not expected:
+        raise HTTPException(status_code=503, detail="AI_SERVICE_TOKEN non configuré côté IA")
+    if not x_service_token or x_service_token != expected:
+        raise HTTPException(status_code=401, detail="Service token invalide ou manquant")
+
+
+def _train_status_default() -> dict:
+    return {
+        "status":       "idle",          # idle | running | success | failed
+        "started_at":   None,
+        "finished_at":  None,
+        "error":        None,
+        "last_metrics": None,
+    }
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -129,6 +151,94 @@ async def train_model(request: Request):
     except Exception as e:
         logger.error(f"Erreur entraînement : {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── POST /optimizer/model/retrain ──────────────────────────────────────────
+# Pipeline de réentraînement sur DONNÉES RÉELLES (cf. data/train_real.py).
+# Lance le job en BackgroundTask et renvoie immédiatement. Garde service-to-service.
+
+def _run_retrain(app_state, since: str | None) -> None:
+    """Task de fond — appelle data.train_real.main puis met à jour app_state."""
+    status = getattr(app_state, "train_status", _train_status_default())
+    status["status"]      = "running"
+    status["started_at"]  = datetime.now(timezone.utc).isoformat()
+    status["finished_at"] = None
+    status["error"]       = None
+    app_state.train_status = status
+
+    try:
+        from data.train_real import main as train_real_main
+        metrics = train_real_main(since=since)
+        # Recharger le modèle dans le predictor pour que les prédictions utilisent le nouveau
+        predictor = getattr(app_state, "predictor", None)
+        if predictor is not None:
+            predictor.load()
+        status["status"]       = "success"
+        status["finished_at"]  = datetime.now(timezone.utc).isoformat()
+        status["last_metrics"] = metrics
+        logger.info(f"Retrain terminé : gagnant={metrics.get('gagnant')} MAE={metrics.get('meilleur_mae')}")
+    except Exception as e:
+        status["status"]      = "failed"
+        status["finished_at"] = datetime.now(timezone.utc).isoformat()
+        status["error"]       = str(e)
+        logger.exception("Retrain échoué")
+    finally:
+        app_state.train_status = status
+
+
+@router.post(
+    "/model/retrain",
+    summary="Lancer un réentraînement sur données réelles (admin)",
+    description="Pipeline data.train_real (pull /api/ai/training-data + complément synthétique). Asynchrone.",
+)
+async def trigger_retrain(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    since: str | None = None,
+    x_service_token: str | None = Header(default=None, alias="X-Service-Token"),
+):
+    _service_token_guard(x_service_token)
+
+    status = getattr(request.app.state, "train_status", _train_status_default())
+    if status.get("status") == "running":
+        return {"status": "already_running", "started_at": status.get("started_at")}
+
+    background_tasks.add_task(_run_retrain, request.app.state, since)
+    return {
+        "status":     "started",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "since":      since,
+    }
+
+
+# ─── GET /model/status ──────────────────────────────────────────────────────
+# Snapshot du dernier job + metrics courantes sur disque.
+
+@router.get(
+    "/model/status",
+    summary="État du dernier réentraînement + metrics courantes",
+)
+async def model_status(
+    request: Request,
+    x_service_token: str | None = Header(default=None, alias="X-Service-Token"),
+):
+    _service_token_guard(x_service_token)
+    status = getattr(request.app.state, "train_status", _train_status_default())
+
+    # Charge les metrics disque (peuvent venir d'un retrain précédent au redémarrage)
+    metrics_on_disk = None
+    predictor = getattr(request.app.state, "predictor", None)
+    if predictor and predictor.metrics_path.exists():
+        try:
+            with open(predictor.metrics_path, encoding="utf-8") as f:
+                metrics_on_disk = json.load(f)
+        except Exception:
+            pass
+
+    return {
+        "training_job":     status,
+        "current_metrics":  metrics_on_disk,
+    }
 
 
 # ─── GET /model/shap/{transport_id} ─────────────────────────────────────────

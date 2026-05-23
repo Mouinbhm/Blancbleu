@@ -237,9 +237,40 @@ async function verifierSante() {
   }
 }
 
+// ── Service-to-service : retraining du DurationPredictor ───────────────────
+// Appelle POST /optimizer/model/retrain et GET /optimizer/model/status sur le
+// microservice Python avec le header X-Service-Token partagé.
+
+function _serviceHeaders() {
+  const token = process.env.AI_SERVICE_TOKEN;
+  if (!token) throw new Error("AI_SERVICE_TOKEN absent côté Node");
+  return { "X-Service-Token": token };
+}
+
+async function relancerEntrainement({ since } = {}) {
+  const params = since ? { since } : undefined;
+  const { data } = await client.post(
+    "/optimizer/model/retrain",
+    null,
+    { params, headers: _serviceHeaders(), timeout: 30_000 },
+  );
+  logger.info("[aiClient] retrain demandé", { status: data?.status });
+  return data;
+}
+
+async function statutModele() {
+  const { data } = await client.get(
+    "/optimizer/model/status",
+    { headers: _serviceHeaders(), timeout: 10_000 },
+  );
+  return data;
+}
+
 module.exports = {
   extrairePMT,
   recommanderDispatch,
   optimiserTournee,
   verifierSante,
+  relancerEntrainement,
+  statutModele,
 };

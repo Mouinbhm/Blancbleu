@@ -55,4 +55,8 @@ router.get("/status", ctrl.getAIStatus);
 // X-Service-Token requis ; pas de JWT utilisateur.
 router.get("/training-data", serviceToken, ctrl.getTrainingData);
 
+// ── Admin — Réentraînement modèle de durée ───────────────────────────────────
+router.post("/model/retrain", protect, authorize("admin"), ctrl.triggerModelRetrain);
+router.get( "/model/status",  protect, authorize("admin", "superviseur"), ctrl.getModelStatus);
+
 module.exports = router;
