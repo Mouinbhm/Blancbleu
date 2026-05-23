@@ -154,24 +154,29 @@ app.use("/api/v1/messages",       require("./routes/messages.routes"));
 // ── Fichiers uploads protégés (PMT, signatures, avatars) ─────────────────────
 app.use("/uploads", require("./routes/uploads"));
 
-// ── Bull Board (admin UI BullMQ) — réservé admin ─────────────────────────────
+// ── Bull Board (admin UI BullMQ) — réservé admin, skippé si queues stubs ────
 if (process.env.NODE_ENV !== "test") {
-  try {
-    const { createBullBoard }     = require("@bull-board/api");
-    const { BullMQAdapter }       = require("@bull-board/api/bullMQAdapter");
-    const { ExpressAdapter }      = require("@bull-board/express");
-    const { queues }              = require("./queues");
-    const { protect, authorize }  = require("./middleware/auth");
+  const { queues } = require("./queues");
+  const queuesAreReal = Object.values(queues).every((q) => !q._stub);
+  if (!queuesAreReal) {
+    logger.info("[BullBoard] non monté (Redis désactivé → queues stubs)");
+  } else {
+    try {
+      const { createBullBoard }     = require("@bull-board/api");
+      const { BullMQAdapter }       = require("@bull-board/api/bullMQAdapter");
+      const { ExpressAdapter }      = require("@bull-board/express");
+      const { protect, authorize }  = require("./middleware/auth");
 
-    const serverAdapter = new ExpressAdapter();
-    serverAdapter.setBasePath("/api/admin/queues");
-    createBullBoard({
-      queues:        Object.values(queues).map((q) => new BullMQAdapter(q)),
-      serverAdapter,
-    });
-    app.use("/api/admin/queues", protect, authorize("admin"), serverAdapter.getRouter());
-  } catch (err) {
-    logger.warn("[BullBoard] non monté", { err: err.message });
+      const serverAdapter = new ExpressAdapter();
+      serverAdapter.setBasePath("/api/admin/queues");
+      createBullBoard({
+        queues:        Object.values(queues).map((q) => new BullMQAdapter(q)),
+        serverAdapter,
+      });
+      app.use("/api/admin/queues", protect, authorize("admin"), serverAdapter.getRouter());
+    } catch (err) {
+      logger.warn("[BullBoard] non monté", { err: err.message });
+    }
   }
 }
 
