@@ -11,10 +11,12 @@ const handler = (req, res) => {
 };
 
 // ─── Store partagé Redis pour le rate limiting multi-instance ────────────────
-// En test, Redis n'est pas démarré → on retombe sur le store mémoire par défaut
-// (suffisant car chaque test démarre un Node isolé).
+// Quand Redis est indisponible (test, REDIS_DISABLED, stub no-op) → on retombe
+// sur le store mémoire par défaut. Suffisant en dev/test ; en prod multi-instance,
+// monter Redis pour partager les quotas entre containers.
 function makeStore(prefix) {
   if (process.env.NODE_ENV === "test") return undefined;
+  if (redis._stub) return undefined;
   return new RedisStore({
     sendCommand: (...args) => redis.call(...args),
     prefix: `bb:rl:${prefix}:`,
