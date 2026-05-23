@@ -22,6 +22,7 @@ const tarifService = require("./tarifService");
 const transportNotif = require("./transportNotificationService");
 const { withTransactionOrFallback } = require("../utils/withTransaction");
 const { delPattern } = require("../utils/redis");
+const featureCollector = require("./featureCollectorService");
 const logger = (() => {
   try {
     return require("../utils/logger");
@@ -529,6 +530,14 @@ async function completerTransport(transportId, utilisateur) {
 
   // Invalider le cache analytics (best-effort)
   delPattern("analytics:dashboard:*").catch(() => {});
+
+  // Capture des features pour l'entraînement du DurationPredictor (best-effort,
+  // non bloquant, hors transaction — l'erreur ne remet pas en cause la complétion)
+  setImmediate(() => {
+    featureCollector.captureTransportFeatures(transport).catch((err) =>
+      logger.warn("[lifecycle] captureTransportFeatures échoué", { err: err.message }),
+    );
+  });
 
   return { transport };
 }
