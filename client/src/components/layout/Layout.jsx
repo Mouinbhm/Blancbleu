@@ -3,6 +3,7 @@ import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../../context/AuthContext";
 import useSocket from "../../hooks/useSocket";
+import { useSocketSync } from "../../hooks/useSocketSync";
 import useNotifications from "../../hooks/useNotifications";
 import DispatcherChat from "./DispatcherChat";
 import api from "../../services/api";
@@ -163,6 +164,10 @@ export default function Layout() {
 
   const notifRef = useRef(null);
   const { connected, subscribe } = useSocket();
+
+  // Branche les events Socket.IO sur l'invalidation React Query (étape Sprint 3.5).
+  // À ne monter qu'une seule fois — Layout est le wrapper authentifié unique.
+  useSocketSync();
 
   // Notifications persistées (MongoDB via API)
   const {

@@ -54,3 +54,6 @@ ai-model/data_clean.csv
 
 # ── Claude Code (local settings) ──────────────────────
 .claude/
+
+# Added by ggshield
+.cache_ggshield
