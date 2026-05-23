@@ -213,4 +213,21 @@ npm start
 AI_SERVICE_URL=http://localhost:5002
 MONGODB_URI=mongodb://localhost:27017/blancbleu
 JWT_SECRET=...
+AI_SERVICE_TOKEN=<même valeur côté Python>
 ```
+
+## Pondérations configurables (Sprint 4)
+
+Les poids `DEFAULT_SCORING_WEIGHTS` ne sont plus le seul levier. Un admin peut
+les ajuster via `PUT /api/ai/dispatch/config` (UI dédiée à
+`/admin/dispatch-config`). Les poids sont stockés dans la collection MongoDB
+`dispatchconfigs` (singleton `_id: "default"`) et passés à chaque appel de
+dispatch via le champ `weights` du payload Python.
+
+Règle métier : `sum(weights) == 1.0` (± 1e-3). Toute mise à jour est auditée
+(`AI_DISPATCH_CONFIG_UPDATE`).
+
+Le scorer Python lit `request.weights` quand le payload en contient ; sinon
+il retombe sur `DEFAULT_SCORING_WEIGHTS`. Le logger indique la source à
+chaque appel.
+

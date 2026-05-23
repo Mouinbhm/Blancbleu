@@ -9,8 +9,10 @@
  */
 import { useState, useEffect, useRef, useMemo } from "react";
 import { aiService, transportService } from "../services/api";
+import { useAuth } from "../context/AuthContext";
 import DurationBadge from "../components/ai/DurationBadge";
 import ModelMetricsCard from "../components/ai/ModelMetricsCard";
+import { ModelHonestyPanel } from "../components/ai/ModelHonestyPanel";
 import useDurationPredict from "../hooks/useDurationPredict";
 import DemoControls from "../components/ui/DemoControls";
 
@@ -1671,7 +1673,23 @@ export default function AideIA() {
       )}
       {tab === "pmt" && <ModulePMT aiStatus={aiStatus} />}
       {tab === "routing" && <ModuleRouting aiStatus={aiStatus} />}
-      {tab === "duration" && <ModuleDuration />}
+      {tab === "duration" && (
+        <>
+          <DurationHonestyWrapper />
+          <ModuleDuration />
+        </>
+      )}
+    </div>
+  );
+}
+
+// Wrapper qui injecte isAdmin depuis l'AuthContext sans changer la signature
+// des autres modules.
+function DurationHonestyWrapper() {
+  const { user } = useAuth();
+  return (
+    <div className="mb-4">
+      <ModelHonestyPanel isAdmin={user?.role === "admin"} />
     </div>
   );
 }
