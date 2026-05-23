@@ -11,10 +11,11 @@
  */
 
 const aiClient = require("../services/aiClient");
-const { audit } = require("../services/auditService");
+const { audit, log } = require("../services/auditService");
 const socketService = require("../services/socketService");
 const { geocodeTransport } = require("../utils/geocodeUtils");
 const DispatchRecommendation = require("../models/DispatchRecommendation");
+const { queues, QUEUES } = require("../queues");
 
 // ════════════════════════════════════════════════════════════════════════════
 // MODULE 1 — PMT (Prescription Médicale de Transport)
@@ -685,6 +686,188 @@ const getAIStatus = async (req, res) => {
   return res.status(statusCode).json(sante);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// SERVICE-TO-SERVICE — Export du dataset d'entraînement DurationPredictor
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/ai/training-data?since=YYYY-MM-DD&limit=10000
+ *
+ * Appelé par le microservice IA Python pour réentraîner le DurationPredictor.
+ * Renvoie les TransportFeature en JSON, projeté pour matcher exactement le
+ * preprocessing attendu côté Python.
+ *
+ * Garde service-to-service via X-Service-Token (middleware serviceToken).
+ * @access  service (AI_SERVICE_TOKEN)
+ */
+const MIN_REAL_FEATURES = 200; // seuil "données suffisantes"
+
+const getTrainingData = async (req, res) => {
+  try {
+    const TransportFeature = require("../models/TransportFeature");
+    const since = req.query.since ? new Date(req.query.since) : null;
+    const limit = Math.min(50_000, parseInt(req.query.limit, 10) || 10_000);
+
+    const filter = {};
+    if (since && !isNaN(since.getTime())) filter.completedAt = { $gte: since };
+
+    // Sortie projetée — champs attendus par train_real.py
+    const rows = await TransportFeature.find(filter)
+      .sort({ completedAt: 1 })
+      .limit(limit)
+      .select("-__v -createdAt -updatedAt -_id -transportId")
+      .lean();
+
+    const features = rows.map((r) => ({
+      distanceKm:         r.distanceKm,
+      heureDepart:        r.heureDepart,
+      jourSemaine:        r.jourSemaine,
+      mobilite:           r.mobilite,
+      typeVehicule:       r.typeVehicule,
+      motif:              r.motif,
+      allerRetour:        r.allerRetour,
+      oxygene:            r.oxygene,
+      brancardage:        r.brancardage,
+      dureeReelleMinutes: r.dureeReelleMinutes,
+      completedAt:        r.completedAt,
+      source:             r.source || "real",
+    }));
+
+    const payload = { count: features.length, features };
+    if (features.length < MIN_REAL_FEATURES) {
+      payload.warning = "insufficient_real_data";
+      payload.threshold = MIN_REAL_FEATURES;
+    }
+    return res.json(payload);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// ADMIN — Réentraînement du DurationPredictor
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/ai/model/retrain
+ * Déclenche un réentraînement async du DurationPredictor (admin only).
+ * Pousse un job BullMQ ; le worker appelle Python /optimizer/model/retrain.
+ * @access  admin
+ */
+const triggerModelRetrain = async (req, res) => {
+  try {
+    const { since } = req.body || {};
+    const queue = queues[QUEUES.AI] || queues[QUEUES.OCR]; // fallback si queue AI absente
+    const job = await queue.add("model_retrain", { since: since || null, requestedBy: req.user._id });
+
+    await log({
+      action:    "AI_MODEL_RETRAIN",
+      origine:   "HUMAIN",
+      utilisateur: req.user,
+      ressource: { type: "Model", reference: "DurationPredictor" },
+      details: {
+        metadata: { since: since || null, jobId: job?.id || null },
+        message:  "Réentraînement du modèle de durée demandé",
+      },
+    });
+
+    return res.status(202).json({
+      message: "Réentraînement programmé",
+      jobId:   job?.id || null,
+      since:   since || null,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// ADMIN — Configuration des pondérations Dispatch (singleton MongoDB)
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/ai/dispatch/config
+ * @access  admin | superviseur
+ */
+const getDispatchConfig = async (req, res) => {
+  try {
+    const DispatchConfig = require("../models/DispatchConfig");
+    let cfg = await DispatchConfig.findById("default").lean();
+    if (!cfg) {
+      // Auto-bootstrap au défaut
+      cfg = { _id: "default", weights: DispatchConfig.DEFAULT_WEIGHTS, updatedBy: null };
+    }
+    return res.json({ ...cfg, defaults: DispatchConfig.DEFAULT_WEIGHTS });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+/**
+ * PUT /api/ai/dispatch/config
+ * Body : { weights: { distance, driverAvailability, ... } }  // somme == 1.0
+ * @access  admin
+ */
+const updateDispatchConfig = async (req, res) => {
+  try {
+    const DispatchConfig = require("../models/DispatchConfig");
+    const { weights } = req.body || {};
+    if (!weights || typeof weights !== "object") {
+      return res.status(400).json({ message: "Body invalide : { weights: {...} } attendu" });
+    }
+    const expectedKeys = Object.keys(DispatchConfig.DEFAULT_WEIGHTS);
+    const missing = expectedKeys.filter((k) => weights[k] == null);
+    if (missing.length) {
+      return res.status(400).json({ message: `Poids manquants : ${missing.join(", ")}` });
+    }
+
+    const sum = expectedKeys.reduce((s, k) => s + Number(weights[k] || 0), 0);
+    if (Math.abs(sum - 1.0) > 1e-3) {
+      return res.status(400).json({
+        message: `Somme des poids invalide : ${sum.toFixed(3)} (attendu 1.0 ± 0.001)`,
+      });
+    }
+
+    const cfg = await DispatchConfig.findOneAndUpdate(
+      { _id: "default" },
+      { $set: { weights, updatedBy: req.user._id } },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
+    );
+
+    await log({
+      action:     "AI_DISPATCH_CONFIG_UPDATE",
+      origine:    "HUMAIN",
+      utilisateur: req.user,
+      ressource:  { type: "DispatchConfig", reference: "default" },
+      details: {
+        metadata: { weights },
+        message:  "Pondérations du dispatch mises à jour",
+      },
+    });
+
+    return res.json(cfg);
+  } catch (err) {
+    return res.status(400).json({ message: err.message });
+  }
+};
+
+/**
+ * GET /api/ai/model/status
+ * Renvoie l'état du dernier job + les metrics courantes (depuis Python).
+ * @access  admin | superviseur
+ */
+const getModelStatus = async (req, res) => {
+  try {
+    const data = await aiClient.statutModele();
+    return res.json(data);
+  } catch (err) {
+    return res.status(503).json({
+      message: "Microservice IA indisponible",
+      error:   err.message,
+    });
+  }
+};
+
 module.exports = {
   extrairePMT,
   validerPMT,
@@ -696,4 +879,9 @@ module.exports = {
   getDispatchHistory,
   accepterRecommandationIA,
   refuserRecommandationIA,
+  getTrainingData,
+  triggerModelRetrain,
+  getModelStatus,
+  getDispatchConfig,
+  updateDispatchConfig,
 };

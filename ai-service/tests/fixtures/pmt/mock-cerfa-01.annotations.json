@@ -1,0 +1,14 @@
+{
+  "patient_nom":        "MARTIN",
+  "patient_prenom":     "Jeanne",
+  "rpps":               "10100123456",
+  "medecin_nom":        "DUPONT",
+  "datePrescription":   "15/01/2026",
+  "type_transport":     "VSL",
+  "mobilite":           "ASSIS",
+  "motif":              "Dialyse",
+  "destination":        "Centre de dialyse Saint-Roch, Nice",
+  "allerRetour":        true,
+  "oxygene":            false,
+  "brancardage":        false
+}

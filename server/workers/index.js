@@ -100,8 +100,26 @@ const cleanupWorker = new Worker(
   baseOpts,
 );
 
+// ─── AI ──────────────────────────────────────────────────────────────────────
+// Jobs courts qui orchestrent des appels HTTP vers le microservice Python.
+// Le travail lourd (entraînement) tourne dans le process IA, pas ici.
+const aiWorker = new Worker(
+  QUEUES.AI,
+  async (job) => {
+    if (job.name === "model_retrain") {
+      const aiClient = require("../services/aiClient");
+      const res = await aiClient.relancerEntrainement({ since: job.data?.since || null });
+      return res;
+    }
+    throw new Error(`Job ai inconnu : ${job.name}`);
+  },
+  { ...baseOpts, concurrency: 1 }, // un seul retrain à la fois
+);
+
 // ─── Logging centralisé ──────────────────────────────────────────────────────
-for (const [name, worker] of Object.entries({ email: emailWorker, ocr: ocrWorker, pdf: pdfWorker, cleanup: cleanupWorker })) {
+for (const [name, worker] of Object.entries({
+  email: emailWorker, ocr: ocrWorker, pdf: pdfWorker, cleanup: cleanupWorker, ai: aiWorker,
+})) {
   worker.on("completed", (job) => logger.info(`[worker:${name}] job ${job.id} (${job.name}) OK`));
   worker.on("failed", (job, err) =>
     logger.warn(`[worker:${name}] job ${job?.id} (${job?.name}) KO`, { err: err.message, attempts: job?.attemptsMade }),
@@ -109,4 +127,4 @@ for (const [name, worker] of Object.entries({ email: emailWorker, ocr: ocrWorker
   worker.on("error", (err) => logger.error(`[worker:${name}] erreur globale`, { err: err.message }));
 }
 
-module.exports = { emailWorker, ocrWorker, pdfWorker, cleanupWorker };
+module.exports = { emailWorker, ocrWorker, pdfWorker, cleanupWorker, aiWorker };

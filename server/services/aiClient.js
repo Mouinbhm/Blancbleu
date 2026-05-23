@@ -127,7 +127,20 @@ async function recommanderDispatch(transport, vehicules, chauffeurs, options = {
       ? { lat: transport.adresseDepart.coordonnees.lat, lng: transport.adresseDepart.coordonnees.lng }
       : null;
 
+    // Charger les pondérations configurables (singleton MongoDB).
+    // Best-effort : si la config est absente ou DB down, on omet les weights
+    // et Python retombe sur DEFAULT_SCORING_WEIGHTS.
+    let weights;
+    try {
+      const DispatchConfig = require("../models/DispatchConfig");
+      const cfg = await DispatchConfig.findById("default").lean();
+      if (cfg?.weights) weights = cfg.weights;
+    } catch (cfgErr) {
+      logger.warn("[aiClient] DispatchConfig lecture échouée", { err: cfgErr.message });
+    }
+
     const { data } = await client.post("/dispatch/recommend", {
+      ...(weights && { weights }),
       transport: {
         ...(transport._id != null && { _id: String(transport._id) }),
         motif:               transport.motif,
@@ -237,9 +250,40 @@ async function verifierSante() {
   }
 }
 
+// ── Service-to-service : retraining du DurationPredictor ───────────────────
+// Appelle POST /optimizer/model/retrain et GET /optimizer/model/status sur le
+// microservice Python avec le header X-Service-Token partagé.
+
+function _serviceHeaders() {
+  const token = process.env.AI_SERVICE_TOKEN;
+  if (!token) throw new Error("AI_SERVICE_TOKEN absent côté Node");
+  return { "X-Service-Token": token };
+}
+
+async function relancerEntrainement({ since } = {}) {
+  const params = since ? { since } : undefined;
+  const { data } = await client.post(
+    "/optimizer/model/retrain",
+    null,
+    { params, headers: _serviceHeaders(), timeout: 30_000 },
+  );
+  logger.info("[aiClient] retrain demandé", { status: data?.status });
+  return data;
+}
+
+async function statutModele() {
+  const { data } = await client.get(
+    "/optimizer/model/status",
+    { headers: _serviceHeaders(), timeout: 10_000 },
+  );
+  return data;
+}
+
 module.exports = {
   extrairePMT,
   recommanderDispatch,
   optimiserTournee,
   verifierSante,
+  relancerEntrainement,
+  statutModele,
 };
