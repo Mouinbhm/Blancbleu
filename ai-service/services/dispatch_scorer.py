@@ -95,9 +95,13 @@ def recommander(request: DispatchRequest) -> DispatchResponse:
     mobilite = transport.mobilite.value if hasattr(transport.mobilite, "value") else transport.mobilite
     heure_depart = _parse_heure(transport.heureDepart)
 
+    # Pondérations dynamiques (config admin) ou fallback aux défauts
+    weights, weights_source = _resolve_weights(getattr(request, "weights", None))
+
     logger.info(
         f"Dispatch scoring v2 — mobilité: {mobilite}, "
-        f"véhicules candidats: {len(vehicules)}, chauffeurs: {len(chauffeurs)}"
+        f"véhicules candidats: {len(vehicules)}, chauffeurs: {len(chauffeurs)}, "
+        f"weights source: {weights_source}"
     )
 
     candidats: List[RecommandationIA] = []
@@ -114,7 +118,7 @@ def recommander(request: DispatchRequest) -> DispatchResponse:
             ))
             continue
 
-        final_score = _score_pondere(scores)
+        final_score = _score_pondere(scores, weights)
         explanation, risks, warnings = _construire_explications(transport, vehicule, scores, chauffeurs, mobilite)
         chauffeur_associe = _trouver_meilleur_chauffeur(vehicule, chauffeurs)
         eta = _estimer_eta(vehicule, transport)
@@ -162,7 +166,7 @@ def recommander(request: DispatchRequest) -> DispatchResponse:
             success          = False,
             transportId      = transport.id,
             generatedAt      = now_str,
-            weights          = DEFAULT_SCORING_WEIGHTS,
+            weights          = weights,
             recommendations  = [],
             bestRecommendation = None,
             excludedCandidates = exclus,
@@ -188,7 +192,7 @@ def recommander(request: DispatchRequest) -> DispatchResponse:
         success            = True,
         transportId        = transport.id,
         generatedAt        = now_str,
-        weights            = DEFAULT_SCORING_WEIGHTS,
+        weights            = weights,
         recommendations    = candidats,
         bestRecommendation = best,
         excludedCandidates = exclus,
@@ -370,18 +374,55 @@ def _score_ponctualite(vehicule, chauffeurs: list) -> int:
 # SCORE PONDÉRÉ FINAL
 # ════════════════════════════════════════════════════════════════════════════════
 
-def _score_pondere(scores: Dict[str, int]) -> int:
+def _score_pondere(scores: Dict[str, int], weights: Optional[Dict[str, float]] = None) -> int:
     """
     Calcule le score final pondéré :
         Score = Σ (poids_critère × score_critère)
 
     Score final sur 100.
+
+    Si `weights` est fourni (config admin via le payload), il est utilisé ;
+    sinon on retombe sur DEFAULT_SCORING_WEIGHTS.
     """
+    w = weights if weights else DEFAULT_SCORING_WEIGHTS
     total = sum(
-        DEFAULT_SCORING_WEIGHTS.get(critere, 0) * score
+        w.get(critere, 0) * score
         for critere, score in scores.items()
     )
     return min(100, max(0, round(total)))
+
+
+def _resolve_weights(weights_in: Optional[Dict[str, float]]) -> tuple[Dict[str, float], str]:
+    """
+    Valide les poids fournis dans la requête. Retourne (weights, source).
+
+    `source` ∈ {"request", "default"} pour traçabilité dans les logs.
+    """
+    if not weights_in:
+        return DEFAULT_SCORING_WEIGHTS, "default"
+
+    # Vérifier que toutes les clés attendues sont présentes
+    expected_keys = set(DEFAULT_SCORING_WEIGHTS.keys())
+    given_keys    = set(weights_in.keys())
+    if not expected_keys.issubset(given_keys):
+        missing = expected_keys - given_keys
+        logger.warning(f"weights invalides (clés manquantes : {missing}) — fallback DEFAULT")
+        return DEFAULT_SCORING_WEIGHTS, "default"
+
+    # Vérifier que la somme vaut environ 1.0
+    try:
+        total = sum(float(weights_in[k]) for k in expected_keys)
+    except (TypeError, ValueError):
+        logger.warning("weights invalides (valeurs non numériques) — fallback DEFAULT")
+        return DEFAULT_SCORING_WEIGHTS, "default"
+
+    if abs(total - 1.0) > 1e-3:
+        logger.warning(f"weights invalides (somme = {total:.3f} ≠ 1.0) — fallback DEFAULT")
+        return DEFAULT_SCORING_WEIGHTS, "default"
+
+    # Normaliser : on ne garde que les 7 clés attendues, dans le type float
+    normalized = {k: float(weights_in[k]) for k in expected_keys}
+    return normalized, "request"
 
 
 # ════════════════════════════════════════════════════════════════════════════════

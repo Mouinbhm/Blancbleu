@@ -91,6 +91,11 @@ class DispatchRequest(BaseModel):
     transport: TransportDispatch
     vehicules: List[VehiculeDispatch]
     chauffeurs: List[ChauffeurDispatch] = []
+    # Pondérations dynamiques fournies par le backend Node (Sprint 4).
+    # Si absentes ou invalides, le scorer retombe sur DEFAULT_SCORING_WEIGHTS.
+    # Les clés attendues sont : distance, driverAvailability, vehicleTypeMatch,
+    # planningLoad, traffic, medicalPriority, punctualityHistory ; somme ≈ 1.0.
+    weights: Optional[Dict[str, float]] = None
 
 
 # ── Schemas de scoring détaillé ───────────────────────────────────────────────
