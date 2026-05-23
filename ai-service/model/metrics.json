@@ -1,24 +1,33 @@
 {
   "modeles": {
     "Linear Regression": {
-      "MAE": 13.88,
-      "R2": 0.885,
-      "MAPE": 30.0,
-      "CV_MAE": 13.8
+      "MAE": 13.71,
+      "RMSE": 18.82,
+      "R2": 0.892,
+      "MAPE": 20.7
     },
     "Random Forest": {
-      "MAE": 6.86,
-      "R2": 0.969,
-      "MAPE": 11.6,
-      "CV_MAE": 7.43
+      "MAE": 7.93,
+      "RMSE": 11.42,
+      "R2": 0.96,
+      "MAPE": 10.3
     },
     "XGBoost": {
-      "MAE": 6.27,
-      "R2": 0.973,
-      "MAPE": 10.4,
-      "CV_MAE": 6.49
+      "MAE": 7.19,
+      "RMSE": 10.45,
+      "R2": 0.967,
+      "MAPE": 9.1
     }
   },
   "gagnant": "XGBoost",
-  "meilleur_mae": 6.27
+  "meilleur_mae": 7.19,
+  "data_composition": {
+    "real": 0,
+    "synthetic": 1500,
+    "train_n": 1200,
+    "test_n": 300
+  },
+  "split_strategy": "shuffled_cold_start",
+  "trained_at": "2026-05-23T14:26:26.296786+00:00",
+  "warning": "Modèle entraîné majoritairement sur données synthétiques (real=0 < seuil 300) — métriques à interpréter avec prudence tant qu'on n'a pas accumulé assez de transports terminés réels."
 }
