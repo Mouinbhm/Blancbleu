@@ -1,0 +1,14 @@
+{
+  "patient_nom":      "LEROY",
+  "patient_prenom":   "Marc",
+  "rpps":             "10100987654",
+  "medecin_nom":      "BERNARD",
+  "datePrescription": "22/02/2026",
+  "type_transport":   "AMBULANCE",
+  "mobilite":         "ALLONGE",
+  "motif":            "Chimiothérapie",
+  "destination":      "Hôpital Pasteur, Nice",
+  "allerRetour":      true,
+  "oxygene":          true,
+  "brancardage":      true
+}

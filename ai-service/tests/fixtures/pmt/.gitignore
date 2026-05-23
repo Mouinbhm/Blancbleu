@@ -1,0 +1,7 @@
+# Pas de données patient réelles versionnées (RGPD).
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff

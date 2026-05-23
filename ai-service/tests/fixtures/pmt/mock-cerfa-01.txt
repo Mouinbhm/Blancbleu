@@ -1,0 +1,23 @@
+PRESCRIPTION MEDICALE DE TRANSPORT - CERFA n°50742*05
+
+PATIENT
+Nom : MARTIN
+Prénom : Jeanne
+Date de naissance : 12/03/1948
+N° de sécurité sociale : 2 48 03 75 108 042 47
+
+MEDECIN PRESCRIPTEUR
+Nom : DUPONT
+Prénom : Pierre
+RPPS : 10100123456
+Date : 15/01/2026
+
+PRESCRIPTION
+Type de transport : VSL
+Mobilité : ASSIS
+Motif : Dialyse
+Destination : Centre de dialyse Saint-Roch, Nice
+Aller-retour : OUI
+Oxygène : NON
+Brancardage : NON
+Fréquence : 3 fois par semaine

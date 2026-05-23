@@ -1,0 +1,21 @@
+PRESCRIPTION MEDICALE DE TRANSPORT - CERFA 50742*05
+
+Patient :
+Nom de famille : LEROY
+Prénom : Marc
+Date de naissance : 03/08/1955
+
+Prescripteur :
+Médecin : BERNARD
+RPPS : 10100987654
+Date de prescription : 22/02/2026
+
+Type de véhicule prescrit : AMBULANCE
+Mobilité du patient : ALLONGE
+Motif médical : Chimiothérapie
+Lieu de prise en charge : Domicile
+Destination : Hôpital Pasteur, Nice
+Aller-retour : OUI
+Oxygène : OUI
+Brancardage : OUI
+Fréquence : Hebdomadaire
