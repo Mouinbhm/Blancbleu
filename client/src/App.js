@@ -27,6 +27,7 @@ import ForceChangePassword from "./pages/ForceChangePassword";
 import SuiviEnDirect from "./pages/SuiviEnDirect";
 import Shifts from "./pages/Shifts";
 import StyleguidePage from "./pages/_StyleguidePage";
+import DispatchConfigPage from "./pages/admin/DispatchConfigPage";
 
 function App() {
   return (
@@ -71,6 +72,7 @@ function App() {
             <Route path="/utilisateurs" element={<Utilisateurs />} />
             <Route path="/suivi-en-direct" element={<SuiviEnDirect />} />
             <Route path="/shifts" element={<Shifts />} />
+            <Route path="/admin/dispatch-config" element={<DispatchConfigPage />} />
           </Route>
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

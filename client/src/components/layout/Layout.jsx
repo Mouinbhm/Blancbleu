@@ -29,7 +29,8 @@ const NAV_GESTION = [
 ];
 
 const NAV_ADMIN = [
-  { path: "/utilisateurs", icon: "manage_accounts", label: "Utilisateurs" },
+  { path: "/utilisateurs",          icon: "manage_accounts", label: "Utilisateurs" },
+  { path: "/admin/dispatch-config", icon: "tune",            label: "Pondérations IA" },
 ];
 
 const pageTitles = {
@@ -45,6 +46,7 @@ const pageTitles = {
   "/utilisateurs":    "Utilisateurs — Gestion des accès",
   "/suivi-en-direct": "Suivi en direct — Positions GPS",
   "/shifts":          "Shifts — Activité des chauffeurs",
+  "/admin/dispatch-config": "Pondérations IA — Scoring dispatch",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
