@@ -59,4 +59,8 @@ router.get("/training-data", serviceToken, ctrl.getTrainingData);
 router.post("/model/retrain", protect, authorize("admin"), ctrl.triggerModelRetrain);
 router.get( "/model/status",  protect, authorize("admin", "superviseur"), ctrl.getModelStatus);
 
+// ── Admin — Pondérations dispatch (singleton MongoDB) ────────────────────────
+router.get("/dispatch/config", protect, authorize("admin", "superviseur"), ctrl.getDispatchConfig);
+router.put("/dispatch/config", protect, authorize("admin"),                ctrl.updateDispatchConfig);
+
 module.exports = router;

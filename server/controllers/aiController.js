@@ -781,6 +781,76 @@ const triggerModelRetrain = async (req, res) => {
   }
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// ADMIN — Configuration des pondérations Dispatch (singleton MongoDB)
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/ai/dispatch/config
+ * @access  admin | superviseur
+ */
+const getDispatchConfig = async (req, res) => {
+  try {
+    const DispatchConfig = require("../models/DispatchConfig");
+    let cfg = await DispatchConfig.findById("default").lean();
+    if (!cfg) {
+      // Auto-bootstrap au défaut
+      cfg = { _id: "default", weights: DispatchConfig.DEFAULT_WEIGHTS, updatedBy: null };
+    }
+    return res.json({ ...cfg, defaults: DispatchConfig.DEFAULT_WEIGHTS });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+/**
+ * PUT /api/ai/dispatch/config
+ * Body : { weights: { distance, driverAvailability, ... } }  // somme == 1.0
+ * @access  admin
+ */
+const updateDispatchConfig = async (req, res) => {
+  try {
+    const DispatchConfig = require("../models/DispatchConfig");
+    const { weights } = req.body || {};
+    if (!weights || typeof weights !== "object") {
+      return res.status(400).json({ message: "Body invalide : { weights: {...} } attendu" });
+    }
+    const expectedKeys = Object.keys(DispatchConfig.DEFAULT_WEIGHTS);
+    const missing = expectedKeys.filter((k) => weights[k] == null);
+    if (missing.length) {
+      return res.status(400).json({ message: `Poids manquants : ${missing.join(", ")}` });
+    }
+
+    const sum = expectedKeys.reduce((s, k) => s + Number(weights[k] || 0), 0);
+    if (Math.abs(sum - 1.0) > 1e-3) {
+      return res.status(400).json({
+        message: `Somme des poids invalide : ${sum.toFixed(3)} (attendu 1.0 ± 0.001)`,
+      });
+    }
+
+    const cfg = await DispatchConfig.findOneAndUpdate(
+      { _id: "default" },
+      { $set: { weights, updatedBy: req.user._id } },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
+    );
+
+    await log({
+      action:     "AI_DISPATCH_CONFIG_UPDATE",
+      origine:    "HUMAIN",
+      utilisateur: req.user,
+      ressource:  { type: "DispatchConfig", reference: "default" },
+      details: {
+        metadata: { weights },
+        message:  "Pondérations du dispatch mises à jour",
+      },
+    });
+
+    return res.json(cfg);
+  } catch (err) {
+    return res.status(400).json({ message: err.message });
+  }
+};
+
 /**
  * GET /api/ai/model/status
  * Renvoie l'état du dernier job + les metrics courantes (depuis Python).
@@ -812,4 +882,6 @@ module.exports = {
   getTrainingData,
   triggerModelRetrain,
   getModelStatus,
+  getDispatchConfig,
+  updateDispatchConfig,
 };

@@ -127,7 +127,20 @@ async function recommanderDispatch(transport, vehicules, chauffeurs, options = {
       ? { lat: transport.adresseDepart.coordonnees.lat, lng: transport.adresseDepart.coordonnees.lng }
       : null;
 
+    // Charger les pondérations configurables (singleton MongoDB).
+    // Best-effort : si la config est absente ou DB down, on omet les weights
+    // et Python retombe sur DEFAULT_SCORING_WEIGHTS.
+    let weights;
+    try {
+      const DispatchConfig = require("../models/DispatchConfig");
+      const cfg = await DispatchConfig.findById("default").lean();
+      if (cfg?.weights) weights = cfg.weights;
+    } catch (cfgErr) {
+      logger.warn("[aiClient] DispatchConfig lecture échouée", { err: cfgErr.message });
+    }
+
     const { data } = await client.post("/dispatch/recommend", {
+      ...(weights && { weights }),
       transport: {
         ...(transport._id != null && { _id: String(transport._id) }),
         motif:               transport.motif,
