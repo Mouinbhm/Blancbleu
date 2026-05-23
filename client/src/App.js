@@ -26,12 +26,18 @@ import Utilisateurs from "./pages/Utilisateurs";
 import ForceChangePassword from "./pages/ForceChangePassword";
 import SuiviEnDirect from "./pages/SuiviEnDirect";
 import Shifts from "./pages/Shifts";
+import StyleguidePage from "./pages/_StyleguidePage";
 
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          {/* Dev-only — UI styleguide */}
+          {process.env.NODE_ENV === "development" && (
+            <Route path="/_styleguide" element={<StyleguidePage />} />
+          )}
+
           {/* Publiques */}
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
