@@ -18,19 +18,37 @@ const { combine, timestamp, json, colorize, printf, errors } = winston.format;
 const isProd = process.env.NODE_ENV === "production";
 const isTest = process.env.NODE_ENV === "test";
 
+// ─── Format custom : injecte requestId / userId depuis AsyncLocalStorage ────
+// Évite d'avoir à passer le contexte explicitement à chaque appel logger.
+// Import lazy pour éviter une dépendance circulaire (logger ↔ requestContext).
+const injectRequestContext = winston.format((info) => {
+  try {
+    // eslint-disable-next-line global-require
+    const { getContext } = require("../middleware/requestContext");
+    const ctx = getContext();
+    if (ctx.requestId && !info.requestId) info.requestId = ctx.requestId;
+    if (ctx.userId    && !info.userId)    info.userId    = String(ctx.userId);
+  } catch {
+    // Pas de middleware dispo (test unitaire, script CLI) — pas grave.
+  }
+  return info;
+});
+
 // ─── Format développement : lisible dans le terminal ─────────────────────────
 const devFormat = combine(
+  injectRequestContext(),
   colorize({ all: true }),
   timestamp({ format: "HH:mm:ss" }),
   errors({ stack: true }),
-  printf(({ level, message, timestamp: ts, stack, ...meta }) => {
+  printf(({ level, message, timestamp: ts, stack, requestId, ...meta }) => {
+    const reqTag = requestId ? ` [${requestId}]` : "";
     const metaStr = Object.keys(meta).length ? " " + JSON.stringify(meta) : "";
-    return `${ts} [${level}] ${message}${metaStr}${stack ? "\n" + stack : ""}`;
+    return `${ts}${reqTag} [${level}] ${message}${metaStr}${stack ? "\n" + stack : ""}`;
   }),
 );
 
 // ─── Format production : JSON structuré ──────────────────────────────────────
-const prodFormat = combine(timestamp(), errors({ stack: true }), json());
+const prodFormat = combine(injectRequestContext(), timestamp(), errors({ stack: true }), json());
 
 // ─── Transports ───────────────────────────────────────────────────────────────
 const transports = [];

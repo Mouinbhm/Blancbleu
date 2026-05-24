@@ -70,6 +70,9 @@ app.post(
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ limit: "5mb", extended: false }));
 app.use(cookieParser());
+// requestContext doit être placé très tôt pour que toutes les opérations
+// asynchrones suivantes voient le requestId dans AsyncLocalStorage.
+app.use(require("./middleware/requestContext").requestContext);
 app.use(require("./middleware/mobileGuard"));
 app.use(noSqlSanitize);
 app.use(xssSanitize);
