@@ -117,6 +117,13 @@ async function sendToRole(role, payload) {
   };
 }
 
+// ── Tests only : force re-init au prochain appel (apres changement env) ──
+function _resetForTests() {
+  _webpush = null;
+  _configured = false;
+  _warnedNotConfigured = false;
+}
+
 module.exports = {
   isConfigured,
   getPublicKey,
@@ -124,4 +131,5 @@ module.exports = {
   sendToRole,
   // Internes (utiles pour tests)
   _lazyInit,
+  _resetForTests,
 };
