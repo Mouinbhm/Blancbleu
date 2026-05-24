@@ -195,11 +195,18 @@ services:
       dockerfile: Dockerfile
     container_name: blancbleu-client
     restart: unless-stopped
+    # Nginx tourne en non-root et écoute sur 8080 dans le container
     ports:
-      - "80:80"
+      - "80:8080"
     depends_on:
       server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - blancbleu-net
 
