@@ -18,6 +18,8 @@
  * ╚══════════════════════════════════════════════════════════════╝
  */
 
+const logger = require("../utils/logger");
+
 let _io = null;
 
 /** Retourne l'instance Socket.IO (utilisée par transportNotificationService) */
@@ -36,7 +38,7 @@ function init(io) {
   _io = io;
 
   io.on("connection", (socket) => {
-    console.log(`[Socket] Connecté : ${socket.id}`);
+    logger.info(`[Socket] Connecté : ${socket.id}`);
 
     // Rejoindre la salle correspondant au rôle utilisateur
     socket.on("join:role", ({ role, userId }) => {
@@ -44,7 +46,7 @@ function init(io) {
       socket.join(ROOMS.ALL);
       socket.data.role = role;
       socket.data.userId = userId;
-      console.log(`[Socket] ${socket.id} → role:${role}`);
+      logger.info(`[Socket] ${socket.id} → role:${role}`);
 
       socket.emit("connected:ack", {
         socketId: socket.id,
@@ -65,7 +67,7 @@ function init(io) {
     });
 
     socket.on("disconnect", (reason) => {
-      console.log(`[Socket] Déconnecté : ${socket.id} (${reason})`);
+      logger.info(`[Socket] Déconnecté : ${socket.id} (${reason})`);
     });
   });
 
@@ -104,7 +106,7 @@ function emitTransportCreated(transport) {
     createdAt: transport.createdAt || new Date(),
     timestamp: new Date(),
   });
-  console.log(`[Socket] transport:created → ${transport.numero}`);
+  logger.info(`[Socket] transport:created → ${transport.numero}`);
 }
 
 /**
@@ -122,7 +124,7 @@ function emitTransportStatut({ transport, ancienStatut, nouveauStatut, utilisate
     progression: _calculerProgression(nouveauStatut),
     timestamp: new Date(),
   });
-  console.log(
+  logger.info(
     `[Socket] transport:statut → ${transport.numero} : ${ancienStatut} → ${nouveauStatut}`
   );
 }
@@ -149,7 +151,7 @@ function emitVehiculeAssigne({ transport, vehicule, chauffeur, eta, score, sourc
     source, // 'AUTO' | 'MANUEL'
     timestamp: new Date(),
   });
-  console.log(
+  logger.info(
     `[Socket] vehicule:assigne → ${vehicule.immatriculation} → ${transport.numero}`
   );
 }
@@ -168,7 +170,7 @@ function emitVehiculeStatut({ vehicule, ancienStatut, nouveauStatut }) {
     nouveauStatut,
     timestamp: new Date(),
   });
-  console.log(
+  logger.info(
     `[Socket] vehicule:statut → ${vehicule.immatriculation} : ${ancienStatut} → ${nouveauStatut}`
   );
 }
@@ -218,7 +220,7 @@ function emitDispatchCompleted({ transport, vehicule, score, eta, alternatives }
     alternatives: alternatives || [],
     timestamp: new Date(),
   });
-  console.log(
+  logger.info(
     `[Socket] dispatch:completed → ${vehicule.immatriculation} (score ${score}/100)`
   );
 }
@@ -236,7 +238,7 @@ function emitPmtExtraite({ transportId, extraction, confiance }) {
     validationRequise: confiance < 0.75,
     timestamp: new Date(),
   });
-  console.log(`[Socket] pmt:extraite → transport ${transportId} (confiance ${confiance})`);
+  logger.info(`[Socket] pmt:extraite → transport ${transportId} (confiance ${confiance})`);
 }
 
 /**
@@ -257,7 +259,7 @@ function emitPrescriptionCreated(prescription) {
     fichierNom:   prescription.fichierNom,
     timestamp:    new Date(),
   });
-  console.log(`[Socket] prescription:created → ${prescription.numero}`);
+  logger.info(`[Socket] prescription:created → ${prescription.numero}`);
 }
 
 /**
@@ -276,7 +278,7 @@ function emitFactureUpdated(facture) {
     montantTotal:   facture.montantTotal,
     timestamp:      new Date(),
   });
-  console.log(`[Socket] facture:updated → ${facture.numero} (payee)`);
+  logger.info(`[Socket] facture:updated → ${facture.numero} (payee)`);
 }
 
 /**
@@ -297,7 +299,7 @@ function emitPatientCreated(patient) {
     createdAt:     patient.createdAt || new Date(),
     timestamp:     new Date(),
   });
-  console.log(`[Socket] patient:created → ${patient.numeroPatient} (${patient.nom} ${patient.prenom})`);
+  logger.info(`[Socket] patient:created → ${patient.numeroPatient} (${patient.nom} ${patient.prenom})`);
 }
 
 /**

@@ -16,6 +16,7 @@ const socketService = require("../services/socketService");
 const { geocodeTransport } = require("../utils/geocodeUtils");
 const DispatchRecommendation = require("../models/DispatchRecommendation");
 const { queues, QUEUES } = require("../queues");
+const { dispatchCounter } = require("../utils/metrics");
 
 // ════════════════════════════════════════════════════════════════════════════
 // MODULE 1 — PMT (Prescription Médicale de Transport)
@@ -215,6 +216,11 @@ const recommanderDispatch = async (req, res) => {
     }
 
     const best = result.bestRecommendation || result.recommandation;
+
+    // Métrique Prometheus : compte les recos générées par source.
+    try {
+      dispatchCounter.labels(fallbackUsed ? "fallback_node" : "ia").inc();
+    } catch { /* metrics best-effort */ }
 
     // Persister un document DispatchRecommendation (historique complet)
     let dispatchRec = null;

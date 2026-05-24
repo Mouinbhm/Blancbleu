@@ -1,0 +1,57 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Venvs locaux
+venv/
+.venv/
+env/
+ENV/
+
+# Tooling Python
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# VCS / IDE
+.git
+.gitignore
+.vscode
+.idea
+
+# Logs / artefacts
+*.log
+logs/
+
+# Notebooks / datasets temporaires
+*.ipynb_checkpoints
+notebooks/
+data/raw/
+data/tmp/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Docs
+*.md
+!README.md
+docs/
+
+# OS
+.DS_Store
+Thumbs.db

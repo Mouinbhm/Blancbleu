@@ -8,15 +8,102 @@ on:
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────────
-  # JOB 1 — Tests Backend Node.js
+  # 1) Lint (ESLint server + client + ruff Python + prettier --check)
+  # ──────────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (server + client + python)
+    runs-on: ubuntu-latest
+    continue-on-error: true   # 13 errors server + 14 client hérités — TODO sprint cleanup
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install root deps (husky, lint-staged, playwright)
+        run: npm ci
+
+      - name: Install server deps
+        working-directory: server
+        run: npm ci
+
+      - name: ESLint server
+        working-directory: server
+        run: npm run lint
+
+      - name: Prettier check server
+        working-directory: server
+        run: npm run format:check
+        continue-on-error: true   # formatage global non encore appliqué
+
+      - name: Install client deps
+        working-directory: client
+        run: npm ci
+
+      - name: ESLint client
+        working-directory: client
+        run: npm run lint
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff==0.6.9
+
+      - name: Ruff check (ai-service)
+        working-directory: ai-service
+        run: ruff check .
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 2) Security audit (npm audit + pip-audit)
+  # ──────────────────────────────────────────────────────────────────────────
+  audit:
+    name: Security audit (npm + pip)
+    runs-on: ubuntu-latest
+    continue-on-error: true   # vulns transitives à documenter dans docs/security.md
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: npm audit (server)
+        working-directory: server
+        run: npm audit --audit-level=high
+
+      - name: npm audit (client)
+        working-directory: client
+        run: npm audit --audit-level=high
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: pip-audit (ai-service)
+        working-directory: ai-service
+        run: pip-audit -r requirements-ci.txt
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3) Tests Backend Node.js (unit + integration + coverage gate)
   # ──────────────────────────────────────────────────────────────────────────
   test-server:
     name: Tests Backend (Node.js)
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
@@ -25,25 +112,25 @@ jobs:
           cache: "npm"
           cache-dependency-path: server/package-lock.json
 
-      - name: Install server dependencies
+      - name: Install server deps
         working-directory: server
         run: npm ci
 
-      - name: Run unit tests
+      - name: Unit tests
         working-directory: server
         env:
           JWT_SECRET: test-secret-ci-blancbleu
           NODE_ENV: test
         run: npm run test:unit
 
-      - name: Run integration tests
+      - name: Integration tests
         working-directory: server
         env:
           JWT_SECRET: test-secret-ci-blancbleu
           NODE_ENV: test
         run: npm run test:integration
 
-      - name: Coverage check (seuil minimum 60%)
+      - name: Coverage report (gate à 60% — TODO monter à 80% progressivement)
         working-directory: server
         env:
           JWT_SECRET: test-secret-ci-blancbleu
@@ -58,15 +145,14 @@ jobs:
           path: server/coverage/
 
   # ──────────────────────────────────────────────────────────────────────────
-  # JOB 2 — Tests IA (Python / FastAPI)
+  # 4) Tests IA (Python pytest)
   # ──────────────────────────────────────────────────────────────────────────
   test-ia:
     name: Tests IA (Python / FastAPI)
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
@@ -75,7 +161,7 @@ jobs:
           cache: "pip"
           cache-dependency-path: ai-service/requirements-ci.txt
 
-      - name: Install Python dependencies (CI — sans binaires système)
+      - name: Install Python deps (sans binaires système)
         working-directory: ai-service
         run: pip install -r requirements-ci.txt
 
@@ -84,15 +170,14 @@ jobs:
         run: pytest tests/test_ia.py -v --tb=short
 
   # ──────────────────────────────────────────────────────────────────────────
-  # JOB 3 — Lint Frontend
+  # 5) Lint + Build frontend
   # ──────────────────────────────────────────────────────────────────────────
-  lint-client:
-    name: Lint Frontend (React)
+  build-client:
+    name: Build Frontend (React)
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
@@ -101,39 +186,113 @@ jobs:
           cache: "npm"
           cache-dependency-path: client/package-lock.json
 
-      - name: Install client dependencies
+      - name: Install client deps
         working-directory: client
         run: npm ci
 
-      - name: Build check
+      - name: Build
         working-directory: client
         env:
-          CI: false
+          CI: false   # tolère les warnings (à passer à true quand client lint sera vert)
           REACT_APP_API_URL: http://localhost:5000/api
         run: npm run build
 
   # ──────────────────────────────────────────────────────────────────────────
-  # JOB 4 — Résumé (badge de statut)
+  # 6) Docker images build (sans push)
+  # ──────────────────────────────────────────────────────────────────────────
+  docker-build:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    continue-on-error: true   # multi-stage à valider en local d'abord
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build server image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          push: false
+          tags: blancbleu-server:ci
+
+      - name: Build client image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./client
+          push: false
+          tags: blancbleu-client:ci
+
+      - name: Build ia image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ai-service
+          push: false
+          tags: blancbleu-ia:ci
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 7) E2E Playwright (PR vers main uniquement, best-effort)
+  # ──────────────────────────────────────────────────────────────────────────
+  e2e:
+    name: E2E Playwright
+    runs-on: ubuntu-latest
+    continue-on-error: true   # WIP — stack difficile à stabiliser en CI
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+
+    services:
+      mongo:
+        image: mongo:7.0
+        ports: ["27017:27017"]
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Install server + client deps
+        run: |
+          npm --prefix server  ci
+          npm --prefix client  ci
+
+      # NOTE : un vrai run E2E nécessite de démarrer server + client + IA
+      # + seed des données. À documenter dans un job dédié quand stabilisé.
+      - name: Smoke (playwright --list)
+        run: npx playwright test --list --config=e2e/playwright.config.js
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 8) Résumé / badge — bloque seulement sur les jobs critiques
   # ──────────────────────────────────────────────────────────────────────────
   ci-status:
     name: CI Status
     runs-on: ubuntu-latest
-    needs: [test-server, test-ia, lint-client]
+    needs: [lint, audit, test-server, test-ia, build-client, docker-build, e2e]
     if: always()
 
     steps:
-      - name: Check all jobs passed
+      - name: Check critical jobs
         run: |
-          if [[ "${{ needs.test-server.result }}" != "success" ]]; then
-            echo "Tests server échoués"
-            exit 1
-          fi
-          if [[ "${{ needs.test-ia.result }}" != "success" ]]; then
-            echo "Tests IA échoués"
-            exit 1
-          fi
-          if [[ "${{ needs.lint-client.result }}" != "success" ]]; then
-            echo "Lint client échoué"
-            exit 1
-          fi
-          echo "Tous les checks CI sont verts"
+          fail=0
+          # Jobs critiques (bloquent un merge)
+          [[ "${{ needs.test-server.result }}"  != "success" ]] && { echo "test-server KO";  fail=1; }
+          [[ "${{ needs.test-ia.result }}"      != "success" ]] && { echo "test-ia KO";      fail=1; }
+          [[ "${{ needs.build-client.result }}" != "success" ]] && { echo "build-client KO"; fail=1; }
+          # Jobs non bloquants (visibilité seulement) :
+          echo "lint=${{ needs.lint.result }} (informatif)"
+          echo "audit=${{ needs.audit.result }} (informatif)"
+          echo "docker-build=${{ needs.docker-build.result }} (informatif)"
+          echo "e2e=${{ needs.e2e.result }} (informatif)"
+          exit $fail

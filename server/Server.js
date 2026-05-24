@@ -9,6 +9,11 @@ const cookieLib = require("cookie");
 const { Server } = require("socket.io");
 require("dotenv").config();
 
+// Sentry — init tout en haut, avant les imports des middlewares qui peuvent
+// throw au require-time. No-op si SENTRY_DSN n'est pas défini.
+const { initSentry, Sentry } = require("./utils/sentry");
+const _sentryEnabled = !!initSentry();
+
 const logger = require("./utils/logger");
 const httpLogger = require("./middleware/httpLogger");
 const { healthHandler } = require("./utils/healthCheck");
@@ -70,11 +75,15 @@ app.post(
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ limit: "5mb", extended: false }));
 app.use(cookieParser());
+// requestContext doit être placé très tôt pour que toutes les opérations
+// asynchrones suivantes voient le requestId dans AsyncLocalStorage.
+app.use(require("./middleware/requestContext").requestContext);
 app.use(require("./middleware/mobileGuard"));
 app.use(noSqlSanitize);
 app.use(xssSanitize);
 app.use(globalLimiter);
 app.use(httpLogger);
+app.use(require("./middleware/metricsMiddleware"));
 app.use(require("./middleware/auditMiddleware"));
 
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
@@ -194,7 +203,30 @@ if (process.env.NODE_ENV !== "production") {
 
 // ─── Health ────────────────────────────────────────────────────────────────────
 app.get("/api/health", healthHandler);
+
+// ─── Métriques Prometheus ─────────────────────────────────────────────────────
+// Protégé par X-Metrics-Token (env METRICS_TOKEN). Ne JAMAIS exposer
+// publiquement. En l'absence de token, l'endpoint refuse tout accès.
+app.get("/metrics", async (req, res) => {
+  const expected = process.env.METRICS_TOKEN;
+  if (!expected) {
+    return res.status(503).json({ message: "METRICS_TOKEN non configuré" });
+  }
+  if (req.get("X-Metrics-Token") !== expected) {
+    return res.status(401).json({ message: "Metrics token invalide" });
+  }
+  const { register } = require("./utils/metrics");
+  res.set("Content-Type", register.contentType);
+  res.end(await register.metrics());
+});
+
 app.use((req, res) => res.status(404).json({ message: "Route non trouvée" }));
+
+// Sentry doit voir les erreurs AVANT notre errorHandler custom (qui les
+// transforme en réponse JSON et termine la chaîne).
+if (_sentryEnabled) {
+  Sentry.setupExpressErrorHandler(app);
+}
 app.use(errorHandler);
 
 // ─── Export pour tests ────────────────────────────────────────────────────────

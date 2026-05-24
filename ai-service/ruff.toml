@@ -1,0 +1,10 @@
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]  # géré par line-length, on tolère qq dépassements
+
+[lint.per-file-ignores]
+"tests/**/*.py"   = ["E402", "F401"]  # imports en cours de test
+"scripts/**/*.py" = ["E402"]

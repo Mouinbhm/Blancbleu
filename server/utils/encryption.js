@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const logger = require("./logger");
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12; // 96-bit IV recommended for GCM
@@ -9,14 +10,14 @@ function getKey() {
   if (!raw) {
     throw new Error(
       "ENCRYPTION_KEY is not set. " +
-        "Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
+        "Generate with: node -e \"logger.info(require('crypto').randomBytes(32).toString('base64'))\"",
     );
   }
   const buf = Buffer.from(raw, "base64");
   if (buf.length !== 32) {
     throw new Error(
       `ENCRYPTION_KEY must decode to exactly 32 bytes (got ${buf.length}). ` +
-        "Regenerate with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
+        "Regenerate with: node -e \"logger.info(require('crypto').randomBytes(32).toString('base64'))\"",
     );
   }
   return buf;

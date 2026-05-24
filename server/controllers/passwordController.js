@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const ResetToken = require("../models/ResetToken");
 const { sendResetEmail } = require("../services/emailService");
+const logger = require("../utils/logger");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // @desc    Demander une réinitialisation — envoie un email avec le lien
@@ -47,7 +48,7 @@ const forgotPassword = async (req, res) => {
       message: "Si cet email existe, un lien de réinitialisation a été envoyé.",
     });
   } catch (err) {
-    console.error("forgotPassword error:", err.message);
+    logger.error("forgotPassword error:", err.message);
     res.status(500).json({ message: "Erreur lors de l'envoi de l'email" });
   }
 };

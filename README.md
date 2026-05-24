@@ -10,6 +10,7 @@
 [![MongoDB](https://img.shields.io/badge/MongoDB-7.0-47A248?logo=mongodb&logoColor=white)](https://mongodb.com)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docker.com)
+[![CI](https://github.com/Mouinbhm/blancbleu/actions/workflows/ci.yml/badge.svg)](https://github.com/Mouinbhm/blancbleu/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/Licence-MIT-blue)](LICENSE)
 
 > Système de dispatch, suivi GPS temps réel et assistance IA pour la gestion des transports médicaux — Nice, Alpes-Maritimes.
@@ -34,6 +35,7 @@
 - [Documentation API](#-documentation-api)
 - [Structure du projet](#-structure-du-projet)
 - [Tests](#-tests)
+- [Documentation opérationnelle](#-documentation-opérationnelle)
 - [Auteur](#-auteur)
 
 ---
@@ -345,6 +347,18 @@ docker-compose down -v
 | Documentation Swagger | http://localhost:5000/api/docs |
 | Microservice IA | http://localhost:5002 |
 | Health check | http://localhost:5000/api/health |
+| Métriques Prometheus | http://localhost:5000/metrics (header `X-Metrics-Token`) |
+
+### Démarrage en mode production
+
+L'override `docker-compose.prod.yml` apporte : `restart: always`, rotation des logs
+(json-file 10 MB × 3), limites de ressources (CPU/mémoire), `LOG_LEVEL=warn`.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Voir [docs/operations.md](docs/operations.md) pour le runbook complet (backup, scaling, incident response).
 
 ---
 
@@ -436,7 +450,23 @@ npm test
 # Mobile — Flutter
 cd blancbleu_patient
 flutter test                # Tests unitaires et widgets
+
+# E2E Playwright (nécessite stack démarrée — voir e2e/README.md)
+npm run test:e2e
 ```
+
+---
+
+## Documentation opérationnelle
+
+| Document | Contenu |
+|---|---|
+| [docs/operations.md](docs/operations.md) | Déploiement prod, sauvegardes, monitoring, scaling, runbook incidents |
+| [docs/security.md](docs/security.md) | Auth, secrets, audit, dépendances, divulgation responsable |
+| [docs/rgpd.md](docs/rgpd.md) | Bases légales, durées de conservation, droits des personnes, sous-traitants |
+| [docs/ia-dispatch-scoring.md](docs/ia-dispatch-scoring.md) | Algorithme de scoring dispatch |
+| [docs/ia-duration-predictor.md](docs/ia-duration-predictor.md) | Modèle de prédiction de durée |
+| [docs/ocr-benchmark.md](docs/ocr-benchmark.md) | Benchmark OCR PMT |
 
 ---
 

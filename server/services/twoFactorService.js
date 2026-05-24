@@ -16,6 +16,7 @@
 const crypto   = require("crypto");
 const bcrypt   = require("bcryptjs");
 const speakeasy = require("speakeasy");
+const logger   = require("../utils/logger");
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const ALGORITHM        = "aes-256-gcm";
@@ -41,7 +42,7 @@ function _getKey() {
     }
     // Mode dev : avertissement + clé fictive
     if (!raw) {
-      console.warn(
+      logger.warn(
         "[2FA] TOTP_ENCRYPTION_KEY non définie — les secrets TOTP sont stockés NON CHIFFRÉS. " +
         "Définissez TOTP_ENCRYPTION_KEY en production."
       );

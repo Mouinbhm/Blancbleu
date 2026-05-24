@@ -1,11 +1,12 @@
 const mongoSanitize = require("express-mongo-sanitize");
 const xss = require("xss");
+const logger = require("../utils/logger");
 
 // ─── Protection injection NoSQL ───────────────────────────────────────────────
 const noSqlSanitize = mongoSanitize({
   replaceWith: "_",
   onSanitize: ({ req, key }) => {
-    console.warn(
+    logger.warn(
       `[SANITIZE] Injection NoSQL détectée — clé: ${key} — IP: ${req.ip}`,
     );
   },

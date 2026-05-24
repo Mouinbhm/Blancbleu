@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Transport = require("../models/Transport");
 const Vehicle = require("../models/Vehicle");
+const logger = require("../utils/logger");
 const {
   planifierTransport,
   assignerVehicule,
@@ -239,7 +240,7 @@ router.post("/seed", async (req, res) => {
         statut_final = "ASSIGNED";
       } catch (err) {
         erreur = err.message;
-        console.error(
+        logger.error(
           `[demo/seed] Assignation échouée — ${t.numero} (${entry.transport.patient.prenom} ${entry.transport.patient.nom}):`,
           err.message,
         );
@@ -267,7 +268,7 @@ router.post("/seed", async (req, res) => {
       detail: resultats,
     });
   } catch (err) {
-    console.error("[demo/seed]", err.message);
+    logger.error("[demo/seed]", err.message);
     return res.status(500).json({ message: err.message || "Erreur seed démo" });
   }
 });
@@ -312,7 +313,7 @@ router.post("/simulate/:id", async (req, res) => {
 
     return res.json({ success: true, message: "Simulation lancée", transportId: req.params.id });
   } catch (err) {
-    console.error("[demo/simulate]", err.message);
+    logger.error("[demo/simulate]", err.message);
     return res.status(500).json({ message: err.message || "Erreur simulation" });
   }
 });

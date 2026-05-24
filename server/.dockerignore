@@ -1,0 +1,47 @@
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# VCS / IDE
+.git
+.gitignore
+.vscode
+.idea
+
+# Logs / coverage / artefacts
+*.log
+logs/
+coverage/
+.nyc_output/
+
+# Tests et fixtures
+tests/
+test-results/
+__tests__/
+
+# Tooling local
+.eslintcache
+.prettierignore
+.prettierrc*
+eslint.config.js
+ruff.toml
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Docs
+*.md
+!README.md
+docs/
+
+# OS
+.DS_Store
+Thumbs.db

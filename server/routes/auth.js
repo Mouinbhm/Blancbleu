@@ -33,17 +33,103 @@ const {
 } = require("../controllers/twoFactorController");
 
 // ─── Routes publiques avec rate limiting ──────────────────────────────────────
+
+/**
+ * @openapi
+ * /api/auth/login:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Connexion utilisateur
+ *     description: |
+ *       Renvoie un JWT (header `Authorization`) ET pose un cookie httpOnly
+ *       `bb_access` (15 min) + `bb_refresh` (7 j). Rate-limit 10/15 min/IP.
+ *       Si 2FA actif : renvoie `{ requiresTwoFactor: true, tempToken }` (à passer
+ *       à /2fa/verify-login).
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: "#/components/schemas/LoginRequest" }
+ *     responses:
+ *       200:
+ *         description: Connexion réussie OU 2FA requis
+ *         content:
+ *           application/json:
+ *             schema: { $ref: "#/components/schemas/LoginResponse" }
+ *       400: { description: Champs manquants }
+ *       401: { description: Email ou mot de passe incorrect }
+ *       403: { description: Compte désactivé }
+ *       429: { description: Trop de tentatives — rate limit dépassé }
+ */
 router.post("/login", authLimiter, login);
+
+/**
+ * @openapi
+ * /api/auth/forgot-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Demande de réinitialisation par email
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, properties: { email: { type: string } }, required: [email] }
+ *     responses:
+ *       200: { description: Email envoyé (réponse identique si email inconnu — anti-énumération) }
+ *       429: { description: Rate limit dépassé }
+ */
 router.post("/forgot-password", authLimiter, forgotPassword);
 router.get("/reset-password/:token", verifyResetToken);
 router.post("/reset-password", resetPassword);
 
 // ─── Refresh token (cookie httpOnly) ─────────────────────────────────────────
-// Pas de protect — le cookie fait office d'authentification ici
+
+/**
+ * @openapi
+ * /api/auth/refresh:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Rotation du refresh token (cookie httpOnly)
+ *     description: Utilise le cookie `bb_refresh` pour émettre un nouveau JWT + nouveau refresh.
+ *     security: [{ cookieAuth: [] }]
+ *     responses:
+ *       200: { description: Nouveau access token (cookie bb_access posé) }
+ *       401: { $ref: "#/components/responses/Unauthorized" }
+ */
 router.post("/refresh", refresh);
+
+/**
+ * @openapi
+ * /api/auth/logout:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Déconnexion (révoque les tokens, efface les cookies)
+ *     responses:
+ *       200: { description: Déconnexion réussie }
+ */
 router.post("/logout", logout);
 
 // ─── Routes privées ───────────────────────────────────────────────────────────
+
+/**
+ * @openapi
+ * /api/auth/me:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Profil de l'utilisateur connecté
+ *     responses:
+ *       200:
+ *         description: Profil utilisateur
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user: { $ref: "#/components/schemas/User" }
+ *       401: { $ref: "#/components/responses/Unauthorized" }
+ */
 router.get("/me", protect, getMe);
 router.patch("/password", protect, updatePassword);
 router.patch("/profile", protect, updateProfile);
