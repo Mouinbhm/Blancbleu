@@ -66,6 +66,28 @@ async function checkIA() {
 }
 
 /**
+ * Vérifie Redis (cache + rate-limiter + BullMQ).
+ * Renvoie status: skipped si Redis est désactivé (stub) — voir utils/redis.js.
+ */
+async function checkRedis() {
+  try {
+    // eslint-disable-next-line global-require
+    const { redis } = require("./redis");
+    if (redis?._stub) {
+      return { status: "skipped", reason: "REDIS_URL absent ou REDIS_DISABLED" };
+    }
+    const start = Date.now();
+    const pong = await redis.ping();
+    return {
+      status:    pong === "PONG" ? "healthy" : "degraded",
+      latencyMs: Date.now() - start,
+    };
+  } catch (err) {
+    return { status: "unhealthy", error: err.message };
+  }
+}
+
+/**
  * Métriques mémoire Node.js
  */
 function checkMemoire() {
@@ -85,15 +107,16 @@ async function healthHandler(req, res) {
   const debut = Date.now();
 
   try {
-    const [mongo, ia] = await Promise.all([checkMongo(), checkIA()]);
+    const [mongo, ia, redis] = await Promise.all([checkMongo(), checkIA(), checkRedis()]);
     const memoire = checkMemoire();
 
+    // mongo critique ; ia/redis dégradent mais ne tuent pas (degraded)
     const sante =
-      mongo.status === "healthy" && ia.status !== "unhealthy"
-        ? "healthy"
-        : mongo.status !== "healthy"
-          ? "unhealthy"
-          : "degraded";
+      mongo.status !== "healthy"
+        ? "unhealthy"
+        : ia.status === "unhealthy" || (redis.status !== "healthy" && redis.status !== "skipped")
+          ? "degraded"
+          : "healthy";
 
     const statusCode =
       sante === "healthy" ? 200 : sante === "degraded" ? 200 : 503;
@@ -108,6 +131,7 @@ async function healthHandler(req, res) {
       services: {
         mongodb: mongo,
         ia,
+        redis,
       },
       systeme: {
         memoire,
@@ -125,4 +149,4 @@ async function healthHandler(req, res) {
   }
 }
 
-module.exports = { healthHandler, checkMongo, checkIA, checkMemoire };
+module.exports = { healthHandler, checkMongo, checkIA, checkRedis, checkMemoire };

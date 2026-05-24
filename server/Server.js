@@ -83,6 +83,7 @@ app.use(noSqlSanitize);
 app.use(xssSanitize);
 app.use(globalLimiter);
 app.use(httpLogger);
+app.use(require("./middleware/metricsMiddleware"));
 app.use(require("./middleware/auditMiddleware"));
 
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
@@ -202,6 +203,23 @@ if (process.env.NODE_ENV !== "production") {
 
 // ─── Health ────────────────────────────────────────────────────────────────────
 app.get("/api/health", healthHandler);
+
+// ─── Métriques Prometheus ─────────────────────────────────────────────────────
+// Protégé par X-Metrics-Token (env METRICS_TOKEN). Ne JAMAIS exposer
+// publiquement. En l'absence de token, l'endpoint refuse tout accès.
+app.get("/metrics", async (req, res) => {
+  const expected = process.env.METRICS_TOKEN;
+  if (!expected) {
+    return res.status(503).json({ message: "METRICS_TOKEN non configuré" });
+  }
+  if (req.get("X-Metrics-Token") !== expected) {
+    return res.status(401).json({ message: "Metrics token invalide" });
+  }
+  const { register } = require("./utils/metrics");
+  res.set("Content-Type", register.contentType);
+  res.end(await register.metrics());
+});
+
 app.use((req, res) => res.status(404).json({ message: "Route non trouvée" }));
 
 // Sentry doit voir les erreurs AVANT notre errorHandler custom (qui les
