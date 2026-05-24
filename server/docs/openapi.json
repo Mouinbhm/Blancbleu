@@ -1,0 +1,1106 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "BlancBleu API",
+    "version": "1.3.0",
+    "description": "Plateforme de gestion de transports sanitaires non urgents (Nice 06).\n\n**Authentification** : la plupart des routes exigent soit le cookie httpOnly `bb_access` (émis par /api/auth/login, prioritaire côté browser), soit le header `Authorization: Bearer <jwt>` (SPA / scripts). Les routes service-to-service (training-data, model/retrain) utilisent `X-Service-Token`.",
+    "contact": {
+      "name": "BlancBleu — Support",
+      "email": "support@blancbleu.fr"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000",
+      "description": "Développement local"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Token JWT obtenu via POST /api/auth/login (utilisable en header Authorization)."
+      },
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "bb_access",
+        "description": "Cookie httpOnly émis par /api/auth/login. Utilisé en priorité par les clients browser."
+      },
+      "serviceTokenAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Service-Token",
+        "description": "Token partagé Node ↔ Python pour les routes service-to-service (training-data, model/retrain, model/status)."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Erreur interne du serveur"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "nom": {
+            "type": "string",
+            "example": "Martin"
+          },
+          "prenom": {
+            "type": "string",
+            "example": "Jean"
+          },
+          "email": {
+            "type": "string",
+            "example": "dispatcher@blancbleu.fr"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "dispatcher",
+              "superviseur",
+              "admin",
+              "comptable",
+              "patient"
+            ]
+          },
+          "mustChangePassword": {
+            "type": "boolean",
+            "example": false
+          },
+          "twoFactorEnabled": {
+            "type": "boolean",
+            "example": false
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "dispatcher@blancbleu.fr"
+          },
+          "password": {
+            "type": "string",
+            "example": "********"
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Connexion réussie"
+          },
+          "token": {
+            "type": "string",
+            "description": "JWT (aussi posé en cookie httpOnly bb_access)"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        }
+      },
+      "Transport": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "numero": {
+            "type": "string",
+            "example": "TRS-20260524-0001"
+          },
+          "typeTransport": {
+            "type": "string",
+            "enum": [
+              "VSL",
+              "TPMR",
+              "AMBULANCE"
+            ]
+          },
+          "motif": {
+            "type": "string",
+            "example": "Dialyse"
+          },
+          "dateTransport": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "heureRDV": {
+            "type": "string",
+            "example": "09:30"
+          },
+          "allerRetour": {
+            "type": "boolean",
+            "example": true
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "REQUESTED",
+              "CONFIRMED",
+              "SCHEDULED",
+              "ASSIGNED",
+              "DRIVER_ACCEPTED",
+              "DRIVER_REJECTED",
+              "EN_ROUTE_TO_PICKUP",
+              "ARRIVED_AT_PICKUP",
+              "PATIENT_ON_BOARD",
+              "ARRIVED_AT_DESTINATION",
+              "WAITING_AT_DESTINATION",
+              "RETURN_TO_BASE",
+              "COMPLETED",
+              "BILLING_PENDING",
+              "BILLED",
+              "PAID",
+              "CANCELLED",
+              "NO_SHOW",
+              "RESCHEDULED",
+              "FAILED"
+            ]
+          },
+          "patient": {
+            "$ref": "#/components/schemas/PatientSubdoc"
+          },
+          "adresseDepart": {
+            "$ref": "#/components/schemas/Adresse"
+          },
+          "adresseDestination": {
+            "$ref": "#/components/schemas/Adresse"
+          },
+          "vehicule": {
+            "type": "string",
+            "nullable": true,
+            "description": "Vehicle ObjectId"
+          },
+          "chauffeur": {
+            "type": "string",
+            "nullable": true,
+            "description": "Personnel ObjectId"
+          },
+          "dureeReelleMinutes": {
+            "type": "number",
+            "nullable": true
+          }
+        }
+      },
+      "Adresse": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string",
+            "example": "CHU Pasteur"
+          },
+          "rue": {
+            "type": "string",
+            "example": "30 Voie Romaine"
+          },
+          "ville": {
+            "type": "string",
+            "example": "Nice"
+          },
+          "codePostal": {
+            "type": "string",
+            "example": "06000"
+          },
+          "coordonnees": {
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number",
+                "example": 43.7102
+              },
+              "lng": {
+                "type": "number",
+                "example": 7.262
+              }
+            }
+          }
+        }
+      },
+      "PatientSubdoc": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string",
+            "example": "Dupont"
+          },
+          "prenom": {
+            "type": "string",
+            "example": "Marie"
+          },
+          "telephone": {
+            "type": "string",
+            "example": "0612345678"
+          },
+          "mobilite": {
+            "type": "string",
+            "enum": [
+              "ASSIS",
+              "FAUTEUIL_ROULANT",
+              "ALLONGE",
+              "CIVIERE"
+            ]
+          },
+          "oxygene": {
+            "type": "boolean",
+            "default": false
+          },
+          "brancardage": {
+            "type": "boolean",
+            "default": false
+          },
+          "accompagnateur": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "Vehicle": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "immatriculation": {
+            "type": "string",
+            "example": "AB-123-CD"
+          },
+          "nom": {
+            "type": "string",
+            "example": "VSL-01"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "VSL",
+              "AMBULANCE",
+              "TPMR"
+            ]
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "Disponible",
+              "En service",
+              "Maintenance",
+              "Hors service"
+            ]
+          },
+          "position": {
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number"
+              },
+              "lng": {
+                "type": "number"
+              },
+              "adresse": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "kilometrage": {
+            "type": "object",
+            "properties": {
+              "actuel": {
+                "type": "number"
+              }
+            }
+          },
+          "carburant": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
+      },
+      "Patient": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "numeroPatient": {
+            "type": "string",
+            "example": "PAT-20260524-0001"
+          },
+          "nom": {
+            "type": "string"
+          },
+          "prenom": {
+            "type": "string"
+          },
+          "dateNaissance": {
+            "type": "string",
+            "format": "date"
+          },
+          "telephone": {
+            "type": "string"
+          },
+          "mobilite": {
+            "type": "string",
+            "enum": [
+              "ASSIS",
+              "FAUTEUIL_ROULANT",
+              "ALLONGE",
+              "CIVIERE"
+            ]
+          },
+          "oxygene": {
+            "type": "boolean"
+          },
+          "brancardage": {
+            "type": "boolean"
+          },
+          "accompagnateur": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "web",
+              "app_mobile",
+              "papier"
+            ]
+          }
+        }
+      },
+      "Facture": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "numero": {
+            "type": "string",
+            "example": "FAC-2026-0042"
+          },
+          "transportId": {
+            "type": "string"
+          },
+          "montantTotal": {
+            "type": "number"
+          },
+          "montantCPAM": {
+            "type": "number"
+          },
+          "montantPatient": {
+            "type": "number"
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "brouillon",
+              "emise",
+              "en_attente",
+              "payee",
+              "annulee",
+              "payment_failed",
+              "remboursee",
+              "partiellement_remboursee",
+              "en_retard"
+            ]
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": [
+              "UNPAID",
+              "PENDING",
+              "SUCCEEDED",
+              "FAILED",
+              "REFUNDED",
+              "PARTIALLY_REFUNDED"
+            ]
+          }
+        }
+      },
+      "DispatchRecommendation": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "transportId": {
+            "type": "string"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "ia",
+              "fallback_node"
+            ]
+          },
+          "bestRecommendation": {
+            "$ref": "#/components/schemas/DispatchCandidate"
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalCandidates": {
+                "type": "integer"
+              },
+              "eligibleCandidates": {
+                "type": "integer"
+              },
+              "excludedCandidates": {
+                "type": "integer"
+              }
+            }
+          },
+          "decision": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "accepted",
+                  "rejected"
+                ]
+              },
+              "decidedAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "decidedBy": {
+                "type": "string",
+                "nullable": true
+              },
+              "rejectionReason": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          }
+        }
+      },
+      "DispatchCandidate": {
+        "type": "object",
+        "properties": {
+          "vehiculeId": {
+            "type": "string"
+          },
+          "vehicleName": {
+            "type": "string"
+          },
+          "driverName": {
+            "type": "string",
+            "nullable": true
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "criteriaScores": {
+            "type": "object",
+            "properties": {
+              "distance": {
+                "type": "number"
+              },
+              "driverAvailability": {
+                "type": "number"
+              },
+              "vehicleTypeMatch": {
+                "type": "number"
+              },
+              "planningLoad": {
+                "type": "number"
+              },
+              "traffic": {
+                "type": "number"
+              },
+              "medicalPriority": {
+                "type": "number"
+              },
+              "punctualityHistory": {
+                "type": "number"
+              }
+            }
+          },
+          "explanation": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "DispatchConfig": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string",
+            "example": "default"
+          },
+          "weights": {
+            "type": "object",
+            "properties": {
+              "distance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "driverAvailability": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "vehicleTypeMatch": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "planningLoad": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "traffic": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "medicalPriority": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "punctualityHistory": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Token manquant, invalide ou expiré",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Rôle non autorisé pour cette action",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Ressource introuvable",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Validation des données échouée",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "Erreur interne",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "cookieAuth": []
+    },
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Authentification, sessions, 2FA, gestion des comptes"
+    },
+    {
+      "name": "Transports",
+      "description": "Transports sanitaires : CRUD + transitions lifecycle"
+    },
+    {
+      "name": "Vehicles",
+      "description": "Flotte de véhicules sanitaires"
+    },
+    {
+      "name": "Patients",
+      "description": "Dossiers patients (RGPD + consentement)"
+    },
+    {
+      "name": "Prescriptions",
+      "description": "Prescriptions Médicales de Transport (PMT)"
+    },
+    {
+      "name": "Factures",
+      "description": "Facturation CPAM + paiement Stripe"
+    },
+    {
+      "name": "AI",
+      "description": "Module IA : dispatch, extraction PMT, prédiction durée"
+    },
+    {
+      "name": "Analytics",
+      "description": "Tableaux de bord, statistiques"
+    },
+    {
+      "name": "Health",
+      "description": "Healthcheck + métriques"
+    },
+    {
+      "name": "Admin",
+      "description": "Réservé administrateurs (config, retrain modèle, etc.)"
+    }
+  ],
+  "paths": {
+    "/api/ai/dispatch/manual": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "summary": "Recommandation libre (sans transport en base)",
+        "description": "Permet de tester le dispatch IA depuis un formulaire libre.",
+        "responses": {
+          "200": {
+            "description": "Recommandation IA"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/ai/dispatch/history": {
+      "get": {
+        "tags": [
+          "AI",
+          "Admin"
+        ],
+        "summary": "Stats sur les recommandations IA (taux acceptation, score moyen, etc.)",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "minimum": 1,
+              "maximum": 365
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agrégats"
+          }
+        }
+      }
+    },
+    "/api/ai/dispatch/{transportId}": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "summary": "Génère une recommandation IA pour un transport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transportId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recommandation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchRecommendation"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Aucun véhicule disponible"
+          }
+        }
+      }
+    },
+    "/api/ai/training-data": {
+      "get": {
+        "tags": [
+          "AI",
+          "Admin"
+        ],
+        "summary": "Export du dataset d'entraînement (service-to-service)",
+        "description": "Appelé par le microservice IA Python pour pull TransportFeature.",
+        "security": [
+          {
+            "serviceTokenAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 10000,
+              "maximum": 50000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Features (avec warning si volume insuffisant)"
+          },
+          "401": {
+            "description": "Service token invalide ou manquant"
+          },
+          "503": {
+            "description": "AI_SERVICE_TOKEN non configuré côté serveur"
+          }
+        }
+      }
+    },
+    "/api/ai/model/retrain": {
+      "post": {
+        "tags": [
+          "AI",
+          "Admin"
+        ],
+        "summary": "Déclenche un réentraînement async du DurationPredictor",
+        "description": "Pousse un job BullMQ → worker appelle Python /optimizer/model/retrain.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "since": {
+                    "type": "string",
+                    "format": "date",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Réentraînement programmé (jobId renvoyé)"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/ai/model/status": {
+      "get": {
+        "tags": [
+          "AI",
+          "Admin"
+        ],
+        "summary": "État du dernier réentraînement + metrics courantes",
+        "responses": {
+          "200": {
+            "description": "État du job + metrics"
+          },
+          "503": {
+            "description": "Microservice IA indisponible"
+          }
+        }
+      }
+    },
+    "/api/ai/dispatch/config": {
+      "get": {
+        "tags": [
+          "AI",
+          "Admin"
+        ],
+        "summary": "Pondérations actuelles du scoring dispatch + valeurs par défaut",
+        "responses": {
+          "200": {
+            "description": "Config + defaults",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchConfig"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "AI",
+          "Admin"
+        ],
+        "summary": "Met à jour les pondérations (somme == 1.0 ± 1e-3)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "weights"
+                ],
+                "properties": {
+                  "weights": {
+                    "type": "object",
+                    "description": "Les 7 clés sont obligatoires ; somme == 1.0"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchConfig"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation échouée (somme invalide ou clés manquantes)"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Connexion utilisateur",
+        "description": "Renvoie un JWT (header `Authorization`) ET pose un cookie httpOnly\n`bb_access` (15 min) + `bb_refresh` (7 j). Rate-limit 10/15 min/IP.\nSi 2FA actif : renvoie `{ requiresTwoFactor: true, tempToken }` (à passer\nà /2fa/verify-login).\n",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Connexion réussie OU 2FA requis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Champs manquants"
+          },
+          "401": {
+            "description": "Email ou mot de passe incorrect"
+          },
+          "403": {
+            "description": "Compte désactivé"
+          },
+          "429": {
+            "description": "Trop de tentatives — rate limit dépassé"
+          }
+        }
+      }
+    },
+    "/api/auth/forgot-password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Demande de réinitialisation par email",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "email"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email envoyé (réponse identique si email inconnu — anti-énumération)"
+          },
+          "429": {
+            "description": "Rate limit dépassé"
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Rotation du refresh token (cookie httpOnly)",
+        "description": "Utilise le cookie `bb_refresh` pour émettre un nouveau JWT + nouveau refresh.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Nouveau access token (cookie bb_access posé)"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Déconnexion (révoque les tokens, efface les cookies)",
+        "responses": {
+          "200": {
+            "description": "Déconnexion réussie"
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Profil de l'utilisateur connecté",
+        "responses": {
+          "200": {
+            "description": "Profil utilisateur",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    }
+  }
+}
