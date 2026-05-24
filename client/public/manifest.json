@@ -1,25 +1,18 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "name": "BlancBleu — Gestion des transports sanitaires",
+  "short_name": "BlancBleu",
+  "description": "Plateforme dispatch pour ambulances, VSL et TPMR — transport sanitaire non urgent.",
   "icons": [
-    {
-      "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
-    },
-    {
-      "src": "logo192.png",
-      "type": "image/png",
-      "sizes": "192x192"
-    },
-    {
-      "src": "logo512.png",
-      "type": "image/png",
-      "sizes": "512x512"
-    }
+    { "src": "favicon.ico",  "sizes": "64x64 32x32 24x24 16x16", "type": "image/x-icon" },
+    { "src": "logo192.png",  "type": "image/png", "sizes": "192x192", "purpose": "any maskable" },
+    { "src": "logo512.png",  "type": "image/png", "sizes": "512x512", "purpose": "any maskable" }
   ],
   "start_url": ".",
+  "scope": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "orientation": "any",
+  "theme_color": "#1D6EF5",
+  "background_color": "#0f172a",
+  "lang": "fr-FR",
+  "categories": ["medical", "business", "productivity"]
 }
