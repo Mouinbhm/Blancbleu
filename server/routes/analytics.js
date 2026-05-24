@@ -315,4 +315,67 @@ router.get(
   },
 );
 
+// ── GET /api/analytics/heatmap?days=30 ───────────────────────────────────────
+// Renvoie les points (départ + destination) des transports complétés sur la
+// période, agrégés par coordonnée arrondie à 3 décimales (~110m) pour réduire
+// le payload et limiter les coûts de rendu côté client.
+//
+// Réponse : { count, points: [[lat, lng, weight], ...], maxWeight, days }
+router.get("/heatmap", protect, async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(parseInt(req.query.days, 10) || 30, 180));
+    const depuis = plage(days);
+
+    // On filtre sur les statuts terminés ou en cours pour avoir des coordonnées
+    // significatives (les REQUESTED peuvent ne pas être géocodés).
+    const statutsInteressants = [
+      "ASSIGNED", "DRIVER_ACCEPTED", "EN_ROUTE_TO_PICKUP", "ARRIVED_AT_PICKUP",
+      "PATIENT_ON_BOARD", "ARRIVED_AT_DESTINATION", "WAITING_AT_DESTINATION",
+      "RETURN_TO_BASE", "COMPLETED", "BILLING_PENDING", "BILLED", "PAID",
+    ];
+
+    const transports = await Transport.find({
+      createdAt: { $gte: depuis },
+      statut: { $in: statutsInteressants },
+      $or: [
+        { "adresseDepart.coordonnees.lat": { $ne: null } },
+        { "adresseDestination.coordonnees.lat": { $ne: null } },
+      ],
+    })
+      .select("adresseDepart.coordonnees adresseDestination.coordonnees")
+      .lean();
+
+    // Agrégation par coordonnée arrondie (~110m)
+    const bucket = new Map();
+    const addPoint = (c) => {
+      if (!c || typeof c.lat !== "number" || typeof c.lng !== "number") return;
+      const key = `${c.lat.toFixed(3)},${c.lng.toFixed(3)}`;
+      bucket.set(key, (bucket.get(key) || 0) + 1);
+    };
+
+    for (const t of transports) {
+      addPoint(t.adresseDepart?.coordonnees);
+      addPoint(t.adresseDestination?.coordonnees);
+    }
+
+    let maxWeight = 0;
+    const points = [];
+    for (const [key, weight] of bucket) {
+      const [lat, lng] = key.split(",").map(Number);
+      points.push([lat, lng, weight]);
+      if (weight > maxWeight) maxWeight = weight;
+    }
+
+    res.json({
+      days,
+      count:     transports.length,
+      uniquePoints: points.length,
+      maxWeight,
+      points,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

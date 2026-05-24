@@ -20,6 +20,7 @@ const NAV_OPERATIONS = [
   { path: "/auto-dispatch",   icon: "smart_toy",       label: "Auto-dispatch", badgeKey: "autoDispatch" },
   { path: "/planning",        icon: "calendar_month",  label: "Planning"        },
   { path: "/suivi-en-direct", icon: "location_on",     label: "Suivi en direct" },
+  { path: "/carte-analytique",icon: "local_fire_department", label: "Heatmap"   },
   { path: "/shifts",          icon: "schedule",        label: "Shifts"          },
   { path: "/patients",        icon: "personal_injury", label: "Patients"        },
 ];
@@ -51,6 +52,7 @@ const pageTitles = {
   "/shifts":          "Shifts — Activité des chauffeurs",
   "/admin/dispatch-config": "Pondérations IA — Scoring dispatch",
   "/auto-dispatch":         "Auto-dispatch — File de validation",
+  "/carte-analytique":      "Heatmap — Densité des transports",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

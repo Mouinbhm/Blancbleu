@@ -29,6 +29,7 @@ import Shifts from "./pages/Shifts";
 import StyleguidePage from "./pages/_StyleguidePage";
 import DispatchConfigPage from "./pages/admin/DispatchConfigPage";
 import AutoDispatchQueue from "./pages/AutoDispatchQueue";
+import CarteAnalytique  from "./pages/CarteAnalytique";
 
 function App() {
   return (
@@ -75,6 +76,7 @@ function App() {
             <Route path="/shifts" element={<Shifts />} />
             <Route path="/admin/dispatch-config" element={<DispatchConfigPage />} />
             <Route path="/auto-dispatch"         element={<AutoDispatchQueue />} />
+            <Route path="/carte-analytique"      element={<CarteAnalytique />} />
           </Route>
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
