@@ -13,11 +13,12 @@ const Redis = require("ioredis");
 const logger = require("../utils/logger");
 
 const QUEUES = {
-  EMAIL:   "email",
-  OCR:     "ocr",
-  PDF:     "pdf",
-  CLEANUP: "cleanup",
-  AI:      "ai",
+  EMAIL:        "email",
+  OCR:          "ocr",
+  PDF:          "pdf",
+  CLEANUP:      "cleanup",
+  AI:           "ai",
+  AUTODISPATCH: "autodispatch",
 };
 
 let connection;

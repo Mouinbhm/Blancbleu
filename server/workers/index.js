@@ -127,4 +127,9 @@ for (const [name, worker] of Object.entries({
   worker.on("error", (err) => logger.error(`[worker:${name}] erreur globale`, { err: err.message }));
 }
 
-module.exports = { emailWorker, ocrWorker, pdfWorker, cleanupWorker, aiWorker };
+// ─── Worker auto-dispatch (HITL) ─────────────────────────────────────────────
+// Module séparé : il gère son propre logging et booté uniquement si connection
+// Redis est dispo (cf. queues/index.js).
+const { autoDispatchWorker } = require("./autoDispatchWorker");
+
+module.exports = { emailWorker, ocrWorker, pdfWorker, cleanupWorker, aiWorker, autoDispatchWorker };

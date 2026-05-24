@@ -38,6 +38,9 @@ const auditLogSchema = new mongoose.Schema(
         "VEHICULE_UNASSIGNED",
         "DISPATCH_AUTO",
         "DISPATCH_MANUEL",
+        "AUTO_DISPATCH_ASSIGNED",
+        "AUTO_DISPATCH_PROPOSAL",
+        "AUTO_DISPATCH_REJECTED",
 
         // ── Véhicule ──────────────────────────────────────────────────────
         "VEHICULE_CREATED",
