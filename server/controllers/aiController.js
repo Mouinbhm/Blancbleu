@@ -801,9 +801,20 @@ const getDispatchConfig = async (req, res) => {
     let cfg = await DispatchConfig.findById("default").lean();
     if (!cfg) {
       // Auto-bootstrap au défaut
-      cfg = { _id: "default", weights: DispatchConfig.DEFAULT_WEIGHTS, updatedBy: null };
+      cfg = {
+        _id: "default",
+        weights:      DispatchConfig.DEFAULT_WEIGHTS,
+        autoDispatch: DispatchConfig.DEFAULT_AUTODISPATCH,
+        updatedBy:    null,
+      };
     }
-    return res.json({ ...cfg, defaults: DispatchConfig.DEFAULT_WEIGHTS });
+    // Hydrate autoDispatch si absent (configs créées avant Sprint 6)
+    if (!cfg.autoDispatch) cfg.autoDispatch = DispatchConfig.DEFAULT_AUTODISPATCH;
+    return res.json({
+      ...cfg,
+      defaults: DispatchConfig.DEFAULT_WEIGHTS,
+      defaultsAutoDispatch: DispatchConfig.DEFAULT_AUTODISPATCH,
+    });
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
@@ -811,32 +822,56 @@ const getDispatchConfig = async (req, res) => {
 
 /**
  * PUT /api/ai/dispatch/config
- * Body : { weights: { distance, driverAvailability, ... } }  // somme == 1.0
+ * Body : { weights?: {...}, autoDispatch?: { enabled, scoreThreshold, requireApproval } }
+ * Au moins un des deux champs doit être présent. weights : somme == 1.0.
  * @access  admin
  */
 const updateDispatchConfig = async (req, res) => {
   try {
     const DispatchConfig = require("../models/DispatchConfig");
-    const { weights } = req.body || {};
-    if (!weights || typeof weights !== "object") {
-      return res.status(400).json({ message: "Body invalide : { weights: {...} } attendu" });
-    }
-    const expectedKeys = Object.keys(DispatchConfig.DEFAULT_WEIGHTS);
-    const missing = expectedKeys.filter((k) => weights[k] == null);
-    if (missing.length) {
-      return res.status(400).json({ message: `Poids manquants : ${missing.join(", ")}` });
+    const { weights, autoDispatch } = req.body || {};
+
+    if (!weights && !autoDispatch) {
+      return res.status(400).json({
+        message: "Body invalide : au moins { weights } ou { autoDispatch } attendu",
+      });
     }
 
-    const sum = expectedKeys.reduce((s, k) => s + Number(weights[k] || 0), 0);
-    if (Math.abs(sum - 1.0) > 1e-3) {
-      return res.status(400).json({
-        message: `Somme des poids invalide : ${sum.toFixed(3)} (attendu 1.0 ± 0.001)`,
-      });
+    const $set = { updatedBy: req.user._id };
+
+    if (weights) {
+      if (typeof weights !== "object") {
+        return res.status(400).json({ message: "weights doit être un objet" });
+      }
+      const expectedKeys = Object.keys(DispatchConfig.DEFAULT_WEIGHTS);
+      const missing = expectedKeys.filter((k) => weights[k] == null);
+      if (missing.length) {
+        return res.status(400).json({ message: `Poids manquants : ${missing.join(", ")}` });
+      }
+      const sum = expectedKeys.reduce((s, k) => s + Number(weights[k] || 0), 0);
+      if (Math.abs(sum - 1.0) > 1e-3) {
+        return res.status(400).json({
+          message: `Somme des poids invalide : ${sum.toFixed(3)} (attendu 1.0 ± 0.001)`,
+        });
+      }
+      $set.weights = weights;
+    }
+
+    if (autoDispatch) {
+      const a = autoDispatch;
+      const validated = {
+        enabled:         Boolean(a.enabled),
+        scoreThreshold:  Number.isFinite(a.scoreThreshold)
+          ? Math.max(50, Math.min(100, a.scoreThreshold))
+          : DispatchConfig.DEFAULT_AUTODISPATCH.scoreThreshold,
+        requireApproval: a.requireApproval !== false, // défaut TRUE (safe)
+      };
+      $set.autoDispatch = validated;
     }
 
     const cfg = await DispatchConfig.findOneAndUpdate(
       { _id: "default" },
-      { $set: { weights, updatedBy: req.user._id } },
+      { $set },
       { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
     );
 
@@ -846,8 +881,8 @@ const updateDispatchConfig = async (req, res) => {
       utilisateur: req.user,
       ressource:  { type: "DispatchConfig", reference: "default" },
       details: {
-        metadata: { weights },
-        message:  "Pondérations du dispatch mises à jour",
+        metadata: { weights: $set.weights || null, autoDispatch: $set.autoDispatch || null },
+        message:  "Config dispatch mise à jour",
       },
     });
 

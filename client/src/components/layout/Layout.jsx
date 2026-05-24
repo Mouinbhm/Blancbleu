@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import useSocket from "../../hooks/useSocket";
 import { useSocketSync } from "../../hooks/useSocketSync";
 import useNotifications from "../../hooks/useNotifications";
+import { useAutoDispatchQueueCount } from "../../hooks/queries/useAutoDispatchQueue";
 import DispatcherChat from "./DispatcherChat";
 import api from "../../services/api";
 
@@ -227,6 +228,9 @@ export default function Layout() {
   })();
 
   const totalUnread = allNotifs.filter((n) => !n.read).length;
+
+  // Badge compteur auto-dispatch (file de validation HITL)
+  const { data: autoDispatchCount = 0 } = useAutoDispatchQueueCount();
 
   // ── Fermeture clic extérieur ──────────────────────────────────────────────
   useEffect(() => {
@@ -469,6 +473,11 @@ export default function Layout() {
               {item.path === "/transports" && totalUnread > 0 && (
                 <span className="bg-danger text-white text-xs font-mono font-bold px-1.5 py-0.5 rounded-full">
                   {totalUnread}
+                </span>
+              )}
+              {item.badgeKey === "autoDispatch" && autoDispatchCount > 0 && (
+                <span className="bg-amber-500 text-white text-xs font-mono font-bold px-1.5 py-0.5 rounded-full">
+                  {autoDispatchCount}
                 </span>
               )}
             </NavLink>
