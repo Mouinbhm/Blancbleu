@@ -7,6 +7,7 @@ import { useSocketSync } from "../../hooks/useSocketSync";
 import useNotifications from "../../hooks/useNotifications";
 import { useAutoDispatchQueueCount } from "../../hooks/queries/useAutoDispatchQueue";
 import DispatcherChat from "./DispatcherChat";
+import PushNotificationsToggle from "../PushNotificationsToggle";
 import api from "../../services/api";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -562,6 +563,8 @@ export default function Layout() {
               <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>logout</span>
             </button>
           </div>
+          <PushNotificationsToggle />
+
           <div className="flex items-center gap-2 px-1">
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${connected ? "bg-success animate-pulse" : "bg-slate-600"}`} />
             <span className="text-slate-600 font-mono" style={{ fontSize: "9px", letterSpacing: "0.1em" }}>

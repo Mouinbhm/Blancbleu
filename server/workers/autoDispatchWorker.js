@@ -163,6 +163,18 @@ async function processAutoDispatchJob(job) {
       transportId: transport._id, numero: transport.numero, recommendationId: rec._id,
     });
 
+    // Web Push best-effort (no-op si VAPID non configuré)
+    try {
+      const webPush = require("../services/webPushService");
+      await webPush.sendToRole("dispatcher", {
+        title: "Nouvelle proposition auto-dispatch",
+        body:  `${transport.numero} → ${best.vehicleName || "véhicule"} (score ${best.score})`,
+        data:  { url: "/auto-dispatch", recommendationId: String(rec._id) },
+      });
+    } catch (e) {
+      logger.warn("[autoDispatch] web push proposal échoué", { err: e.message });
+    }
+
     logger.info("[autoDispatch] proposition créée (HITL pending)", {
       transportId, recId: rec._id, score: best.score,
     });
