@@ -3,11 +3,12 @@
  */
 const Equipement = require("../models/Equipement");
 const service = require("../services/equipementService");
+const logger = require("../utils/logger");
 
 // Helper erreur métier
 const erreur = (res, err) => {
   if (err.status) return res.status(err.status).json({ message: err.message });
-  console.error("Equipement error:", err);
+  logger.error("Equipement error:", err);
   return res.status(500).json({ message: err.message || "Erreur serveur" });
 };
 

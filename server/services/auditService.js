@@ -7,6 +7,7 @@
  * Aucune notion d'urgence, d'escalade ou de priorité P1/P2/P3.
  */
 const AuditLog = require("../models/AuditLog");
+const logger = require("../utils/logger");
 
 /**
  * Enregistre une entrée d'audit dans la base de données.
@@ -54,7 +55,7 @@ async function log({
       },
     });
   } catch (err) {
-    console.error("[Audit] Erreur d'enregistrement:", err.message);
+    logger.error("[Audit] Erreur d'enregistrement:", err.message);
   }
 }
 

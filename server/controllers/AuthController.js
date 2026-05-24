@@ -5,6 +5,7 @@ const User = require("../models/User");
 const RefreshToken = require("../models/RefreshToken");
 const RevokedToken = require("../models/RevokedToken");
 const { sendWelcomeEmail } = require("../services/emailService");
+const logger = require("../utils/logger");
 
 const safeMsg = (err) =>
   process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test"
@@ -132,7 +133,7 @@ const register = async (req, res) => {
     try {
       await sendWelcomeEmail(user.email, user.prenom, user.nom, user.email, password, roleValide);
     } catch (mailErr) {
-      console.warn("[register] Email de bienvenue non envoyé :", mailErr.message);
+      logger.warn("[register] Email de bienvenue non envoyé :", mailErr.message);
     }
 
     res.status(201).json({
@@ -506,7 +507,7 @@ const adminResetPassword = async (req, res) => {
     try {
       await sendWelcomeEmail(user.email, user.prenom, user.nom, user.email, nouveauPassword, user.role);
     } catch (mailErr) {
-      console.warn("[adminResetPassword] Email non envoyé :", mailErr.message);
+      logger.warn("[adminResetPassword] Email non envoyé :", mailErr.message);
     }
 
     res.json({ message: "Mot de passe réinitialisé et email envoyé" });

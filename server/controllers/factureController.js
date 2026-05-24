@@ -9,6 +9,7 @@ const tarifService   = require("../services/tarifService");
 const invoiceService = require("../services/invoiceService");
 const pdfService     = require("../services/invoicePdfService");
 const { audit }      = require("../services/auditService");
+const logger         = require("../utils/logger");
 
 const STATUTS_VALIDES = [
   "brouillon","emise","en_attente","payee","annulee",
@@ -283,7 +284,7 @@ const deleteFacture = async (req, res) => {
     await f.save();
     res.json({ message: "Facture annulée", facture: f });
   } catch (err) {
-    console.error("[factureController] deleteFacture:", err);
+    logger.error("[factureController] deleteFacture:", err);
     res.status(500).json({ message: safeMsg(err) });
   }
 };

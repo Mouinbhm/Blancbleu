@@ -4,6 +4,7 @@
  */
 const Vehicle = require("../models/Vehicle");
 const socketService = require("./socketService");
+const logger = require("../utils/logger");
 
 const INTERVAL_MS = 8000;
 let _interval = null;
@@ -81,7 +82,7 @@ async function simulerDeplacement() {
     }
   } catch (err) {
     if (process.env.NODE_ENV !== "test") {
-      console.error("[Simulation] Erreur:", err.message);
+      logger.error("[Simulation] Erreur:", err.message);
     }
   }
 }
@@ -91,13 +92,13 @@ const SIMULATION_ACTIVE = false;
 
 function demarrer() {
   if (!SIMULATION_ACTIVE) {
-    console.log("🔒 Simulation véhicules désactivée (SIMULATION_ACTIVE = false)");
+    logger.info("🔒 Simulation véhicules désactivée (SIMULATION_ACTIVE = false)");
     return;
   }
   if (_actif) return;
   _actif = true;
   _interval = setInterval(simulerDeplacement, INTERVAL_MS);
-  console.log("🚐 Simulation GPS véhicules démarrée");
+  logger.info("🚐 Simulation GPS véhicules démarrée");
 }
 
 function arreter() {

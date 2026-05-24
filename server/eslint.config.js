@@ -14,9 +14,17 @@ module.exports = [
     },
     rules: {
       "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
-      "no-console":     "warn",
+      "no-console":     "error",
       "prefer-const":   "error",
       "eqeqeq":         ["error", "smart"],
+    },
+  },
+  {
+    // CLI scripts one-shot — console.* autorisé (pas de logger Winston dans
+    // un script run-and-exit, lancé manuellement).
+    files: ["scripts/**/*.js", "seed.js", "fix-transport.js"],
+    rules: {
+      "no-console": "off",
     },
   },
   {

@@ -1,5 +1,6 @@
 const swaggerJsdoc = require("swagger-jsdoc");
 const swaggerUi = require("swagger-ui-express");
+const logger = require("../utils/logger");
 
 const options = {
   definition: {
@@ -139,7 +140,7 @@ function setupSwagger(app) {
   if (process.env.NODE_ENV === "production") {
     // En production : protéger /api-docs derrière une auth basique optionnelle
     // Pour l'instant on l'expose, à restreindre selon les besoins
-    console.log("📄 Swagger UI disponible sur /api-docs");
+    logger.info("📄 Swagger UI disponible sur /api-docs");
   }
 
   app.use(

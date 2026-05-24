@@ -6,6 +6,8 @@
  * When not configured, all calls are no-ops — app works normally without push.
  */
 
+const logger = require("../utils/logger");
+
 let _messaging = null;
 
 (function initFirebase() {
@@ -17,9 +19,9 @@ let _messaging = null;
       admin.initializeApp({ credential: admin.credential.cert(JSON.parse(raw)) });
     }
     _messaging = admin.messaging();
-    console.log("[PushNotification] Firebase Admin SDK initialisé");
+    logger.info("[PushNotification] Firebase Admin SDK initialisé");
   } catch (err) {
-    console.warn("[PushNotification] Firebase non disponible :", err.message);
+    logger.warn("[PushNotification] Firebase non disponible :", err.message);
   }
 })();
 
@@ -40,7 +42,7 @@ async function sendPush({ token, title, body, data = {} }) {
     });
     return { success: true, messageId };
   } catch (err) {
-    console.warn("[PushNotification] Envoi échoué :", err.message);
+    logger.warn("[PushNotification] Envoi échoué :", err.message);
     return { error: err.message };
   }
 }
@@ -57,7 +59,7 @@ async function notifyPatient({ userId, title, body, data = {} }) {
     if (!user?.fcmToken) return;
     return sendPush({ token: user.fcmToken, title, body, data });
   } catch (err) {
-    console.warn("[PushNotification] notifyPatient échoué :", err.message);
+    logger.warn("[PushNotification] notifyPatient échoué :", err.message);
   }
 }
 
@@ -72,7 +74,7 @@ async function notifyPatientByEmail({ email, title, body, data = {} }) {
     if (!user?.fcmToken) return;
     return sendPush({ token: user.fcmToken, title, body, data });
   } catch (err) {
-    console.warn("[PushNotification] notifyPatientByEmail échoué :", err.message);
+    logger.warn("[PushNotification] notifyPatientByEmail échoué :", err.message);
   }
 }
 

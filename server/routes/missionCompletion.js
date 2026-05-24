@@ -5,6 +5,7 @@ const express = require("express");
 const router = express.Router();
 const { protect } = require("../middleware/auth");
 const Intervention = require("../models/Intervention");
+const logger = require("../utils/logger");
 const {
   evaluateMissionCompletion,
   suggestMissionCompletion,
@@ -17,7 +18,7 @@ const {
 // Helper erreur
 const err = (res, e) => {
   if (e.status) return res.status(e.status).json({ message: e.message });
-  console.error(e);
+  logger.error(e);
   return res.status(500).json({ message: e.message || "Erreur serveur" });
 };
 
