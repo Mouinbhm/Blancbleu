@@ -15,11 +15,25 @@ const { nanoid } = require("nanoid");
 
 const als = new AsyncLocalStorage();
 
+// Sentry est optionnel — on évite de require dur le module si pas installé/init.
+let _sentry = null;
+try {
+  _sentry = require("@sentry/node");
+} catch {
+  // Sentry pas dispo — pas de tag, c'est tout.
+}
+
 function requestContext(req, res, next) {
   const requestId = req.headers["x-request-id"] || nanoid(10);
   // Echo back pour permettre au client (et aux navigateurs/proxies) de
   // corréler une réponse aux logs serveur.
   res.setHeader("x-request-id", requestId);
+
+  // Tag Sentry — uniquement si DSN configuré (Sentry.getClient() retourne undefined sinon)
+  if (_sentry?.getClient?.()) {
+    _sentry.setTag("requestId", requestId);
+  }
+
   // userId : populé seulement après le middleware `protect`, donc souvent
   // absent ici ; le record peut être enrichi plus tard si besoin.
   als.run({ requestId, userId: req.user?._id }, () => next());

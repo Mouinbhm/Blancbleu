@@ -9,6 +9,11 @@ const cookieLib = require("cookie");
 const { Server } = require("socket.io");
 require("dotenv").config();
 
+// Sentry — init tout en haut, avant les imports des middlewares qui peuvent
+// throw au require-time. No-op si SENTRY_DSN n'est pas défini.
+const { initSentry, Sentry } = require("./utils/sentry");
+const _sentryEnabled = !!initSentry();
+
 const logger = require("./utils/logger");
 const httpLogger = require("./middleware/httpLogger");
 const { healthHandler } = require("./utils/healthCheck");
@@ -198,6 +203,12 @@ if (process.env.NODE_ENV !== "production") {
 // ─── Health ────────────────────────────────────────────────────────────────────
 app.get("/api/health", healthHandler);
 app.use((req, res) => res.status(404).json({ message: "Route non trouvée" }));
+
+// Sentry doit voir les erreurs AVANT notre errorHandler custom (qui les
+// transforme en réponse JSON et termine la chaîne).
+if (_sentryEnabled) {
+  Sentry.setupExpressErrorHandler(app);
+}
 app.use(errorHandler);
 
 // ─── Export pour tests ────────────────────────────────────────────────────────
