@@ -5,7 +5,8 @@
   "description": "Monorepo BlancBleu : server (Node) + client (React) + ai-service (Python) + 2 apps Flutter — tooling racine (Husky, lint-staged, Playwright E2E).",
   "scripts": {
     "prepare": "husky",
-    "e2e": "playwright test",
+    "e2e": "playwright test --config=e2e/playwright.config.js",
+    "e2e:install": "playwright install chromium",
     "lint:server": "npm --prefix server run lint",
     "lint:client": "npm --prefix client run lint",
     "lint": "npm run lint:server && npm run lint:client",
@@ -13,6 +14,7 @@
     "test:client": "npm --prefix client test -- --watchAll=false"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.5"
   }
