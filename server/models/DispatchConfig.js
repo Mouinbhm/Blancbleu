@@ -20,6 +20,14 @@ const DEFAULT_WEIGHTS = {
   punctualityHistory: 0.05,
 };
 
+// Defaults SAFE : auto-dispatch désactivé, et si activé → validation humaine obligatoire.
+// Voir docs/auto-dispatch.md pour les garde-fous.
+const DEFAULT_AUTODISPATCH = {
+  enabled:         false,
+  scoreThreshold:  80,
+  requireApproval: true,
+};
+
 const dispatchConfigSchema = new mongoose.Schema(
   {
     _id:       { type: String, default: "default" },
@@ -31,6 +39,11 @@ const dispatchConfigSchema = new mongoose.Schema(
       traffic:            { type: Number, default: DEFAULT_WEIGHTS.traffic,            min: 0, max: 1 },
       medicalPriority:    { type: Number, default: DEFAULT_WEIGHTS.medicalPriority,    min: 0, max: 1 },
       punctualityHistory: { type: Number, default: DEFAULT_WEIGHTS.punctualityHistory, min: 0, max: 1 },
+    },
+    autoDispatch: {
+      enabled:         { type: Boolean, default: DEFAULT_AUTODISPATCH.enabled },
+      scoreThreshold:  { type: Number,  default: DEFAULT_AUTODISPATCH.scoreThreshold, min: 50, max: 100 },
+      requireApproval: { type: Boolean, default: DEFAULT_AUTODISPATCH.requireApproval },
     },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },
@@ -65,5 +78,6 @@ dispatchConfigSchema.pre(["findOneAndUpdate", "updateOne"], function (next) {
 
 const DispatchConfig = mongoose.model("DispatchConfig", dispatchConfigSchema);
 
-DispatchConfig.DEFAULT_WEIGHTS = DEFAULT_WEIGHTS;
+DispatchConfig.DEFAULT_WEIGHTS      = DEFAULT_WEIGHTS;
+DispatchConfig.DEFAULT_AUTODISPATCH = DEFAULT_AUTODISPATCH;
 module.exports = DispatchConfig;

@@ -100,6 +100,7 @@
     "stripe": "^22.1.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
+    "web-push": "^3.6.7",
     "winston": "^3.19.0",
     "xss": "^1.0.15"
   },

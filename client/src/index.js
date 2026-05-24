@@ -7,9 +7,13 @@ import App from "./App";
 import { queryClient } from "./lib/queryClient";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { initSentry } from "./lib/sentry";
+import { initServiceWorker } from "./serviceWorkerRegistration";
 
 // Init Sentry au tout début (no-op sans REACT_APP_SENTRY_DSN)
 initSentry();
+
+// PWA Service Worker (no-op en dev — voir serviceWorkerRegistration.js)
+initServiceWorker();
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(

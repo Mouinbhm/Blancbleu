@@ -5,7 +5,9 @@ import { useAuth } from "../../context/AuthContext";
 import useSocket from "../../hooks/useSocket";
 import { useSocketSync } from "../../hooks/useSocketSync";
 import useNotifications from "../../hooks/useNotifications";
+import { useAutoDispatchQueueCount } from "../../hooks/queries/useAutoDispatchQueue";
 import DispatcherChat from "./DispatcherChat";
+import PushNotificationsToggle from "../PushNotificationsToggle";
 import api from "../../services/api";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -15,8 +17,10 @@ import api from "../../services/api";
 const NAV_OPERATIONS = [
   { path: "/dashboard",       icon: "dashboard",       label: "Tableau de bord" },
   { path: "/transports",      icon: "directions_car",  label: "Transports"      },
+  { path: "/auto-dispatch",   icon: "smart_toy",       label: "Auto-dispatch", badgeKey: "autoDispatch" },
   { path: "/planning",        icon: "calendar_month",  label: "Planning"        },
   { path: "/suivi-en-direct", icon: "location_on",     label: "Suivi en direct" },
+  { path: "/carte-analytique",icon: "local_fire_department", label: "Heatmap"   },
   { path: "/shifts",          icon: "schedule",        label: "Shifts"          },
   { path: "/patients",        icon: "personal_injury", label: "Patients"        },
 ];
@@ -47,6 +51,8 @@ const pageTitles = {
   "/suivi-en-direct": "Suivi en direct — Positions GPS",
   "/shifts":          "Shifts — Activité des chauffeurs",
   "/admin/dispatch-config": "Pondérations IA — Scoring dispatch",
+  "/auto-dispatch":         "Auto-dispatch — File de validation",
+  "/carte-analytique":      "Heatmap — Densité des transports",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -225,6 +231,9 @@ export default function Layout() {
   })();
 
   const totalUnread = allNotifs.filter((n) => !n.read).length;
+
+  // Badge compteur auto-dispatch (file de validation HITL)
+  const { data: autoDispatchCount = 0 } = useAutoDispatchQueueCount();
 
   // ── Fermeture clic extérieur ──────────────────────────────────────────────
   useEffect(() => {
@@ -469,6 +478,11 @@ export default function Layout() {
                   {totalUnread}
                 </span>
               )}
+              {item.badgeKey === "autoDispatch" && autoDispatchCount > 0 && (
+                <span className="bg-amber-500 text-white text-xs font-mono font-bold px-1.5 py-0.5 rounded-full">
+                  {autoDispatchCount}
+                </span>
+              )}
             </NavLink>
           ))}
 
@@ -551,6 +565,8 @@ export default function Layout() {
               <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>logout</span>
             </button>
           </div>
+          <PushNotificationsToggle />
+
           <div className="flex items-center gap-2 px-1">
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${connected ? "bg-success animate-pulse" : "bg-slate-600"}`} />
             <span className="text-slate-600 font-mono" style={{ fontSize: "9px", letterSpacing: "0.1em" }}>

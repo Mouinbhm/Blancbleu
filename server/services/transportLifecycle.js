@@ -216,6 +216,28 @@ async function planifierTransport(transportId, utilisateur) {
     numero: transport.numero,
     date: transport.dateTransport,
   });
+
+  // ── Trigger auto-dispatch best-effort si activé en config ──────────────────
+  // Le worker re-vérifie l'éligibilité au moment du run + idempotence stricte
+  // (skip si déjà assigné ou pending existe), donc on peut pousser sans risque.
+  setImmediate(async () => {
+    try {
+      const DispatchConfig = require("../models/DispatchConfig");
+      const cfg = await DispatchConfig.findById("default").lean();
+      if (!cfg?.autoDispatch?.enabled) return;
+
+      const { queues, QUEUES } = require("../queues");
+      const q = queues[QUEUES.AUTODISPATCH];
+      if (!q) return;
+      await q.add("eval", { transportId: String(transportId) }, {
+        jobId: `autodispatch:${transportId}`, // dédoublonnage natif
+      });
+      logger.debug("[lifecycle] job auto-dispatch enqueued", { transportId });
+    } catch (err) {
+      logger.warn("[lifecycle] auto-dispatch enqueue échoué", { err: err.message });
+    }
+  });
+
   return { transport };
 }
 
