@@ -39,6 +39,39 @@ const upload = multer({
 router.post( "/pmt/extract",           protect, authorize(...STAFF), upload.single("pmt"), ctrl.extrairePMT);
 router.patch("/pmt/validate/:transportId", protect, authorize(...STAFF), ctrl.validerPMT);
 
+// ── Auto-dispatch HITL — routes statiques (avant /:id pour éviter le shadow) ──
+const autoDispatchCtrl = require("../controllers/autoDispatchController");
+
+/**
+ * @openapi
+ * /api/ai/dispatch/auto/queue:
+ *   get:
+ *     tags: [AI]
+ *     summary: File des propositions auto-dispatch en attente de validation
+ *     responses:
+ *       200: { description: Liste paginée des propositions pending }
+ */
+router.get("/dispatch/auto/queue",       protect, authorize(...STAFF), autoDispatchCtrl.getQueue);
+router.get("/dispatch/auto/queue/count", protect, authorize(...STAFF), autoDispatchCtrl.getQueueCount);
+
+/**
+ * @openapi
+ * /api/ai/dispatch/auto/{recId}/accept:
+ *   post:
+ *     tags: [AI]
+ *     summary: Valide une proposition (assigne le véhicule + chauffeur recommandés)
+ */
+router.post("/dispatch/auto/:recId/accept", protect, authorize(...STAFF), autoDispatchCtrl.accept);
+
+/**
+ * @openapi
+ * /api/ai/dispatch/auto/{recId}/reject:
+ *   post:
+ *     tags: [AI]
+ *     summary: Rejette une proposition (raison obligatoire, min 3 caractères)
+ */
+router.post("/dispatch/auto/:recId/reject", protect, authorize(...STAFF), autoDispatchCtrl.reject);
+
 // ── Dispatch — routes statiques avant /:id ────────────────────────────────────
 
 /**

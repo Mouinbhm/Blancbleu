@@ -25,4 +25,10 @@ export const aiService = {
 
   // Module 3 — Optimisation de tournée
   optimiserTournee: (data) => api.post("/ai/routing/optimize", data),
+
+  // Module 4 — Auto-dispatch HITL (file de validation dispatcher)
+  getAutoDispatchQueue:       (limit = 50)    => api.get(`/ai/dispatch/auto/queue?limit=${limit}`),
+  getAutoDispatchQueueCount:  ()              => api.get("/ai/dispatch/auto/queue/count"),
+  acceptAutoDispatchProposal: (recId)         => api.post(`/ai/dispatch/auto/${recId}/accept`),
+  rejectAutoDispatchProposal: (recId, raison) => api.post(`/ai/dispatch/auto/${recId}/reject`, { raison }),
 };

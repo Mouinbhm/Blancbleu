@@ -15,6 +15,7 @@ import api from "../../services/api";
 const NAV_OPERATIONS = [
   { path: "/dashboard",       icon: "dashboard",       label: "Tableau de bord" },
   { path: "/transports",      icon: "directions_car",  label: "Transports"      },
+  { path: "/auto-dispatch",   icon: "smart_toy",       label: "Auto-dispatch", badgeKey: "autoDispatch" },
   { path: "/planning",        icon: "calendar_month",  label: "Planning"        },
   { path: "/suivi-en-direct", icon: "location_on",     label: "Suivi en direct" },
   { path: "/shifts",          icon: "schedule",        label: "Shifts"          },
@@ -47,6 +48,7 @@ const pageTitles = {
   "/suivi-en-direct": "Suivi en direct — Positions GPS",
   "/shifts":          "Shifts — Activité des chauffeurs",
   "/admin/dispatch-config": "Pondérations IA — Scoring dispatch",
+  "/auto-dispatch":         "Auto-dispatch — File de validation",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
