@@ -5,6 +5,7 @@ const ctrl       = require("../controllers/personnelAuthController");
 const { uploadAvatar, uploadDocument } = require("../middleware/upload");
 
 router.post("/login",           ctrl.login);
+router.post("/refresh",         ctrl.refresh);
 router.post("/change-password", requirePersonnel, ctrl.changePassword);
 router.patch("/profile",        requirePersonnel, ctrl.updateProfile);
 router.post("/avatar",          requirePersonnel, (req, res, next) => {

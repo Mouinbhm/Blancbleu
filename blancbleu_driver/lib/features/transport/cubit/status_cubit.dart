@@ -2,6 +2,24 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/local_database.dart';
+import '../../../services/gps_service.dart';
+
+// Statuts pendant lesquels le transport est "actif" du point de vue du
+// chauffeur : son GPS doit être routé vers la room transport:{id} pour que
+// le patient le voie bouger en temps réel.
+const _kActiveStatuses = {
+  'EN_ROUTE_TO_PICKUP',
+  'ARRIVED_AT_PICKUP',
+  'PATIENT_ON_BOARD',
+  'ARRIVED_AT_DESTINATION',
+  'WAITING_AT_DESTINATION',
+  'RETURN_TO_BASE',
+};
+
+// Statuts terminaux : le transport n'est plus l'actif courant.
+const _kTerminalStatuses = {
+  'COMPLETED', 'CANCELLED', 'NO_SHOW', 'FAILED', 'BILLED', 'PAID',
+};
 
 // ── States ─────────────────────────────────────────────────────────────────
 
@@ -54,6 +72,15 @@ class StatusCubit extends Cubit<StatusState> {
     emit(StatusUpdating(newStatus));
     // Optimistic update
     currentStatus = newStatus;
+
+    // Sprint M1 — bascule le transport actif côté GpsService pour que chaque
+    // emit driver:location porte le bon transportId (le serveur route ensuite
+    // vers la room transport:{id} pour le suivi patient).
+    if (_kActiveStatuses.contains(newStatus)) {
+      GpsService.instance.setActiveTransport(transportId);
+    } else if (_kTerminalStatuses.contains(newStatus)) {
+      GpsService.instance.setActiveTransport(null);
+    }
 
     try {
       await ApiClient.instance.updateTransportStatus(transportId, newStatus, note: note);

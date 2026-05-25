@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/constants.dart';
@@ -8,10 +9,17 @@ class ApiClient {
   final _storage = const FlutterSecureStorage();
 
   /// Set this callback from the app root to handle expired / invalid tokens.
-  /// It will be called once when any API call receives a 401 or 403 response.
+  /// Called when refresh fails (or on 403 = vraiment interdit).
   static void Function()? onUnauthorized;
 
   bool _loggedOut = false; // prevent multiple logout calls in rapid succession
+
+  // Single-flight refresh : si plusieurs requêtes échouent en 401 en parallèle,
+  // une seule tentative de refresh est lancée ; les autres attendent son résultat.
+  static Completer<bool>? _refreshCompleter;
+
+  // Marker dans RequestOptions.extra pour éviter de retry indéfiniment.
+  static const String _retriedKey = '_bb_retried';
 
   ApiClient._() {
     _dio = Dio(BaseOptions(
@@ -27,16 +35,66 @@ class ApiClient {
         if (token != null) options.headers['Authorization'] = 'Bearer $token';
         handler.next(options);
       },
-      onError: (err, handler) {
+      onError: (err, handler) async {
         final status = err.response?.statusCode;
-        if ((status == 401 || status == 403) && !_loggedOut) {
-          _loggedOut = true;
-          // Clear stored credentials and notify the app to go back to login
-          _storage.delete(key: AppConstants.tokenKey);
-          _storage.delete(key: AppConstants.userKey);
-          onUnauthorized?.call();
+        final ro = err.requestOptions;
+        final path = ro.path;
+
+        // 403 = interdit (rôle, ressource), pas expiré → logout direct.
+        if (status == 403) {
+          await _forceLogout();
+          return handler.next(err);
         }
-        handler.next(err);
+
+        // 401 sur le endpoint /refresh lui-même → logout (refresh KO ou
+        // révoqué). Sans ce garde, on boucle.
+        final isRefreshCall = path.endsWith('/personnel/auth/refresh');
+        final alreadyRetried = ro.extra[_retriedKey] == true;
+
+        if (status != 401 || isRefreshCall || alreadyRetried) {
+          return handler.next(err);
+        }
+
+        // Tente le refresh (single-flight).
+        final ok = await _ensureRefreshed();
+        if (!ok) {
+          await _forceLogout();
+          return handler.next(err);
+        }
+
+        // Rejoue la requête originale avec le nouveau token.
+        try {
+          final newToken = await _storage.read(key: AppConstants.tokenKey);
+          if (newToken == null) {
+            await _forceLogout();
+            return handler.next(err);
+          }
+          final retryOptions = Options(
+            method:  ro.method,
+            headers: {...ro.headers, 'Authorization': 'Bearer $newToken'},
+            contentType:     ro.contentType,
+            responseType:    ro.responseType,
+            sendTimeout:     ro.sendTimeout,
+            receiveTimeout:  ro.receiveTimeout,
+            extra: {...ro.extra, _retriedKey: true},
+            validateStatus:  ro.validateStatus,
+          );
+          final response = await _dio.request<dynamic>(
+            ro.path,
+            data:            ro.data,
+            queryParameters: ro.queryParameters,
+            options:         retryOptions,
+          );
+          return handler.resolve(response);
+        } on DioException catch (e) {
+          // Si le retry échoue à nouveau en 401 → logout (refresh ne suffit plus).
+          if (e.response?.statusCode == 401) {
+            await _forceLogout();
+          }
+          return handler.next(e);
+        } catch (_) {
+          return handler.next(err);
+        }
       },
     ));
   }
@@ -45,6 +103,61 @@ class ApiClient {
 
   /// Call after a successful login so the 401-guard is reset for the new session.
   void resetSession() => _loggedOut = false;
+
+  // ── Refresh single-flight ─────────────────────────────────────────────────
+  Future<bool> _ensureRefreshed() async {
+    if (_refreshCompleter != null) return _refreshCompleter!.future;
+    final c = Completer<bool>();
+    _refreshCompleter = c;
+    try {
+      final raw = await _storage.read(key: AppConstants.refreshKey);
+      if (raw == null || raw.isEmpty) {
+        c.complete(false);
+        return false;
+      }
+      // Dio dédié SANS interceptor pour éviter de re-déclencher le refresh.
+      final plain = Dio(BaseOptions(
+        baseUrl: AppConstants.baseUrl,
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
+        headers: {'Content-Type': 'application/json'},
+      ));
+      final res = await plain.post(
+        '/api/v1/personnel/auth/refresh',
+        data: {'refreshToken': raw},
+        options: Options(validateStatus: (s) => s != null && s < 500),
+      );
+      if (res.statusCode == 200 && res.data is Map) {
+        final body = res.data as Map<String, dynamic>;
+        final newAccess  = body['token']        as String?;
+        final newRefresh = body['refreshToken'] as String?;
+        if (newAccess != null && newAccess.isNotEmpty) {
+          await _storage.write(key: AppConstants.tokenKey, value: newAccess);
+          if (newRefresh != null && newRefresh.isNotEmpty) {
+            await _storage.write(key: AppConstants.refreshKey, value: newRefresh);
+          }
+          c.complete(true);
+          return true;
+        }
+      }
+      c.complete(false);
+      return false;
+    } catch (_) {
+      c.complete(false);
+      return false;
+    } finally {
+      _refreshCompleter = null;
+    }
+  }
+
+  Future<void> _forceLogout() async {
+    if (_loggedOut) return;
+    _loggedOut = true;
+    await _storage.delete(key: AppConstants.tokenKey);
+    await _storage.delete(key: AppConstants.refreshKey);
+    await _storage.delete(key: AppConstants.userKey);
+    onUnauthorized?.call();
+  }
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   Future<Map<String, dynamic>> login(String email, String password) async {

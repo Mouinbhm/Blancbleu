@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -13,11 +14,16 @@ class ApiService {
 
   static const _timeout    = Duration(seconds: 15);
   static const String _tokenKey   = 'bb_token';
+  static const String _refreshKey = 'bb_refresh';
   static const String _patientKey = 'bb_patient';
 
   static const _secure = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
+
+  // Single-flight refresh : si N requêtes échouent en 401 en parallèle, un
+  // SEUL appel /refresh est lancé, les autres attendent ce Completer.
+  static Completer<bool>? _refreshCompleter;
 
   // ── Token / session ────────────────────────────────────────────────────────
 
@@ -27,13 +33,41 @@ class ApiService {
   static Future<String?> getToken() =>
       _secure.read(key: _tokenKey);
 
+  static Future<void> _saveRefresh(String t) =>
+      _secure.write(key: _refreshKey, value: t);
+
+  static Future<String?> _getRefresh() =>
+      _secure.read(key: _refreshKey);
+
   static Future<void> clearSession() async {
     await _secure.delete(key: _tokenKey);
+    await _secure.delete(key: _refreshKey);
     final p = await SharedPreferences.getInstance();
     p.remove(_patientKey);
   }
 
-  static Future<bool> isLoggedIn() async => (await getToken()) != null;
+  /// Sprint M1 — Valide la session au démarrage.
+  /// Avant : retournait simplement `(token != null)` → l'écran d'accueil
+  /// s'affichait avec un token expiré, puis 401 sur le premier appel.
+  /// Maintenant : tente un appel léger authentifié (GET /me) qui passe par
+  /// `_request` et déclenche le refresh transparent si nécessaire. Si le
+  /// refresh échoue → clearSession + false.
+  static Future<bool> isLoggedIn() async {
+    final token = await getToken();
+    if (token == null) return false;
+    try {
+      await getMesDonnees(); // 401 → _request tente refresh → si KO throw
+      return true;
+    } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('SESSION_EXPIRED')) {
+        // Refresh KO (déjà clearSession dans _request) → repli login.
+        return false;
+      }
+      // Erreur réseau : on garde la session optimiste, l'utilisateur retentera.
+      return true;
+    }
+  }
 
   static Future<void> savePatient(Map<String, dynamic> patient) async =>
       (await SharedPreferences.getInstance())
@@ -61,6 +95,71 @@ class ApiService {
     return data;
   }
 
+  // ── Refresh single-flight ─────────────────────────────────────────────────
+  static Future<bool> _ensureRefreshed() async {
+    if (_refreshCompleter != null) return _refreshCompleter!.future;
+    final c = Completer<bool>();
+    _refreshCompleter = c;
+    try {
+      final raw = await _getRefresh();
+      if (raw == null || raw.isEmpty) {
+        c.complete(false);
+        return false;
+      }
+      final res = await http.post(
+        Uri.parse('$_base/refresh'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refreshToken': raw}),
+      ).timeout(_timeout, onTimeout: () => http.Response('', 408));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final newAccess  = data['accessToken'] as String?;
+        final newRefresh = data['refreshToken'] as String?;
+        if (newAccess != null && newAccess.isNotEmpty) {
+          await saveToken(newAccess);
+          if (newRefresh != null && newRefresh.isNotEmpty) {
+            await _saveRefresh(newRefresh);
+          }
+          c.complete(true);
+          return true;
+        }
+      }
+      c.complete(false);
+      return false;
+    } catch (_) {
+      c.complete(false);
+      return false;
+    } finally {
+      _refreshCompleter = null;
+    }
+  }
+
+  /// Enveloppe un appel http qui peut retourner 401. Si 401, tente UN refresh
+  /// (single-flight) puis rejoue la requête une fois. Si le refresh échoue ou
+  /// si le retry est encore 401 → clearSession + throw SESSION_EXPIRED.
+  ///
+  /// Le closure `makeRequest` est rappelé tel quel pour le retry — il doit donc
+  /// lire le token au moment de l'appel (via _headers()), pas en amont.
+  static Future<http.Response> _request(
+    Future<http.Response> Function() makeRequest,
+  ) async {
+    var res = await makeRequest();
+    if (res.statusCode != 401) return res;
+
+    final ok = await _ensureRefreshed();
+    if (!ok) {
+      await clearSession();
+      throw Exception('SESSION_EXPIRED');
+    }
+    res = await makeRequest();
+    if (res.statusCode == 401) {
+      // Le refresh a abouti mais le serveur refuse toujours → session morte.
+      await clearSession();
+      throw Exception('SESSION_EXPIRED');
+    }
+    return res;
+  }
+
   // ── Auth ───────────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> login(String email, String password) async {
@@ -71,6 +170,10 @@ class ApiService {
     ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible. Vérifiez votre connexion.'));
     final data = _parse(res);
     await saveToken(data['accessToken'] as String);
+    final refresh = data['refreshToken'] as String?;
+    if (refresh != null && refresh.isNotEmpty) {
+      await _saveRefresh(refresh);
+    }
     await savePatient(data['patient'] as Map<String, dynamic>);
     return data;
   }
@@ -105,6 +208,10 @@ class ApiService {
     ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible. Vérifiez votre connexion.'));
     final data = _parse(res);
     await saveToken(data['accessToken'] as String);
+    final refresh = data['refreshToken'] as String?;
+    if (refresh != null && refresh.isNotEmpty) {
+      await _saveRefresh(refresh);
+    }
     await savePatient(data['patient'] as Map<String, dynamic>);
     return data;
   }
@@ -112,10 +219,10 @@ class ApiService {
   // ── Dashboard ──────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> getDashboard() async {
-    final res = await http.get(
+    final res = await _request(() async => http.get(
       Uri.parse('$_base/dashboard'),
       headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
+    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
     return _parse(res);
   }
 
@@ -124,8 +231,8 @@ class ApiService {
   static Future<List<dynamic>> getTransports({String? statut}) async {
     var url = '$_base/transports';
     if (statut != null) url += '?statut=$statut';
-    final res = await http.get(Uri.parse(url), headers: await _headers())
-        .timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
+    final res = await _request(() async => http.get(Uri.parse(url), headers: await _headers())
+        .timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
     return _parse(res)['transports'] as List<dynamic>;
   }
 
@@ -162,30 +269,30 @@ class ApiService {
   // ── Transport par id ───────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> getTransportById(String id) async {
-    final res = await http.get(
+    final res = await _request(() async => http.get(
       Uri.parse('$_base/transports/$id'),
       headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
+    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
     return _parse(res)['transport'] as Map<String, dynamic>;
   }
 
   // ── Tracking ───────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> getTracking(String id) async {
-    final res = await http.get(
+    final res = await _request(() async => http.get(
       Uri.parse('$_base/transports/$id/tracking'),
       headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
+    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
     return _parse(res);
   }
 
   // ── Factures ───────────────────────────────────────────────────────────────
 
   static Future<List<dynamic>> getFactures() async {
-    final res = await http.get(
+    final res = await _request(() async => http.get(
       Uri.parse('$_base/factures'),
       headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
+    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
     return _parse(res)['factures'] as List<dynamic>;
   }
 
@@ -320,8 +427,8 @@ class ApiService {
   }) async {
     var url = '$_notifBase?page=$page&limit=$limit';
     if (read != null) url += '&read=$read';
-    final res = await http.get(Uri.parse(url), headers: await _headers())
-        .timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
+    final res = await _request(() async => http.get(Uri.parse(url), headers: await _headers())
+        .timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
     return _parse(res);
   }
 
@@ -431,11 +538,10 @@ class ApiService {
 
   // GET /api/patient/me — récupère le profil avec les champs RGPD
   static Future<Map<String, dynamic>> getMesDonnees() async {
-    final res = await http.get(
+    final res = await _request(() async => http.get(
       Uri.parse('$_base/me'),
       headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    if (res.statusCode == 401) throw Exception('SESSION_EXPIRED');
+    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
     if (res.statusCode >= 400) {
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       throw Exception(data['message'] ?? 'Erreur serveur');

@@ -12,6 +12,7 @@ const Transport      = require('../models/Transport')
 const Facture        = require('../models/Facture')
 const Prescription   = require('../models/Prescription')
 const RevokedToken   = require('../models/RevokedToken')
+const mobileTokenService = require('../services/mobileTokenService')
 const logger         = require('../utils/logger')
 const { emitPatientCreated, emitTransportCreated, emitPrescriptionCreated, emitFactureUpdated } = require('../services/socketService')
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
@@ -126,11 +127,14 @@ async function buildFactureFilter(userId, userEmail) {
   return orConditions.length === 1 ? orConditions[0] : { $or: orConditions }
 }
 
+// Sprint M1 : access token court (1h). Le refresh prend le relais via
+// POST /api/patient/refresh. Conservée pour les éventuels chemins legacy
+// qui ne refresh pas (ex. signature dans updateProfile si besoin).
 function signToken(id) {
   return jwt.sign(
     { id, jti: randomBytes(16).toString('hex') },
     process.env.JWT_SECRET,
-    { expiresIn: '7d' },
+    { expiresIn: '1h' },
   )
 }
 
@@ -266,8 +270,10 @@ router.post('/register', async (req, res) => {
     // Notifier le dashboard dispatcher en temps réel
     emitPatientCreated(patientDoc)
 
-    const accessToken = signToken(user._id)
-    res.status(201).json({ accessToken, patient: patientPayload(user) })
+    const { accessToken, refreshToken, expiresIn } = await mobileTokenService.issueTokens({
+      audience: 'patient', entity: user, req,
+    })
+    res.status(201).json({ accessToken, refreshToken, expiresIn, patient: patientPayload(user) })
   } catch (err) {
     logger.error('[patient/register]', { err: err.message })
     res.status(500).json({ message: safeMsg(err) })
@@ -304,10 +310,49 @@ router.post('/login', async (req, res) => {
       logger.warn('[patient/login] auto-sync Patient échoué', { err: e.message })
     )
 
-    const accessToken = signToken(user._id)
-    res.json({ accessToken, patient: patientPayload(user) })
+    const { accessToken, refreshToken, expiresIn } = await mobileTokenService.issueTokens({
+      audience: 'patient', entity: user, req,
+    })
+    res.json({ accessToken, refreshToken, expiresIn, patient: patientPayload(user) })
   } catch (err) {
     logger.error('[patient/login]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
+  }
+})
+
+// ── ROUTE 2bis : POST /api/patient/refresh ───────────────────────────────────
+// Body : { refreshToken }
+// Rotation stricte : l'ancien refresh est révoqué immédiatement.
+router.post('/refresh', async (req, res) => {
+  try {
+    const { refreshToken: rawRefresh } = req.body || {}
+    if (!rawRefresh) {
+      return res.status(400).json({ message: 'refreshToken requis' })
+    }
+
+    const result = await mobileTokenService.rotateTokens({
+      audience: 'patient',
+      rawRefreshToken: rawRefresh,
+      loadEntity: async (userId) => {
+        const u = await User.findById(userId).select('-password')
+        if (!u || !u.actif || u.role !== 'patient') return null
+        return u
+      },
+      req,
+    })
+
+    if (!result) {
+      return res.status(401).json({ message: 'Refresh token invalide ou expiré' })
+    }
+
+    res.json({
+      accessToken:  result.accessToken,
+      refreshToken: result.refreshToken,
+      expiresIn:    result.expiresIn,
+      patient:      patientPayload(result.entity),
+    })
+  } catch (err) {
+    logger.error('[patient/refresh]', { err: err.message })
     res.status(500).json({ message: safeMsg(err) })
   }
 })
@@ -323,6 +368,11 @@ router.post('/logout', authPatient, async (req, res) => {
         jti:       decoded.jti,
         expiresAt: new Date(decoded.exp * 1000),
       })
+    }
+    // Best-effort : révoque le refresh fourni en body (logout single-device).
+    const { refreshToken: rawRefresh } = req.body || {}
+    if (rawRefresh) {
+      await mobileTokenService.revokeToken(rawRefresh).catch(() => {})
     }
     res.json({ message: 'Déconnexion réussie' })
   } catch (err) {

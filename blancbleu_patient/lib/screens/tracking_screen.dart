@@ -54,6 +54,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
   void initState() {
     super.initState();
     _load();
+    // _connectSocket est async (lecture du token avant connexion). On l'invoque
+    // sans await ici — si la connexion échoue, le fallback polling prend le relais.
     _connectSocket();
     // Fallback polling — reprend si socket déconnecté
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
@@ -72,19 +74,39 @@ class _TrackingScreenState extends State<TrackingScreen> {
     super.dispose();
   }
 
-  void _connectSocket() {
+  Future<void> _connectSocket() async {
     final base = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:5000/api/patient';
     final serverUrl = base.replaceAll(RegExp(r'/api.*'), '');
 
-    _socket = IO.io(serverUrl, IO.OptionBuilder()
+    // Le serveur exige un JWT au handshake (Server.js io.use middleware) —
+    // sans setAuth, la connexion est rejetée silencieusement et le patient
+    // ne reçoit JAMAIS les events temps réel (fallback polling uniquement).
+    final token = await ApiService.getToken();
+    if (!mounted) return;
+
+    final optionsBuilder = IO.OptionBuilder()
       .setTransports(['websocket', 'polling'])
       .enableReconnection()
-      .setReconnectionDelay(2000)
-      .build());
+      .setReconnectionDelay(2000);
+    if (token != null && token.isNotEmpty) {
+      optionsBuilder.setAuth({'token': token});
+    }
+    _socket = IO.io(serverUrl, optionsBuilder.build());
 
     _socket!.onConnect((_) {
       // Rejoindre la room du transport pour recevoir GPS + statut en temps réel
       _socket!.emit('join:transport', widget.transportId);
+    });
+
+    // Si le handshake échoue (token invalide, expiré, refusé) on log et on
+    // laisse le fallback polling prendre le relais — pas de boucle silencieuse.
+    _socket!.onConnectError((err) {
+      // ignore: avoid_print
+      print('[tracking] socket connectError: $err');
+    });
+    _socket!.onError((err) {
+      // ignore: avoid_print
+      print('[tracking] socket error: $err');
     });
 
     // Mise à jour GPS en temps réel depuis le chauffeur

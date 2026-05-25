@@ -73,6 +73,16 @@ class GpsService {
     sio.Socket? socket;
     StreamSubscription<Position>? positionSub;
     DateTime? lastEmit;
+    // Transport actif (Sprint M1) — inclus dans chaque emit driver:location
+    // pour que le serveur route vers la room transport:{id} (suivi patient).
+    String? activeTransportId;
+
+    // setTransport : mise à jour du transport actif depuis le main isolate.
+    service.on('setTransport').listen((data) {
+      if (data == null) return;
+      final id = data['transportId'] as String?;
+      activeTransportId = (id != null && id.isNotEmpty) ? id : null;
+    });
 
     service.on('track').listen((data) async {
       if (data == null) return;
@@ -112,13 +122,14 @@ class GpsService {
         lastEmit = now;
 
         socket?.emit('driver:location', {
-          'driverId':  driverId,
-          'vehicleId': vehicleId,
-          'shiftId':   shiftId,
-          'lat':       pos.latitude,
-          'lng':       pos.longitude,
-          'speed':     pos.speed,
-          'timestamp': now.toIso8601String(),
+          'driverId':    driverId,
+          'vehicleId':   vehicleId,
+          'shiftId':     shiftId,
+          'transportId': activeTransportId,
+          'lat':         pos.latitude,
+          'lng':         pos.longitude,
+          'speed':       pos.speed,
+          'timestamp':   now.toIso8601String(),
         });
       });
     });
@@ -127,6 +138,7 @@ class GpsService {
       await positionSub?.cancel();
       socket?.disconnect();
       socket?.dispose();
+      activeTransportId = null;
       service.stopSelf();
     });
   }
@@ -174,6 +186,18 @@ class GpsService {
     _bgService.invoke('stop');
     isTracking.value = false;
     debugPrint('[GpsService] Tracking stopped');
+  }
+
+  /// Sprint M1 — Met à jour le transport actif transmis dans chaque emit
+  /// `driver:location` (clé `transportId`). Le serveur s'en sert pour router
+  /// le GPS vers la room `transport:{id}` consommée par le suivi patient.
+  ///
+  /// Appeler [setActiveTransport(id)] quand le chauffeur entame un transport
+  /// (passage en EN_ROUTE_TO_PICKUP), et [setActiveTransport(null)] à la fin
+  /// (COMPLETED / CANCELLED / NO_SHOW).
+  void setActiveTransport(String? transportId) {
+    _bgService.invoke('setTransport', {'transportId': transportId});
+    debugPrint('[GpsService] Active transport = $transportId');
   }
 
   // ── Permission helper ────────────────────────────────────────────────────
