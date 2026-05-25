@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/constants.dart';
+import 'socket_manager.dart';
 
 class ApiClient {
   static ApiClient? _instance;
@@ -136,6 +137,9 @@ class ApiClient {
           if (newRefresh != null && newRefresh.isNotEmpty) {
             await _storage.write(key: AppConstants.refreshKey, value: newRefresh);
           }
+          // Sprint M2 — propage le nouveau token au foreground socket pour
+          // éviter une déconnexion silencieuse au prochain heartbeat serveur.
+          SocketManager.instance.reauthenticate();
           c.complete(true);
           return true;
         }
