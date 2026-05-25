@@ -46,7 +46,28 @@ class ApiService {
     p.remove(_patientKey);
   }
 
-  static Future<bool> isLoggedIn() async => (await getToken()) != null;
+  /// Sprint M1 — Valide la session au démarrage.
+  /// Avant : retournait simplement `(token != null)` → l'écran d'accueil
+  /// s'affichait avec un token expiré, puis 401 sur le premier appel.
+  /// Maintenant : tente un appel léger authentifié (GET /me) qui passe par
+  /// `_request` et déclenche le refresh transparent si nécessaire. Si le
+  /// refresh échoue → clearSession + false.
+  static Future<bool> isLoggedIn() async {
+    final token = await getToken();
+    if (token == null) return false;
+    try {
+      await getMesDonnees(); // 401 → _request tente refresh → si KO throw
+      return true;
+    } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('SESSION_EXPIRED')) {
+        // Refresh KO (déjà clearSession dans _request) → repli login.
+        return false;
+      }
+      // Erreur réseau : on garde la session optimiste, l'utilisateur retentera.
+      return true;
+    }
+  }
 
   static Future<void> savePatient(Map<String, dynamic> patient) async =>
       (await SharedPreferences.getInstance())
@@ -517,11 +538,10 @@ class ApiService {
 
   // GET /api/patient/me — récupère le profil avec les champs RGPD
   static Future<Map<String, dynamic>> getMesDonnees() async {
-    final res = await http.get(
+    final res = await _request(() async => http.get(
       Uri.parse('$_base/me'),
       headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    if (res.statusCode == 401) throw Exception('SESSION_EXPIRED');
+    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
     if (res.statusCode >= 400) {
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       throw Exception(data['message'] ?? 'Erreur serveur');

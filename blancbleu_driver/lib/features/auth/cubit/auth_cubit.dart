@@ -15,11 +15,33 @@ class AuthCubit extends Cubit<AuthState> {
   Future<void> tryAutoLogin() async {
     final token = await _storage.read(key: AppConstants.tokenKey);
     final userJson = await _storage.read(key: AppConstants.userKey);
-    if (token != null && userJson != null) {
-      final user = jsonDecode(userJson) as Map<String, dynamic>;
-      emit(AuthSuccess(user: user, token: token));
-    } else {
+    if (token == null || userJson == null) {
       emit(AuthInitial());
+      return;
+    }
+    final user = jsonDecode(userJson) as Map<String, dynamic>;
+
+    // Sprint M1 — Valide la session via un appel léger authentifié plutôt
+    // que de faire confiance au token stocké. Si le token est expiré,
+    // l'interceptor du Dio tentera le refresh automatiquement (etape 2).
+    // Si le refresh échoue, _forceLogout() vide le storage et déclenche
+    // onUnauthorized → on tombera sur AuthInitial.
+    try {
+      // getActiveShift est légère et always-authenticated.
+      await ApiClient.instance.getActiveShift();
+      ApiClient.instance.resetSession();
+      emit(AuthSuccess(user: user, token: token));
+    } catch (_) {
+      // Si le refresh a échoué l'interceptor a déjà clear le storage.
+      // On vérifie : si le token a disparu → vraiment déconnecté.
+      final stillThere = await _storage.read(key: AppConstants.tokenKey);
+      if (stillThere == null) {
+        emit(AuthInitial());
+      } else {
+        // Erreur réseau (pas 401) : on reste optimiste pour offline-first,
+        // l'utilisateur retentera ses actions plus tard.
+        emit(AuthSuccess(user: user, token: token));
+      }
     }
   }
 
