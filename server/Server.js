@@ -94,6 +94,24 @@ const io = new Server(server, {
   },
 });
 
+// Sprint M2 — Redis adapter pour scaling horizontal (multi-instance).
+// Conditionné à la disponibilité de Redis : en dev/test (stub), on reste sur
+// l'adapter mémoire par défaut (instance unique). En prod multi-instance,
+// active REDIS_URL et l'adapter prend le relais automatiquement.
+try {
+  const { redis: pubBase } = require("./utils/redis");
+  if (!pubBase._stub) {
+    const { createAdapter } = require("@socket.io/redis-adapter");
+    const subClient = pubBase.duplicate();
+    io.adapter(createAdapter(pubBase, subClient));
+    logger.info("Socket.IO Redis adapter actif (multi-instance ready)");
+  } else {
+    logger.warn("Socket.IO en mode memory adapter (Redis stub) — pas de scaling horizontal");
+  }
+} catch (err) {
+  logger.warn("Socket.IO Redis adapter non initialisé", { err: err.message });
+}
+
 // Authentification Socket.IO — lit le token depuis cookie bb_access ou Authorization header
 io.use((socket, next) => {
   let raw =

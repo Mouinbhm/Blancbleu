@@ -17,13 +17,10 @@
 const TrackingPoint = require("../models/TrackingPoint");
 const DriverShift   = require("../models/DriverShift");
 const Message       = require("../models/Message");
-
-/**
- * In-memory snapshot of the latest known position for each vehicle.
- * Key: vehicleId (string)  Value: { lat, lng, speed, driverId, driverNom, shiftId, timestamp }
- * Used by index.js to push a snapshot to newly connected dispatchers/admins.
- */
-const vehiclePositions = new Map();
+// Sprint M2 — snapshot des positions vit dans Redis (cf. vehiclePositionStore)
+// pour supporter le scaling multi-instance. La Map en mémoire est conservée
+// comme fallback dans le store quand Redis n'est pas dispo.
+const vehiclePositionStore = require("./vehiclePositionStore");
 
 // Build a display name from JWT fields; fall back to email or a generic label
 function displayName(user) {
@@ -74,8 +71,11 @@ function initDriverSocket(io) {
             timestamp: new Date(),
           };
 
-          // Update in-memory snapshot (for Suivi en direct initial load)
-          if (vehicleId) vehiclePositions.set(vehicleId, posPayload);
+          // Persist snapshot (Redis si dispo, sinon Map mémoire — cf. store).
+          // Best-effort : ne bloque jamais l'emit GPS.
+          if (vehicleId) {
+            vehiclePositionStore.set(vehicleId, posPayload).catch(() => {});
+          }
 
           const STAFF_ROOMS = ["role:dispatcher", "role:admin", "role:superviseur"];
 
@@ -188,4 +188,4 @@ function initDriverSocket(io) {
   });
 }
 
-module.exports = { initDriverSocket, vehiclePositions };
+module.exports = { initDriverSocket };
