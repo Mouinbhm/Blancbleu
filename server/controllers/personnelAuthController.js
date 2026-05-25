@@ -1,20 +1,10 @@
-const jwt      = require("jsonwebtoken");
 const bcrypt   = require("bcryptjs");
 const Personnel = require("../models/Personnel");
+const mobileTokenService = require("../services/mobileTokenService");
 
-const sign = (personnel) =>
-  jwt.sign(
-    {
-      id:     personnel._id,
-      email:  personnel.email,
-      role:   personnel.role,
-      type:   "personnel",
-      nom:    personnel.nom    || "",
-      prenom: personnel.prenom || "",
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: "24h" },
-  );
+// Sprint M1 : signe un access token court (1h). Le refresh prend le relais.
+// Conservée pour les flows qui ne refresh pas (changePassword, updateProfile).
+const sign = (personnel) => mobileTokenService.signAccessToken("personnel", personnel);
 
 const personnelPayload = (p) => ({
   id:                  p._id,
@@ -52,8 +42,53 @@ const login = async (req, res) => {
     personnel.lastLogin = new Date();
     await personnel.save({ validateBeforeSave: false });
 
-    const token = sign(personnel);
-    return res.json({ token, personnel: personnelPayload(personnel) });
+    const { accessToken, refreshToken, expiresIn } = await mobileTokenService.issueTokens({
+      audience: "personnel",
+      entity:   personnel,
+      req,
+    });
+    return res.json({
+      token: accessToken,
+      refreshToken,
+      expiresIn,
+      personnel: personnelPayload(personnel),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+// POST /api/v1/personnel/auth/refresh
+// Body : { refreshToken }
+// Rotation stricte : l'ancien refresh est révoqué immédiatement.
+const refresh = async (req, res) => {
+  try {
+    const { refreshToken: rawRefresh } = req.body || {};
+    if (!rawRefresh) {
+      return res.status(400).json({ message: "refreshToken requis" });
+    }
+
+    const result = await mobileTokenService.rotateTokens({
+      audience:        "personnel",
+      rawRefreshToken: rawRefresh,
+      loadEntity:      async (userId) => {
+        const p = await Personnel.findById(userId);
+        if (!p || !p.actif) return null;
+        return p;
+      },
+      req,
+    });
+
+    if (!result) {
+      return res.status(401).json({ message: "Refresh token invalide ou expiré" });
+    }
+
+    return res.json({
+      token: result.accessToken,
+      refreshToken: result.refreshToken,
+      expiresIn: result.expiresIn,
+      personnel: personnelPayload(result.entity),
+    });
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
@@ -143,8 +178,15 @@ const uploadDocument = async (req, res) => {
 };
 
 // POST /api/v1/personnel/auth/logout
+// Body : { refreshToken? } — best-effort, on tente de révoquer le refresh
+// fourni s'il en existe un (single-device logout). Si absent, on clear juste
+// fcmToken comme avant (rétrocompat avec les anciens clients).
 const logout = async (req, res) => {
   try {
+    const { refreshToken: rawRefresh } = req.body || {};
+    if (rawRefresh) {
+      await mobileTokenService.revokeToken(rawRefresh).catch(() => {});
+    }
     await Personnel.findByIdAndUpdate(req.personnel._id, { fcmToken: null });
     return res.json({ message: "Déconnecté" });
   } catch (err) {
@@ -152,4 +194,4 @@ const logout = async (req, res) => {
   }
 };
 
-module.exports = { login, changePassword, me, logout, updateProfile, uploadAvatar, uploadDocument };
+module.exports = { login, refresh, changePassword, me, logout, updateProfile, uploadAvatar, uploadDocument };
