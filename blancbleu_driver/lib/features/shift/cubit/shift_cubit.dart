@@ -3,7 +3,6 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/network/api_client.dart';
-import '../../../core/location/location_service.dart';
 import '../../../services/gps_service.dart';
 
 const _kShiftKey = 'active_shift_cache';
@@ -49,7 +48,6 @@ class ShiftCubit extends Cubit<ShiftState> {
         final shift = Map<String, dynamic>.from(jsonDecode(cached) as Map);
         final shiftId   = (shift['_id'] ?? shift['id'] ?? '').toString();
         final vehicleId = _extractVehicleId(shift['vehicleId']);
-        LocationService.instance.startTracking(shiftId);
         await GpsService.instance.startTracking(shiftId, vehicleId);
         emit(ShiftActive(shift));
       } catch (_) {}
@@ -64,7 +62,6 @@ class ShiftCubit extends Cubit<ShiftState> {
         await prefs.setString(_kShiftKey, jsonEncode(shift));
         final shiftId   = (shift['_id'] ?? shift['id'] ?? '').toString();
         final vehicleId = _extractVehicleId(shift['vehicleId']);
-        LocationService.instance.startTracking(shiftId);
         await GpsService.instance.startTracking(shiftId, vehicleId);
         emit(ShiftActive(shift));
       } else {
@@ -87,7 +84,6 @@ class ShiftCubit extends Cubit<ShiftState> {
       final shiftId = (shift['_id'] ?? shift['id'] ?? '').toString();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_kShiftKey, jsonEncode(shift));
-      LocationService.instance.startTracking(shiftId);
       await GpsService.instance.startTracking(shiftId, vehicleId);
       emit(ShiftActive(shift));
     } catch (e) {
@@ -102,7 +98,6 @@ class ShiftCubit extends Cubit<ShiftState> {
       await ApiClient.instance.endShift(totalKm: totalKm, notes: notes);
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_kShiftKey);
-      LocationService.instance.stopTracking();
       await GpsService.instance.stopTracking();
       emit(ShiftEnded());
     } catch (e) {

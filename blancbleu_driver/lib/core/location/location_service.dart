@@ -1,22 +1,35 @@
-import 'dart:async';
 import 'package:geolocator/geolocator.dart';
-import '../network/api_client.dart';
-import '../storage/local_database.dart';
 
+/// Sprint M1 — Service de localisation simplifié.
+///
+/// Le tracking continu (push GPS toutes les N secondes) est désormais
+/// la responsabilité EXCLUSIVE de [GpsService] (socket Socket.IO depuis
+/// un isolate background, ~5s). Le timer 30s + écriture SQLite + HTTP
+/// batch qui vivait ici a été retiré pour éliminer le double-flux GPS.
+///
+/// Ce service ne conserve que les helpers ponctuels utilisés par l'UI :
+/// `requestPermission()` et `getCurrentPosition()`.
+///
+/// TODO(M2): offline GPS buffering in background isolate — quand le socket
+/// est down, le worker bg devrait écrire les points dans SQLite et flush
+/// au retour de la connexion. Sort du périmètre M1 (le chemin socket actuel
+/// ne persiste pas hors-ligne).
 class LocationService {
   static LocationService? _instance;
   static LocationService get instance => _instance ??= LocationService._();
   LocationService._();
 
-  Timer? _timer;
-  String? _activeShiftId;
+  /// Transport actif (lecture seule pour les consumers UI éventuels).
+  /// Le GPS background isolate utilise [GpsService.setActiveTransport] —
+  /// ce champ n'est PAS consommé pour router les emits GPS.
   String? _activeTransportId;
+  String? get activeTransportId => _activeTransportId;
 
   Future<bool> requestPermission() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return false;
 
-    LocationPermission perm = await Geolocator.checkPermission();
+    var perm = await Geolocator.checkPermission();
     if (perm == LocationPermission.denied) {
       perm = await Geolocator.requestPermission();
       if (perm == LocationPermission.denied) return false;
@@ -36,46 +49,8 @@ class LocationService {
     }
   }
 
-  void startTracking(String shiftId) {
-    _activeShiftId = shiftId;
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 30), (_) => _record());
-  }
-
-  void setActiveTransport(String? transportId) => _activeTransportId = transportId;
-
-  void stopTracking() {
-    _timer?.cancel();
-    _timer = null;
-    _activeShiftId = null;
-    _activeTransportId = null;
-  }
-
-  Future<void> _record() async {
-    if (_activeShiftId == null) return;
-    final pos = await getCurrentPosition();
-    if (pos == null) return;
-
-    await LocalDatabase.instance.queueTrackingPoint(
-      lat:         pos.latitude,
-      lng:         pos.longitude,
-      speed:       pos.speed,
-      accuracy:    pos.accuracy,
-      shiftId:     _activeShiftId,
-      transportId: _activeTransportId,
-    );
-
-    // Send immediately so the live map updates in real time.
-    // The SQLite queue above is the offline fallback if this call fails.
-    try {
-      await ApiClient.instance.batchTracking([{
-        'lat':         pos.latitude,
-        'lng':         pos.longitude,
-        'speed':       pos.speed,
-        'accuracy':    pos.accuracy,
-        if (_activeTransportId != null) 'transportId': _activeTransportId,
-        'timestamp':   DateTime.now().toIso8601String(),
-      }]);
-    } catch (_) {}
-  }
+  /// Conservé pour compat éventuelle — actif uniquement comme metadata locale
+  /// (ne route plus le GPS, c'est [GpsService.setActiveTransport] qui le fait).
+  void setActiveTransport(String? transportId) =>
+      _activeTransportId = transportId;
 }
