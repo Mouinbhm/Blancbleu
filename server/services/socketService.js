@@ -33,6 +33,13 @@ const ROOMS = {
   ALL: "broadcast",
 };
 
+// Sprint M2 — Helper interne : émet vers les 3 rooms staff au lieu de io.emit
+// global. Sécurité (fuite d'info inter-rôle) + perf (pas d'envoi aux patients).
+function _emitToStaff(event, payload) {
+  if (!_io) return;
+  _io.to(ROOMS.DISPATCHERS).to(ROOMS.ADMINS).to(ROOMS.SUPERVISORS).emit(event, payload);
+}
+
 // ── Initialisation ────────────────────────────────────────────────────────────
 function init(io) {
   _io = io;
@@ -71,7 +78,9 @@ function init(io) {
     });
   });
 
-  // Heartbeat toutes les 30 secondes
+  // Heartbeat toutes les 30 secondes — broadcast intentionnel (présence
+  // serveur, consommé par TOUS les clients pour l'indicateur "TEMPS RÉEL
+  // ACTIF" de leur UI). Exception unique au principe "no global io.emit".
   setInterval(() => {
     if (_io) {
       _io.emit("system:heartbeat", { timestamp: new Date(), status: "ok" });
@@ -85,11 +94,11 @@ function init(io) {
 
 /**
  * transport:created
- * Émis quand un nouveau transport est créé
+ * Émis quand un nouveau transport est créé — visible des staff uniquement.
  */
 function emitTransportCreated(transport) {
   if (!_io) return;
-  _io.emit("transport:created", {
+  _emitToStaff("transport:created", {
     _id: transport._id,
     numero: transport.numero,
     statut: transport.statut,
@@ -111,11 +120,12 @@ function emitTransportCreated(transport) {
 
 /**
  * transport:statut
- * Émis à chaque changement de statut (state machine)
+ * Émis à chaque changement de statut (state machine). Scopé : staff + room
+ * transport:{id} (patients/dispatchers qui suivent ce transport spécifique).
  */
 function emitTransportStatut({ transport, ancienStatut, nouveauStatut, utilisateur }) {
   if (!_io) return;
-  _io.emit("transport:statut", {
+  const payload = {
     transportId: transport._id,
     numero: transport.numero,
     ancienStatut,
@@ -123,7 +133,11 @@ function emitTransportStatut({ transport, ancienStatut, nouveauStatut, utilisate
     utilisateur: utilisateur || "système",
     progression: _calculerProgression(nouveauStatut),
     timestamp: new Date(),
-  });
+  };
+  _emitToStaff("transport:statut", payload);
+  if (transport._id) {
+    _io.to(`transport:${transport._id}`).emit("transport:statut", payload);
+  }
   logger.info(
     `[Socket] transport:statut → ${transport.numero} : ${ancienStatut} → ${nouveauStatut}`
   );
@@ -135,7 +149,7 @@ function emitTransportStatut({ transport, ancienStatut, nouveauStatut, utilisate
  */
 function emitVehiculeAssigne({ transport, vehicule, chauffeur, eta, score, source = "MANUEL" }) {
   if (!_io) return;
-  _io.emit("vehicule:assigne", {
+  const payload = {
     transportId: transport._id,
     numero: transport.numero,
     vehicule: {
@@ -150,7 +164,11 @@ function emitVehiculeAssigne({ transport, vehicule, chauffeur, eta, score, sourc
     score,
     source, // 'AUTO' | 'MANUEL'
     timestamp: new Date(),
-  });
+  };
+  _emitToStaff("vehicule:assigne", payload);
+  if (transport._id) {
+    _io.to(`transport:${transport._id}`).emit("vehicule:assigne", payload);
+  }
   logger.info(
     `[Socket] vehicule:assigne → ${vehicule.immatriculation} → ${transport.numero}`
   );
@@ -162,7 +180,7 @@ function emitVehiculeAssigne({ transport, vehicule, chauffeur, eta, score, sourc
  */
 function emitVehiculeStatut({ vehicule, ancienStatut, nouveauStatut }) {
   if (!_io) return;
-  _io.emit("vehicule:statut", {
+  _emitToStaff("vehicule:statut", {
     vehiculeId: vehicule._id,
     immatriculation: vehicule.immatriculation,
     type: vehicule.type,
@@ -181,7 +199,7 @@ function emitVehiculeStatut({ vehicule, ancienStatut, nouveauStatut }) {
  */
 function emitTransportStatutChange({ transportId, numero, ancienStatut, nouveauStatut, journal, utilisateur }) {
   if (!_io) return;
-  _io.emit("transport:statut_change", {
+  const payload = {
     transportId,
     numero,
     ancienStatut,
@@ -189,7 +207,11 @@ function emitTransportStatutChange({ transportId, numero, ancienStatut, nouveauS
     journal: journal || [],
     utilisateur: utilisateur || "système",
     timestamp: new Date(),
-  });
+  };
+  _emitToStaff("transport:statut_change", payload);
+  if (transportId) {
+    _io.to(`transport:${transportId}`).emit("transport:statut_change", payload);
+  }
 }
 
 /**
@@ -198,7 +220,7 @@ function emitTransportStatutChange({ transportId, numero, ancienStatut, nouveauS
  */
 function emitVehiculePosition(data) {
   if (!_io) return;
-  _io.emit("vehicule:position", { ...data, timestamp: new Date() });
+  _emitToStaff("vehicule:position", { ...data, timestamp: new Date() });
 }
 
 /**
@@ -207,7 +229,7 @@ function emitVehiculePosition(data) {
  */
 function emitDispatchCompleted({ transport, vehicule, score, eta, alternatives }) {
   if (!_io) return;
-  _io.emit("dispatch:completed", {
+  _emitToStaff("dispatch:completed", {
     transportId: transport._id,
     numero: transport.numero,
     vehicule: {
@@ -231,13 +253,17 @@ function emitDispatchCompleted({ transport, vehicule, score, eta, alternatives }
  */
 function emitPmtExtraite({ transportId, extraction, confiance }) {
   if (!_io) return;
-  _io.emit("pmt:extraite", {
+  const payload = {
     transportId,
     extraction,
     confiance,
     validationRequise: confiance < 0.75,
     timestamp: new Date(),
-  });
+  };
+  _emitToStaff("pmt:extraite", payload);
+  if (transportId) {
+    _io.to(`transport:${transportId}`).emit("pmt:extraite", payload);
+  }
   logger.info(`[Socket] pmt:extraite → transport ${transportId} (confiance ${confiance})`);
 }
 
@@ -310,7 +336,7 @@ async function emitStatsUpdate() {
   if (!_io) return;
   try {
     const stats = await _getStatsRapides();
-    _io.emit("stats:update", stats);
+    _emitToStaff("stats:update", stats);
   } catch {
     // Silencieux
   }
