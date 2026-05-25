@@ -21,6 +21,7 @@ const Message       = require("../models/Message");
 // pour supporter le scaling multi-instance. La Map en mémoire est conservée
 // comme fallback dans le store quand Redis n'est pas dispo.
 const vehiclePositionStore = require("./vehiclePositionStore");
+const EVENTS = require("./events");
 
 // Build a display name from JWT fields; fall back to email or a generic label
 function displayName(user) {
@@ -79,18 +80,16 @@ function initDriverSocket(io) {
 
           const STAFF_ROOMS = ["role:dispatcher", "role:admin", "role:superviseur"];
 
-          // Legacy event kept for backward compatibility
-          io.to(STAFF_ROOMS).emit("driver:location_updated", posPayload);
+          // Sprint M2 — UN seul event canonique pour les staff. Avant on
+          // émettait driver:location_updated ET vehicle:position en parallèle,
+          // ce qui causait des doublons côté Suivi en direct.
+          io.to(STAFF_ROOMS).emit(EVENTS.VEHICLE_POSITION, posPayload);
 
-          // New event consumed by the Suivi en direct live map
-          io.to(STAFF_ROOMS).emit("vehicle:position", posPayload);
-
-          // Sprint M1 — route le GPS vers la room transport pour le suivi
-          // patient temps réel. Le patient a join:transport:{id} via le
-          // tracking_screen côté app et reçoit ce même event que la route
-          // HTTP /api/tracking/batch émet.
+          // Sprint M2 — event canonique pour le suivi patient (remplace
+          // tracking:gps_updated). Même nom que celui émis par la route HTTP
+          // /api/tracking/batch (trackingController), pour cohérence.
           if (transportId) {
-            io.to(`transport:${transportId}`).emit("tracking:gps_updated", {
+            io.to(`transport:${transportId}`).emit(EVENTS.TRANSPORT_GPS, {
               transportId,
               lat, lng, speed,
               timestamp: new Date(),
