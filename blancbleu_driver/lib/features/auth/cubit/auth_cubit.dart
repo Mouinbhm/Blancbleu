@@ -27,14 +27,20 @@ class AuthCubit extends Cubit<AuthState> {
     emit(AuthLoading());
     try {
       final data = await ApiClient.instance.login(email, password);
-      final token = data['token']     as String?;
-      final user  = data['personnel'] as Map<String, dynamic>?;
+      final token        = data['token']        as String?;
+      final refreshToken = data['refreshToken'] as String?;
+      final user         = data['personnel']    as Map<String, dynamic>?;
       if (token == null || user == null) {
         emit(const AuthError('Réponse serveur invalide'));
         return;
       }
       await _storage.write(key: AppConstants.tokenKey, value: token);
       await _storage.write(key: AppConstants.userKey,  value: jsonEncode(user));
+      if (refreshToken != null) {
+        await _storage.write(key: AppConstants.refreshKey, value: refreshToken);
+      }
+      // Réarme l'interceptor (au cas où un logout silencieux aurait set le flag)
+      ApiClient.instance.resetSession();
       emit(AuthSuccess(user: user, token: token));
     } on Exception catch (e) {
       emit(AuthError(e.toString().replaceFirst('Exception: ', '')));
@@ -44,6 +50,7 @@ class AuthCubit extends Cubit<AuthState> {
   Future<void> logout() async {
     await _storage.delete(key: AppConstants.tokenKey);
     await _storage.delete(key: AppConstants.userKey);
+    await _storage.delete(key: AppConstants.refreshKey);
     emit(AuthInitial());
   }
 }
