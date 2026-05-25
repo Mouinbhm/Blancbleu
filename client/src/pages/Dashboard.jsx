@@ -98,13 +98,12 @@ export default function Dashboard() {
     return () => clearInterval(iv);
   }, [loadPrediction]);
 
-  // Temps réel : statut mis à jour
+  // Temps réel : statut mis à jour (Sprint M2 — event unique transport:status)
   useEffect(() => {
-    const u1 = subscribe("transport:statut",        () => loadData());
-    const u2 = subscribe("transport:statut_change", () => loadData());
-    const u3 = subscribe("shift:started",           () => loadData());
-    const u4 = subscribe("shift:ended",             () => loadData());
-    return () => { u1(); u2(); u3(); u4(); };
+    const u1 = subscribe("transport:status", () => loadData());
+    const u3 = subscribe("shift:started",    () => loadData());
+    const u4 = subscribe("shift:ended",      () => loadData());
+    return () => { u1(); u3(); u4(); };
   }, [subscribe, loadData]);
 
   const disponibles = vehicles.filter((v) => v.statut === "Disponible").length;

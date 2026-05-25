@@ -275,8 +275,9 @@ export default function TransportMap({ transport, vehiclePosition }) {
       console.log("  coordonnées           :", data.lat, data.lng);
     };
 
-    socket.on("vehicule:position", onDebug);
-    return () => socket.off("vehicule:position", onDebug);
+    // Sprint M2 — event canonique unique "vehicle:position" (EN)
+    socket.on("vehicle:position", onDebug);
+    return () => socket.off("vehicle:position", onDebug);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── TÂCHE 2 : Marqueur véhicule — écouteur direct sur le socket ───────────
@@ -365,10 +366,11 @@ export default function TransportMap({ transport, vehiclePosition }) {
       }
     };
 
-    socket.on("vehicule:position", onPosition);
+    // Sprint M2 — event canonique unique "vehicle:position" (EN)
+    socket.on("vehicle:position", onPosition);
 
     return () => {
-      socket.off("vehicule:position", onPosition);
+      socket.off("vehicle:position", onPosition);
       // Ne supprimer que les marqueurs créés par socket (pas le marqueur statique)
       if (vehiculeMarkerRef.current && markerSourceRef.current === "socket") {
         vehiculeMarkerRef.current.remove();
