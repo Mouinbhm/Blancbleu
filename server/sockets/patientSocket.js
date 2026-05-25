@@ -4,10 +4,11 @@
  * Patients join a personal room `patient:{userId}` so that transport
  * status updates can be pushed to them in real time.
  *
- * Events server → patient app:
- *   transport:status_updated   transport status changed by driver
- *   transport:assigned         transport assigned (vehicle + driver)
- *   transport:cancelled        transport cancelled by dispatcher
+ * Events server → patient app (Sprint M2 — voir server/sockets/events.js) :
+ *   transport:status     TRANSPORT_STATUS    transport status changed by driver
+ *   transport:assigned   TRANSPORT_ASSIGNED  transport assigned (vehicle + driver)
+ *   transport:cancelled  TRANSPORT_CANCELLED transport cancelled by dispatcher
+ *   transport:gps        TRANSPORT_GPS       GPS realtime (room transport:{id})
  */
 
 function initPatientSocket(io) {

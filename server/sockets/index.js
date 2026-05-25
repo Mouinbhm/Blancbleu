@@ -7,8 +7,9 @@
  *   3. patientSocket — room patient + token FCM
  */
 
-const { initDriverSocket, vehiclePositions } = require("./driverSocket");
+const { initDriverSocket } = require("./driverSocket");
 const { initPatientSocket } = require("./patientSocket");
+const vehiclePositionStore = require("./vehiclePositionStore");
 const Notification = require("../models/Notification");
 
 function initSockets(io) {
@@ -51,9 +52,15 @@ function initSockets(io) {
       });
     }
 
-    // Push current vehicle positions snapshot to newly connected staff
-    if (["dispatcher", "admin", "superviseur"].includes(user.role) && vehiclePositions.size > 0) {
-      socket.emit("vehicle:positions_snapshot", Object.fromEntries(vehiclePositions));
+    // Sprint M2 — Snapshot des positions véhicules pour les staff fraîchement
+    // connectés. Lu depuis le store Redis (multi-instance) avec fallback Map.
+    if (["dispatcher", "admin", "superviseur"].includes(user.role)) {
+      try {
+        const snapshot = await vehiclePositionStore.getAll();
+        if (snapshot && Object.keys(snapshot).length > 0) {
+          socket.emit("vehicle:positions_snapshot", snapshot);
+        }
+      } catch { /* best-effort */ }
     }
 
     // Envoyer le compteur de non-lus dès la connexion

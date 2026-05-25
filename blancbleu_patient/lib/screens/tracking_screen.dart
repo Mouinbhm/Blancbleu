@@ -2,10 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../config/theme.dart';
+import '../core/network/socket_manager.dart';
 import '../services/api_service.dart';
 
 class TrackingScreen extends StatefulWidget {
@@ -29,7 +28,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   final _mapController = MapController();
   Timer?    _refreshTimer;
-  IO.Socket? _socket;
+
+  // Sprint M2 — Listeners aux streams du SocketManager (foreground patient).
+  StreamSubscription<Map<String, dynamic>>? _gpsSub;
+  StreamSubscription<Map<String, dynamic>>? _statusSub;
 
   static const _activeStatuts = [
     'ASSIGNED', 'EN_ROUTE_TO_PICKUP', 'ARRIVED_AT_PICKUP', 'PATIENT_ON_BOARD',
@@ -54,12 +56,13 @@ class _TrackingScreenState extends State<TrackingScreen> {
   void initState() {
     super.initState();
     _load();
-    // _connectSocket est async (lecture du token avant connexion). On l'invoque
-    // sans await ici — si la connexion échoue, le fallback polling prend le relais.
-    _connectSocket();
-    // Fallback polling — reprend si socket déconnecté
+    // Sprint M2 — SocketManager singleton. connect() lit le token, gère
+    // reconnect + backoff + ré-auth après refresh. join:transport est
+    // ré-émis automatiquement à chaque reconnexion.
+    _initSocket();
+    // Fallback polling — reprend si socket réellement déconnecté
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (mounted && _isActive() && (_socket?.connected != true)) {
+      if (mounted && _isActive() && !SocketManager.instance.isConnected) {
         _load(silent: true);
       }
     });
@@ -69,52 +72,28 @@ class _TrackingScreenState extends State<TrackingScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     _mapController.dispose();
-    _socket?.disconnect();
-    _socket?.dispose();
+    _gpsSub?.cancel();
+    _statusSub?.cancel();
+    SocketManager.instance.leaveTransport(widget.transportId);
     super.dispose();
   }
 
-  Future<void> _connectSocket() async {
-    final base = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:5000/api/patient';
-    final serverUrl = base.replaceAll(RegExp(r'/api.*'), '');
-
-    // Le serveur exige un JWT au handshake (Server.js io.use middleware) —
-    // sans setAuth, la connexion est rejetée silencieusement et le patient
-    // ne reçoit JAMAIS les events temps réel (fallback polling uniquement).
-    final token = await ApiService.getToken();
-    if (!mounted) return;
-
-    final optionsBuilder = IO.OptionBuilder()
-      .setTransports(['websocket', 'polling'])
-      .enableReconnection()
-      .setReconnectionDelay(2000);
-    if (token != null && token.isNotEmpty) {
-      optionsBuilder.setAuth({'token': token});
+  Future<void> _initSocket() async {
+    final mgr = SocketManager.instance;
+    if (!mgr.isConnected) {
+      await mgr.connect();
     }
-    _socket = IO.io(serverUrl, optionsBuilder.build());
+    mgr.joinTransport(widget.transportId);
 
-    _socket!.onConnect((_) {
-      // Rejoindre la room du transport pour recevoir GPS + statut en temps réel
-      _socket!.emit('join:transport', widget.transportId);
-    });
-
-    // Si le handshake échoue (token invalide, expiré, refusé) on log et on
-    // laisse le fallback polling prendre le relais — pas de boucle silencieuse.
-    _socket!.onConnectError((err) {
-      // ignore: avoid_print
-      print('[tracking] socket connectError: $err');
-    });
-    _socket!.onError((err) {
-      // ignore: avoid_print
-      print('[tracking] socket error: $err');
-    });
-
-    // Mise à jour GPS en temps réel depuis le chauffeur
-    _socket!.on('tracking:gps_updated', (data) {
+    // Sprint M2 — events canoniques : transport:gps + transport:status.
+    // Le payload supporte les clés EN (newStatus) ET FR (nouveauStatut)
+    // pendant la transition.
+    _gpsSub = mgr.onTransportGps.listen((data) {
       if (!mounted) return;
-      final d = data is Map ? data : {};
-      final lat = (d['lat'] as num?)?.toDouble();
-      final lng = (d['lng'] as num?)?.toDouble();
+      final dTransportId = data['transportId']?.toString();
+      if (dTransportId != null && dTransportId != widget.transportId) return;
+      final lat = (data['lat'] as num?)?.toDouble();
+      final lng = (data['lng'] as num?)?.toDouble();
       if (lat == null || lng == null) return;
 
       setState(() {
@@ -131,11 +110,12 @@ class _TrackingScreenState extends State<TrackingScreen> {
       });
     });
 
-    // Mise à jour du statut en temps réel
-    _socket!.on('transport:status_updated', (data) {
+    _statusSub = mgr.onTransportStatus.listen((data) {
       if (!mounted) return;
-      final d = data is Map ? data : {};
-      final newStatut = d['nouveauStatut'] as String?;
+      final dTransportId = data['transportId']?.toString();
+      if (dTransportId != null && dTransportId != widget.transportId) return;
+      final newStatut =
+          (data['newStatus'] ?? data['nouveauStatut']) as String?;
       if (newStatut == null) return;
       setState(() {
         _tracking = {
@@ -143,14 +123,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
           'statut': newStatut,
         };
       });
-      // Recharger les détails complets si statut terminal
       const terminals = ['COMPLETED', 'CANCELLED', 'NO_SHOW', 'FAILED'];
       if (terminals.contains(newStatut)) _load(silent: true);
-    });
-
-    _socket!.onDisconnect((_) {
-      // Reprendre le polling en cas de déconnexion
-      if (mounted && _isActive()) _load(silent: true);
     });
   }
 

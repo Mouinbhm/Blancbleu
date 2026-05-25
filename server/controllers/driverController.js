@@ -13,6 +13,7 @@ const fs          = require("fs");
 
 const lifecycle   = require("../services/transportLifecycle");
 const { notifyPatientByEmail } = require("../services/pushNotification");
+const EVENTS = require("../sockets/events");
 
 // ── Helper : vérifier que le transport appartient bien au chauffeur ───────────
 async function _myTransport(transportId, personnelId) {
@@ -38,7 +39,7 @@ async function _notifyPatient(io, transport, payload) {
     .select("_id")
     .lean();
   if (patientUser) {
-    io.to(`patient:${patientUser._id}`).emit("transport:status_updated", payload);
+    io.to(`patient:${patientUser._id}`).emit(EVENTS.TRANSPORT_STATUS, payload);
   }
 }
 
@@ -55,14 +56,15 @@ async function _handleTransition(req, res, lifeCycleFn, extraArgs = []) {
       const payload = {
         transportId: transport._id,
         numero:      transport.numero,
-        status:      transport.statut,
+        newStatus:   transport.statut,
+        status:      transport.statut, // alias rétrocompat
         driverId:    req.personnel._id,
         driverNom:   `${req.personnel.prenom} ${req.personnel.nom}`,
         timestamp:   new Date(),
       };
       io.to("role:dispatcher").to("role:admin").to("role:superviseur")
         .to(`transport:${transport._id}`)
-        .emit("transport:status_updated", payload);
+        .emit(EVENTS.TRANSPORT_STATUS, payload);
       await _notifyPatient(io, transport, payload);
     }
 
@@ -267,7 +269,7 @@ const updateStatus = async (req, res) => {
       };
       io.to("role:dispatcher").to("role:admin").to("role:superviseur")
         .to(`transport:${transport._id}`)
-        .emit("transport:status_updated", payload);
+        .emit(EVENTS.TRANSPORT_STATUS, payload);
       await _notifyPatient(io, transport, payload);
     }
 

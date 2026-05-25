@@ -62,7 +62,7 @@ export default function useSocket() {
       addEvent({ type: "unit:assigned", data, color: "purple" });
     };
 
-    // ── transport:statut / transport:statut_change / transport:status_updated ─
+    // ── transport:status (Sprint M2 — unifié) ─────────────────────────────
     const onStatusUpdated = (data) => {
       addEvent({ type: "status:updated", data, color: "orange" });
     };
@@ -115,9 +115,7 @@ export default function useSocket() {
     socket.on("transport:created", onTransportCreated);
     socket.on("intervention:created", onInterventionCreated);
     socket.on("unit:assigned", onUnitAssigned);
-    socket.on("transport:statut",         onStatusUpdated);
-    socket.on("transport:statut_change",  onStatusUpdated);
-    socket.on("transport:status_updated", onStatusUpdated);
+    socket.on("transport:status",        onStatusUpdated);  // M2 — unique nom canonique
     socket.on("escalation:triggered", onEscalationTriggered);
     socket.on("dispatch:completed", onDispatchCompleted);
     socket.on("unit:status_changed", onUnitStatusChanged);
@@ -143,9 +141,7 @@ export default function useSocket() {
       socket.off("transport:created", onTransportCreated);
       socket.off("intervention:created", onInterventionCreated);
       socket.off("unit:assigned", onUnitAssigned);
-      socket.off("transport:statut",         onStatusUpdated);
-      socket.off("transport:statut_change",  onStatusUpdated);
-      socket.off("transport:status_updated", onStatusUpdated);
+      socket.off("transport:status",        onStatusUpdated);
       socket.off("escalation:triggered", onEscalationTriggered);
       socket.off("dispatch:completed", onDispatchCompleted);
       socket.off("unit:status_changed", onUnitStatusChanged);

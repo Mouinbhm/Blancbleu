@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'core/network/api_client.dart';
+import 'core/network/socket_manager.dart';
 import 'core/network/sync_service.dart';
 import 'core/notifications/notification_service.dart';
 import 'core/theme/theme_notifier.dart';
@@ -56,6 +59,12 @@ class _Root extends StatefulWidget {
 }
 
 class _RootState extends State<_Root> {
+  // Sprint M2 — Listeners aux streams du SocketManager (foreground).
+  StreamSubscription<Map<String, dynamic>>? _assignedSub;
+  StreamSubscription<Map<String, dynamic>>? _cancelledSub;
+  StreamSubscription<Map<String, dynamic>>? _msgSub;
+  StreamSubscription<Map<String, dynamic>>? _shiftEndSub;
+
   @override
   void initState() {
     super.initState();
@@ -69,11 +78,50 @@ class _RootState extends State<_Root> {
         duration: Duration(seconds: 4),
       ));
     };
+
+    // Sprint M2 — abonnement aux events server→driver via SocketManager.
+    final mgr = SocketManager.instance;
+    _assignedSub = mgr.onTransportAssigned.listen((data) {
+      final numero = data['numero']?.toString() ?? data['transportId']?.toString() ?? '';
+      NotificationService.showMessage(
+        'Nouveau transport assigné : $numero',
+        title: 'Nouvelle mission',
+      );
+      SyncService.instance.sync();
+    });
+    _cancelledSub = mgr.onTransportCancelled.listen((data) {
+      final numero = data['numero']?.toString() ?? data['transportId']?.toString() ?? '';
+      NotificationService.showMessage(
+        'Transport annulé : $numero',
+        title: 'Mission annulée',
+      );
+      SyncService.instance.sync();
+    });
+    _msgSub = mgr.onMessageDispatcher.listen((data) {
+      final text = data['text']?.toString() ?? '';
+      final from = data['fromNom']?.toString() ?? 'Dispatcher';
+      if (text.isNotEmpty) {
+        NotificationService.showMessage(text, title: from);
+      }
+    });
+    _shiftEndSub = mgr.onShiftForcedEnd.listen((_) {
+      NotificationService.showMessage(
+        'Votre shift a été terminé par le dispatcher.',
+        title: 'Shift terminé',
+      );
+      if (mounted) {
+        context.read<ShiftCubit>().end();
+      }
+    });
   }
 
   @override
   void dispose() {
     ApiClient.onUnauthorized = null;
+    _assignedSub?.cancel();
+    _cancelledSub?.cancel();
+    _msgSub?.cancel();
+    _shiftEndSub?.cancel();
     super.dispose();
   }
 
@@ -84,7 +132,12 @@ class _RootState extends State<_Root> {
         if (state is AuthSuccess) {
           // Reset the logout guard so the new session works normally
           ApiClient.instance.resetSession();
+          // Sprint M2 — ouvrir la connexion socket foreground APRES auth OK
+          SocketManager.instance.connect();
           SyncService.instance.sync();
+        } else if (state is AuthInitial) {
+          // Sprint M2 — fermer la connexion au logout / session expirée
+          SocketManager.instance.disconnect();
         }
       },
       builder: (context, state) {

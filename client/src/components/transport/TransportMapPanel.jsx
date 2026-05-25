@@ -6,8 +6,8 @@ import { Card, Skeleton } from "../ui";
 
 /**
  * Wrapper React Query autour du composant Leaflet existant.
- * Écoute la position GPS du véhicule en temps réel (event tracking:gps_updated
- * de la room transport:{id}).
+ * Sprint M2 — Écoute les events canoniques transport:gps (room transport:{id})
+ * et vehicle:position (staff). Voir docs/socket-events.md.
  */
 export function TransportMapPanel({ transportId }) {
   const { data: transport, isLoading } = useTransport(transportId);
@@ -29,13 +29,14 @@ export function TransportMapPanel({ transportId }) {
       setVehiclePos({ lat: d.lat, lng: d.lng });
     };
 
-    socket.on("tracking:gps_updated", onGps);
-    socket.on("vehicule:position",    onPosition);
+    // Sprint M2 — events canoniques (remplacent tracking:gps_updated + vehicule:position)
+    socket.on("transport:gps",     onGps);
+    socket.on("vehicle:position",  onPosition);
 
     return () => {
       socket.emit("leave:transport", transportId);
-      socket.off("tracking:gps_updated", onGps);
-      socket.off("vehicule:position",    onPosition);
+      socket.off("transport:gps",     onGps);
+      socket.off("vehicle:position",  onPosition);
     };
   }, [transportId]);
 

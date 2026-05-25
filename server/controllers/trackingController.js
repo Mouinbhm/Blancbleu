@@ -2,6 +2,8 @@ const TrackingPoint = require("../models/TrackingPoint");
 const DriverShift   = require("../models/DriverShift");
 const Transport     = require("../models/Transport");
 const Vehicle       = require("../models/Vehicle");
+const EVENTS        = require("../sockets/events");
+const vehiclePositionStore = require("../sockets/vehiclePositionStore");
 
 // POST /api/v1/tracking/batch
 // Body: { points: [{ lat, lng, speed, timestamp, accuracy, transportId? }] }
@@ -56,13 +58,18 @@ const batchInsert = async (req, res) => {
         updatedAt:    last.timestamp,
       };
 
-      // Broadcast to dispatcher/admin
+      // Sprint M2 — event canonique VEHICLE_POSITION pour les staff.
       io.to("role:dispatcher").to("role:admin").to("role:superviseur")
-        .emit("driver:location_updated", payload);
+        .emit(EVENTS.VEHICLE_POSITION, payload);
 
-      // Emit to transport-specific room for every transportId in the batch
+      // Snapshot Redis pour les staff fraichement connectes (M2).
+      if (shift.vehicleId) {
+        vehiclePositionStore.set(shift.vehicleId, payload).catch(() => {});
+      }
+
+      // Sprint M2 — event canonique TRANSPORT_GPS pour le suivi patient.
       for (const tId of declaredTransportIds) {
-        io.to(`transport:${tId}`).emit("tracking:gps_updated", { ...payload, transportId: tId });
+        io.to(`transport:${tId}`).emit(EVENTS.TRANSPORT_GPS, { ...payload, transportId: tId });
       }
     }
 
