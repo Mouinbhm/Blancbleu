@@ -84,6 +84,18 @@ function initDriverSocket(io) {
 
           // New event consumed by the Suivi en direct live map
           io.to(STAFF_ROOMS).emit("vehicle:position", posPayload);
+
+          // Sprint M1 — route le GPS vers la room transport pour le suivi
+          // patient temps réel. Le patient a join:transport:{id} via le
+          // tracking_screen côté app et reçoit ce même event que la route
+          // HTTP /api/tracking/batch émet.
+          if (transportId) {
+            io.to(`transport:${transportId}`).emit("tracking:gps_updated", {
+              transportId,
+              lat, lng, speed,
+              timestamp: new Date(),
+            });
+          }
         } catch { /* non-bloquant */ }
       });
 
