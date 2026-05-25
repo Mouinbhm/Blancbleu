@@ -134,13 +134,17 @@ async function _transition(transportId, nouveauStatut, metadata = {}, session = 
     utilisateur: metadata.utilisateur || "système",
   });
   socketService.emitStatsUpdate?.();
-  // Émettre dans la room transport:{id} pour le suivi patient + flutter
-  socketService.emitToTransportRoom?.(transport._id, "transport:status_updated", {
-    transportId: transport._id,
-    numero:      transport.numero,
-    ancienStatut: entreeJournal.de,
+  // Sprint M2 — event canonique TRANSPORT_STATUS pour les clients qui suivent
+  // ce transport (patient app, web Suivi en direct, driver foreground).
+  const EVENTS = require("../sockets/events");
+  socketService.emitToTransportRoom?.(transport._id, EVENTS.TRANSPORT_STATUS, {
+    transportId:  transport._id,
+    numero:       transport.numero,
+    oldStatus:    entreeJournal.de,
+    newStatus:    nouveauStatut,
+    ancienStatut: entreeJournal.de, // alias FR rétrocompat
     nouveauStatut,
-    progression: require("./transportStateMachine").TransportStateMachine.progression(nouveauStatut),
+    progression:  require("./transportStateMachine").TransportStateMachine.progression(nouveauStatut),
   });
 
   // ── PART E : Notification persistée + push Socket ─────────────────────────

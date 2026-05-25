@@ -6,8 +6,10 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:dio/dio.dart';
 import 'package:socket_io_client/socket_io_client.dart' as sio;
 
+import '../core/storage/local_database.dart';
 import '../core/utils/constants.dart';
 
 /// Real-time GPS tracking via Socket.IO.
@@ -66,6 +68,59 @@ class GpsService {
   @pragma('vm:entry-point')
   static bool _iosBgHandler(ServiceInstance service) => true;
 
+  // ── Sprint M2 — Offline GPS flush ──────────────────────────────────────
+  /// Vide la file `tracking_queue` (points GPS persistes pendant que le socket
+  /// etait down) vers POST /api/v1/tracking/batch. Idempotent cote serveur.
+  /// Appele a chaque (re)connexion du socket bg.
+  static Future<void> _flushOfflineQueue({
+    required String apiBase,
+    required String token,
+  }) async {
+    try {
+      final pending = await LocalDatabase.instance.getPendingTrackingPoints(limit: 200);
+      if (pending.isEmpty) return;
+
+      final batchPoints = pending.map((r) => {
+        'lat':         r['lat'],
+        'lng':         r['lng'],
+        'speed':       r['speed'] ?? 0,
+        'accuracy':    r['accuracy'],
+        if (r['transport_id'] != null) 'transportId': r['transport_id'],
+        'timestamp':   DateTime.fromMillisecondsSinceEpoch(
+          (r['timestamp'] as int?) ?? DateTime.now().millisecondsSinceEpoch,
+        ).toIso8601String(),
+      }).toList();
+
+      final dio = Dio(BaseOptions(
+        baseUrl:        apiBase,
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 15),
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ));
+      final res = await dio.post(
+        '/api/v1/tracking/batch',
+        data: {'points': batchPoints},
+        options: Options(validateStatus: (s) => s != null && s < 500),
+      );
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        final ids = pending.map((r) => r['id'] as int).toList();
+        await LocalDatabase.instance.markTrackingPointsSynced(ids);
+        // ignore: avoid_print
+        print('[GpsService bg] offline flush OK : ${ids.length} points');
+      } else {
+        // ignore: avoid_print
+        print('[GpsService bg] offline flush HTTP ${res.statusCode}');
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('[GpsService bg] offline flush failed: $e');
+    }
+  }
+
   // ── Background isolate entry point ───────────────────────────────────────
 
   @pragma('vm:entry-point')
@@ -89,6 +144,7 @@ class GpsService {
 
       final wsUrl    = data['wsUrl']    as String? ?? AppConstants.wsUrl;
       final token    = data['token']    as String? ?? '';
+      final apiBase  = data['apiBase']  as String? ?? AppConstants.baseUrl;
       final shiftId  = data['shiftId']  as String? ?? '';
       final vehicleId = data['vehicleId'] as String? ?? '';
       final driverId = data['driverId'] as String?;
@@ -106,6 +162,13 @@ class GpsService {
           .setReconnectionDelay(2000)
           .build(),
       );
+
+      // Sprint M2 — Offline GPS buffering : à la (re)connexion, flush la file
+      // SQLite vers POST /tracking/batch (idempotent côté serveur).
+      socket!.onConnect((_) {
+        _flushOfflineQueue(apiBase: apiBase, token: token);
+      });
+
       socket!.connect();
 
       // Start Geolocator position stream
@@ -115,13 +178,13 @@ class GpsService {
           accuracy: LocationAccuracy.high,
           distanceFilter: 10, // metres — only fires if driver moved ≥10 m
         ),
-      ).listen((pos) {
+      ).listen((pos) async {
         final now = DateTime.now();
         // Throttle: never emit more than once every 5 seconds
         if (lastEmit != null && now.difference(lastEmit!).inSeconds < 5) return;
         lastEmit = now;
 
-        socket?.emit('driver:location', {
+        final payload = <String, dynamic>{
           'driverId':    driverId,
           'vehicleId':   vehicleId,
           'shiftId':     shiftId,
@@ -130,7 +193,28 @@ class GpsService {
           'lng':         pos.longitude,
           'speed':       pos.speed,
           'timestamp':   now.toIso8601String(),
-        });
+        };
+
+        // Sprint M2 — Si le socket est UP, on emet directement. Sinon on
+        // persiste le point dans SQLite (tracking_queue). Au prochain connect,
+        // onConnect declenchera _flushOfflineQueue qui POST en batch.
+        if (socket?.connected == true) {
+          socket!.emit('driver:location', payload);
+        } else {
+          try {
+            await LocalDatabase.instance.queueTrackingPoint(
+              lat:         pos.latitude,
+              lng:         pos.longitude,
+              speed:       pos.speed,
+              accuracy:    pos.accuracy,
+              shiftId:     shiftId.isNotEmpty ? shiftId : null,
+              transportId: activeTransportId,
+            );
+          } catch (e) {
+            // ignore: avoid_print
+            print('[GpsService bg] queue offline failed: $e');
+          }
+        }
       });
     });
 
@@ -175,6 +259,7 @@ class GpsService {
       'driverId':  driverId,
       'token':     token ?? '',
       'wsUrl':     AppConstants.wsUrl,
+      'apiBase':   AppConstants.baseUrl, // Sprint M2 — pour le flush offline
     });
 
     isTracking.value = true;

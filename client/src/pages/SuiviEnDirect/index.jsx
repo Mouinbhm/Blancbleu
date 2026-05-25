@@ -80,9 +80,9 @@ export default function SuiviEnDirect() {
     return () => clearInterval(iv);
   }, []);
 
-  // Écoute Socket.IO : driver:location_updated
+  // Écoute Socket.IO : vehicle:position (Sprint M2 — unifié EN)
   useEffect(() => {
-    const unsub = subscribe("driver:location_updated", (data) => {
+    const unsub = subscribe("vehicle:position", (data) => {
       setDrivers((prev) => ({
         ...prev,
         [data.driverId]: {

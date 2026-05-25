@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/network/socket_manager.dart';
+
 class ApiService {
   // API_BASE_URL must be set in .env (see .env.example).
   // Fallback: Android emulator → 10.0.2.2, physical device → LAN IP, prod → https://
@@ -120,6 +122,9 @@ class ApiService {
           if (newRefresh != null && newRefresh.isNotEmpty) {
             await _saveRefresh(newRefresh);
           }
+          // Sprint M2 — propage le nouveau token au socket pour eviter
+          // une deconnexion silencieuse au prochain handshake serveur.
+          SocketManager.instance.reauthenticate();
           c.complete(true);
           return true;
         }

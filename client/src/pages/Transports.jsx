@@ -118,10 +118,9 @@ export default function Transports() {
 
   useEffect(() => {
     const reload = () => { loadData(); loadPending(); };
-    const u1 = subscribe("transport:statut",         reload);
-    const u2 = subscribe("transport:statut_change",  reload);
-    const u3 = subscribe("transport:status_updated", reload); // emitted by driver app
-    return () => { u1(); u2(); u3(); };
+    // Sprint M2 — event canonique unique (remplace 3 listeners FR/EN/legacy)
+    const u1 = subscribe("transport:status", reload);
+    return () => { u1(); };
   }, [subscribe, loadData, loadPending]);
 
   // Nouveau transport créé depuis l'app mobile → recharger + alerte demandes
