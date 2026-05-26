@@ -31,6 +31,10 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Shared mobile core (Sprint M3) — typed models, network, errors, events.
+  bb_core:
+    path: ../packages/bb_core
+
   cupertino_icons: ^1.0.2
   google_fonts: ^6.2.0
   http: ^1.2.0

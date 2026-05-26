@@ -1,0 +1,14 @@
+# Dart / Flutter
+.dart_tool/
+.packages
+.pub/
+build/
+pubspec.lock
+
+# Generated
+*.g.dart
+*.freezed.dart
+
+# IDE
+.idea/
+.vscode/
