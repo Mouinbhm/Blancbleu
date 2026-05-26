@@ -4,8 +4,8 @@
 ///   - models     (typed freezed)
 ///   - errors     (sealed BbException)
 ///   - events     (socket event constants — mirror of server/sockets/events.js)
-///   - network    (DioClient, TokenManager, SocketManagerBase — étape 3)
-///   - storage    (SecureStorageWrapper — étape 3)
+///   - network    (DioClient, TokenManager, SocketManagerBase, errorMapper)
+///   - storage    (SecureStorageWrapper)
 ///
 /// Consumed by `blancbleu_driver/` and `blancbleu_patient/` as path dependency.
 library bb_core;
@@ -39,3 +39,10 @@ export 'src/models/facture.dart';
 export 'src/models/prescription.dart';
 export 'src/models/app_notification.dart';
 export 'src/models/tracking_point.dart';
+
+// storage + network
+export 'src/storage/secure_storage_wrapper.dart';
+export 'src/network/token_manager.dart';
+export 'src/network/error_mapper.dart';
+export 'src/network/dio_client.dart';
+export 'src/network/socket_manager_base.dart';
