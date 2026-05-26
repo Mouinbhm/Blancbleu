@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
+import '../main.dart' show attachPatientFcmHandlers;
 import '../services/api_service.dart';
 import 'forgot_password_screen.dart';
 import 'home_screen.dart';
@@ -40,6 +41,9 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await ApiService.login(identifier, password);
       if (!mounted) return;
+      // Sprint M4 — Active FCM apres login : POST du token + handlers
+      // foreground/tap. No-op si Firebase non configure (degradation).
+      attachPatientFcmHandlers();
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
       );

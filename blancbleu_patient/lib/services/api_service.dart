@@ -477,6 +477,17 @@ class ApiService {
     }
   }
 
+  /// Sprint M4 — Supprime le token FCM cote serveur (logout).
+  /// Best-effort : ne crashe pas si endpoint KO.
+  static Future<void> deleteFcmToken() async {
+    try {
+      await http.delete(
+        Uri.parse('$_base/fcm-token'),
+        headers: await _headers(),
+      ).timeout(_timeout);
+    } catch (_) { /* non-bloquant */ }
+  }
+
   // ── Mot de passe oublié / réinitialisation ────────────────────────────────
 
   static String get _authBase =>

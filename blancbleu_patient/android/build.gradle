@@ -7,6 +7,10 @@ buildscript {
 
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        // Sprint M4 — Firebase Cloud Messaging.
+        // Le plugin lit google-services.json (gitignoré). Applique
+        // uniquement si le fichier existe (cf. app/build.gradle).
+        classpath 'com.google.gms:google-services:4.4.1'
     }
 }
 
