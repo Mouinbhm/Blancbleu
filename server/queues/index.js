@@ -19,6 +19,7 @@ const QUEUES = {
   CLEANUP:      "cleanup",
   AI:           "ai",
   AUTODISPATCH: "autodispatch",
+  PUSH:         "push", // Sprint M4 — push FCM async (driver + patient)
 };
 
 let connection;

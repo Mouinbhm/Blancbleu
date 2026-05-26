@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
+import '../main.dart' show attachPatientFcmHandlers;
 import '../services/api_service.dart';
 import 'home_screen.dart';
 
@@ -127,6 +128,8 @@ class _SignupScreenState extends State<SignupScreen> {
         },
       );
       if (!mounted) return;
+      // Sprint M4 — Active FCM apres register (no-op si Firebase absent).
+      attachPatientFcmHandlers();
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
       );

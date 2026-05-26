@@ -158,6 +158,35 @@ async function _transition(transportId, nouveauStatut, metadata = {}, session = 
     ).catch((err) => logger.warn("[lifecycle] Notification transport échouée", { err: err.message }));
   });
 
+  // ── Sprint M4 — Push FCM pour les changements de statut clés (patient) ───
+  // On évite le spam : seuls les statuts qui changent l'expérience patient
+  // déclenchent une push. Le socket suffit pour les autres.
+  const PATIENT_PUSH_STATUSES = new Set([
+    "ASSIGNED", "EN_ROUTE_TO_PICKUP", "ARRIVED_AT_PICKUP", "CANCELLED",
+  ]);
+  if (PATIENT_PUSH_STATUSES.has(nouveauStatut) && transport.patient?.email) {
+    setImmediate(() => {
+      const { pushToPatientEmail } = require("./pushDispatcher");
+      const titles = {
+        ASSIGNED:           "Véhicule attribué",
+        EN_ROUTE_TO_PICKUP: "Votre ambulance arrive",
+        ARRIVED_AT_PICKUP:  "Votre ambulance est sur place",
+        CANCELLED:          "Transport annulé",
+      };
+      // RGPD : pas de données médicales dans le body (cf. M4 étape 7).
+      pushToPatientEmail(transport.patient.email, {
+        type:      "transport_status",
+        title:     titles[nouveauStatut] || "Mise à jour transport",
+        body:      transport.numero ? `Transport ${transport.numero}` : "Nouvelle mise à jour",
+        channelId: "blancbleu_transport",
+        data: {
+          transportId: String(transport._id),
+          newStatus:   nouveauStatut,
+        },
+      }).catch((err) => logger.warn("[lifecycle] push patient échoué", { err: err.message }));
+    });
+  }
+
   return transport;
 }
 
@@ -358,6 +387,27 @@ async function assignerVehicule(
     score: scoreDispatch,
     source: auto ? "AUTO" : "MANUEL",
   });
+
+  // Sprint M4 — Push FCM au chauffeur (channel critique). Le socket suffit
+  // quand l'app est ouverte ; le push couvre les cas "app tuée" / "ecran
+  // verrouillé" — c'est précisément le coeur métier (chauffeur doit savoir
+  // sa nouvelle mission même s'il a fermé l'app).
+  if (chauffeurIdFinal) {
+    setImmediate(() => {
+      const { pushToDriver } = require("./pushDispatcher");
+      pushToDriver(chauffeurIdFinal, {
+        type:      "transport_assigned",
+        title:     "Nouvelle mission",
+        body:      transport.numero ? `Transport ${transport.numero}` : "Nouveau transport assigné",
+        channelId: "blancbleu_critical",
+        priority:  "high",
+        data: {
+          transportId: String(transport._id),
+          numero:      transport.numero || "",
+        },
+      }).catch((err) => logger.warn("[lifecycle] push driver échoué", { err: err.message }));
+    });
+  }
 
   logger.info("Véhicule assigné", {
     numero: transport.numero,

@@ -241,6 +241,25 @@ class ApiClient {
     return (res.data as Map<String, dynamic>)['token'] as String?;
   }
 
+  // ── Sprint M4 — FCM push token lifecycle ─────────────────────────────────
+  Future<void> registerFcmToken(String token) async {
+    try {
+      await _dio.post(
+        '${AppConstants.baseUrl}/api/v1/personnel/auth/fcm-token',
+        data: {'token': token},
+      );
+    } catch (_) {
+      // Best-effort : si l'enregistrement échoue, on n'empêche pas le boot.
+      // Le prochain onTokenRefresh ré-essaiera.
+    }
+  }
+
+  Future<void> deleteFcmToken() async {
+    try {
+      await _dio.delete('${AppConstants.baseUrl}/api/v1/personnel/auth/fcm-token');
+    } catch (_) { /* best-effort */ }
+  }
+
   // ── SOS ───────────────────────────────────────────────────────────────────
   Future<void> sosSend({double? lat, double? lng, String? shiftId, String? transportId}) async {
     await _dio.post('/driver/sos', data: {

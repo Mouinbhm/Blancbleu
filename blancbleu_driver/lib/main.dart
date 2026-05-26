@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:bb_core/bb_core.dart' show PushService, RemoteMessage, FirebaseMessaging;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -17,17 +18,47 @@ import 'features/tournee/screens/home_screen.dart';
 import 'services/gps_service.dart';
 import 'shared/theme/app_theme.dart';
 
+/// Sprint M4 — Handler FCM background/terminated.
+///
+/// DOIT être une fonction top-level annotée `@pragma('vm:entry-point')` et
+/// enregistrée AVANT `runApp` (sinon les push n'arrivent pas quand l'app est
+/// tuée). Reste minimal — le log seul suffit ; l'affichage système du push
+/// vient du bloc `notification` envoyé par le serveur.
+@pragma('vm:entry-point')
+Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
+  // ignore: avoid_print
+  print('[FCM bg] ${message.messageId} data=${message.data}');
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('fr_FR', null);
   try { await GpsService.init(); } catch (e) { debugPrint('[main] GpsService.init error: $e'); }
   try { await ThemeNotifier.instance.init(); } catch (e) { debugPrint('[main] ThemeNotifier.init error: $e'); }
   try { await NotificationService.init(); } catch (e) { debugPrint('[main] NotificationService.init error: $e'); }
+
+  // Sprint M4 — Firebase Cloud Messaging (degradation gracieuse).
+  // PushService.init() catch en interne — si la config Firebase est absente
+  // (pas de google-services.json), FCM est desactivé runtime et l'app boote
+  // normalement. attachHandlers (token + foreground + tap) sera branche dans
+  // _Root.initState quand on a accès au context (deep-link).
+  final fcmReady = await PushService.instance.init();
+  if (fcmReady) {
+    // ENREGISTREMENT DU BG HANDLER : doit etre AVANT runApp pour que les push
+    // arrivent quand l'app est tuee. Le handler top-level (au-dessus) reste
+    // minimal — l'affichage systeme vient du bloc `notification` envoye par
+    // le serveur.
+    FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
+  }
   runApp(const BlancBleuDriverApp());
 }
 
 class BlancBleuDriverApp extends StatelessWidget {
   const BlancBleuDriverApp({super.key});
+
+  /// Sprint M4 — Navigator global accessible depuis n'importe où (handlers
+  /// FCM, deep-link app tuee qui ne peuvent pas passer par context).
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +73,7 @@ class BlancBleuDriverApp extends StatelessWidget {
         builder: (_, __) => MaterialApp(
           title: 'BlancBleu Driver',
           debugShowCheckedModeBanner: false,
+          navigatorKey: navigatorKey,
           theme: AppTheme.theme,
           darkTheme: AppTheme.darkTheme,
           themeMode: ThemeNotifier.instance.mode,
@@ -49,6 +81,46 @@ class BlancBleuDriverApp extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Sprint M4 — Routing deep-link depuis un push FCM (data.type).
+/// Appelé par onMessageTap (background) et getInitialMessage (app tuée).
+/// Reste minimal : log + snackbar le temps qu'on ajoute les routes nommees.
+void _handleFcmDeepLink(RemoteMessage msg) {
+  final nav = BlancBleuDriverApp.navigatorKey.currentState;
+  final ctx = nav?.context;
+  final type = msg.data['type']?.toString();
+  final transportId = msg.data['transportId']?.toString();
+  debugPrint('[FCM tap] type=$type data=${msg.data}');
+
+  if (ctx == null) return;
+  // TODO M5 — quand les routes nommees (/transports/:id, /chat, /shift)
+  // seront en place, naviguer via Navigator.of(ctx).pushNamed('/transports/$id').
+  // Pour l'instant : feedback visuel + sync de la tournee (l'utilisateur
+  // verra le transport apparaitre dans la liste).
+  final messenger = ScaffoldMessenger.maybeOf(ctx);
+  if (messenger != null && type != null) {
+    String label;
+    switch (type) {
+      case 'transport_assigned':
+        label = 'Nouvelle mission : ${transportId ?? ""}';
+        SyncService.instance.sync();
+        break;
+      case 'transport_status':
+        label = 'Mise à jour transport ${transportId ?? ""}';
+        SyncService.instance.sync();
+        break;
+      case 'shift_forced_end':
+        label = 'Votre shift a été terminé.';
+        break;
+      case 'message_dispatcher':
+        label = 'Nouveau message du dispatcher';
+        break;
+      default:
+        label = 'Notification reçue';
+    }
+    messenger.showSnackBar(SnackBar(content: Text(label)));
   }
 }
 
@@ -135,9 +207,36 @@ class _RootState extends State<_Root> {
           // Sprint M2 — ouvrir la connexion socket foreground APRES auth OK
           SocketManager.instance.connect();
           SyncService.instance.sync();
+
+          // Sprint M4 — brancher FCM apres login : POST du token + handlers.
+          // PushService est no-op si Firebase non configure (degradation).
+          PushService.instance.attachHandlers(
+            onTokenChanged: (token) async {
+              await ApiClient.instance.registerFcmToken(token);
+            },
+            onForegroundMessage: (msg) {
+              final n = msg.notification;
+              final type = msg.data['type']?.toString();
+              if (n != null) {
+                if (type == 'transport_assigned' || type == 'shift_forced_end') {
+                  NotificationService.showCritical(
+                    n.body ?? '', title: n.title ?? 'BlancBleu Driver',
+                  );
+                } else {
+                  NotificationService.showMessage(
+                    n.body ?? '', title: n.title ?? 'BlancBleu',
+                  );
+                }
+              }
+            },
+            onMessageTap: _handleFcmDeepLink,
+          );
         } else if (state is AuthInitial) {
           // Sprint M2 — fermer la connexion au logout / session expirée
           SocketManager.instance.disconnect();
+          // Sprint M4 — Best-effort : supprimer le token FCM serveur + device
+          ApiClient.instance.deleteFcmToken();
+          PushService.instance.deleteToken();
         }
       },
       builder: (context, state) {

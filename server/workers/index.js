@@ -132,4 +132,11 @@ for (const [name, worker] of Object.entries({
 // Redis est dispo (cf. queues/index.js).
 const { autoDispatchWorker } = require("./autoDispatchWorker");
 
-module.exports = { emailWorker, ocrWorker, pdfWorker, cleanupWorker, aiWorker, autoDispatchWorker };
+// ─── Worker push FCM (Sprint M4) ─────────────────────────────────────────────
+// Module séparé pour mêmes raisons (logging interne, boot conditionnel Redis).
+const { pushWorker } = require("./pushWorker");
+
+module.exports = {
+  emailWorker, ocrWorker, pdfWorker, cleanupWorker, aiWorker,
+  autoDispatchWorker, pushWorker,
+};
