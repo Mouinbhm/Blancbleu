@@ -374,6 +374,8 @@ router.post('/logout', authPatient, async (req, res) => {
     if (rawRefresh) {
       await mobileTokenService.revokeToken(rawRefresh).catch(() => {})
     }
+    // Sprint M4 — efface le fcmToken pour eviter d'envoyer des push apres logout
+    await User.findByIdAndUpdate(req.user._id, { $unset: { fcmToken: 1 } }).catch(() => {})
     res.json({ message: 'Déconnexion réussie' })
   } catch (err) {
     logger.error('[patient/logout]', { err: err.message })
@@ -391,6 +393,19 @@ router.post('/fcm-token', authPatient, async (req, res) => {
     res.json({ message: 'Token FCM enregistré' })
   } catch (err) {
     logger.error('[patient/fcm-token]', { err: err.message })
+    res.status(500).json({ message: safeMsg(err) })
+  }
+})
+
+// ── ROUTE 2d : DELETE /api/patient/fcm-token (logout) ───────────────────────
+// Sprint M4 — efface le token FCM cote serveur pour eviter d'envoyer des push
+// au device de l'utilisateur apres son logout.
+router.delete('/fcm-token', authPatient, async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.user._id, { $unset: { fcmToken: 1 } })
+    res.json({ message: 'Token FCM supprimé' })
+  } catch (err) {
+    logger.error('[patient/fcm-token DELETE]', { err: err.message })
     res.status(500).json({ message: safeMsg(err) })
   }
 })

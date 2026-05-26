@@ -177,6 +177,31 @@ const uploadDocument = async (req, res) => {
   }
 };
 
+// POST /api/v1/personnel/auth/fcm-token (Sprint M4)
+// Body : { token } — enregistre/met à jour le token FCM du chauffeur.
+const registerFcmToken = async (req, res) => {
+  try {
+    const { token } = req.body || {};
+    if (!token) return res.status(400).json({ message: "token requis" });
+    await Personnel.findByIdAndUpdate(req.personnel._id, { fcmToken: token });
+    return res.json({ message: "Token FCM enregistré" });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+// DELETE /api/v1/personnel/auth/fcm-token (Sprint M4)
+// Efface le token FCM (au logout côté app pour éviter d'envoyer des push
+// au device de l'utilisateur après son logout).
+const deleteFcmToken = async (req, res) => {
+  try {
+    await Personnel.findByIdAndUpdate(req.personnel._id, { fcmToken: null });
+    return res.json({ message: "Token FCM supprimé" });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
 // POST /api/v1/personnel/auth/logout
 // Body : { refreshToken? } — best-effort, on tente de révoquer le refresh
 // fourni s'il en existe un (single-device logout). Si absent, on clear juste
@@ -194,4 +219,7 @@ const logout = async (req, res) => {
   }
 };
 
-module.exports = { login, refresh, changePassword, me, logout, updateProfile, uploadAvatar, uploadDocument };
+module.exports = {
+  login, refresh, changePassword, me, logout, updateProfile, uploadAvatar, uploadDocument,
+  registerFcmToken, deleteFcmToken,
+};

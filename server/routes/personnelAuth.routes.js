@@ -23,4 +23,8 @@ router.post("/documents",       requirePersonnel, (req, res, next) => {
 router.get("/me",               requirePersonnel, ctrl.me);
 router.post("/logout",          requirePersonnel, ctrl.logout);
 
+// Sprint M4 — gestion du token FCM (push notifications)
+router.post("/fcm-token",       requirePersonnel, ctrl.registerFcmToken);
+router.delete("/fcm-token",     requirePersonnel, ctrl.deleteFcmToken);
+
 module.exports = router;
