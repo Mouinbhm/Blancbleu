@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:bb_core/bb_core.dart' show PushService, RemoteMessage, FirebaseMessaging;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -17,12 +18,38 @@ import 'features/tournee/screens/home_screen.dart';
 import 'services/gps_service.dart';
 import 'shared/theme/app_theme.dart';
 
+/// Sprint M4 — Handler FCM background/terminated.
+///
+/// DOIT être une fonction top-level annotée `@pragma('vm:entry-point')` et
+/// enregistrée AVANT `runApp` (sinon les push n'arrivent pas quand l'app est
+/// tuée). Reste minimal — le log seul suffit ; l'affichage système du push
+/// vient du bloc `notification` envoyé par le serveur.
+@pragma('vm:entry-point')
+Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
+  // ignore: avoid_print
+  print('[FCM bg] ${message.messageId} data=${message.data}');
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('fr_FR', null);
   try { await GpsService.init(); } catch (e) { debugPrint('[main] GpsService.init error: $e'); }
   try { await ThemeNotifier.instance.init(); } catch (e) { debugPrint('[main] ThemeNotifier.init error: $e'); }
   try { await NotificationService.init(); } catch (e) { debugPrint('[main] NotificationService.init error: $e'); }
+
+  // Sprint M4 — Firebase Cloud Messaging (degradation gracieuse).
+  // PushService.init() catch en interne — si la config Firebase est absente
+  // (pas de google-services.json), FCM est desactivé runtime et l'app boote
+  // normalement. attachHandlers (token + foreground + tap) sera branche dans
+  // _Root.initState quand on a accès au context (deep-link).
+  final fcmReady = await PushService.instance.init();
+  if (fcmReady) {
+    // ENREGISTREMENT DU BG HANDLER : doit etre AVANT runApp pour que les push
+    // arrivent quand l'app est tuee. Le handler top-level (au-dessus) reste
+    // minimal — l'affichage systeme vient du bloc `notification` envoye par
+    // le serveur.
+    FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
+  }
   runApp(const BlancBleuDriverApp());
 }
 

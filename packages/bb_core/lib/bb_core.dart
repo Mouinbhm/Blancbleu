@@ -6,6 +6,7 @@
 ///   - events     (socket event constants — mirror of server/sockets/events.js)
 ///   - network    (DioClient, TokenManager, SocketManagerBase, errorMapper)
 ///   - storage    (SecureStorageWrapper)
+///   - push       (PushService — Firebase Cloud Messaging, M4)
 ///
 /// Consumed by `blancbleu_driver/` and `blancbleu_patient/` as path dependency.
 library bb_core;
@@ -46,3 +47,12 @@ export 'src/network/token_manager.dart';
 export 'src/network/error_mapper.dart';
 export 'src/network/dio_client.dart';
 export 'src/network/socket_manager_base.dart';
+
+// push (M4)
+export 'src/push/push_service.dart';
+// Réexport pour que les apps n'aient pas à dépendre de firebase_messaging
+// directement. Le handler background top-level DOIT être déclaré dans l'app
+// elle-même (contrainte FCM) — d'où l'export de FirebaseMessaging pour que
+// l'app puisse appeler onBackgroundMessage sans import direct.
+export 'package:firebase_messaging/firebase_messaging.dart'
+    show RemoteMessage, FirebaseMessaging;

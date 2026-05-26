@@ -4,6 +4,13 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// Sprint M4 — Firebase : on applique le plugin google-services UNIQUEMENT si
+// le fichier de config est présent. Permet de builder l'app sans Firebase
+// (dégradation gracieuse, FCM désactivé runtime via try/catch dans main.dart).
+if (file('google-services.json').exists()) {
+    apply plugin: 'com.google.gms.google-services'
+}
+
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
 if (localPropertiesFile.exists()) {
