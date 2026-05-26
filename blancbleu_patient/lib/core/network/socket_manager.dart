@@ -21,7 +21,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:socket_io_client/socket_io_client.dart' as sio;
 
 import '../../services/api_service.dart';
-import 'socket_events.dart';
+// Sprint M3 — SocketEvents centralisé dans bb_core (anciennement miroir
+// per-app dans ce dossier, supprimé).
+import 'package:bb_core/bb_core.dart' show SocketEvents;
 
 class SocketManager {
   SocketManager._();

@@ -31,7 +31,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:socket_io_client/socket_io_client.dart' as sio;
 
 import '../utils/constants.dart';
-import 'socket_events.dart';
+// Sprint M3 — SocketEvents centralisé dans bb_core (anciennement miroir
+// per-app dans ce dossier, supprimé).
+import 'package:bb_core/bb_core.dart' show SocketEvents;
 
 class SocketManager {
   SocketManager._();

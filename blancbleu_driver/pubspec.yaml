@@ -10,6 +10,10 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Shared mobile core (Sprint M3) — typed models, network, errors, events.
+  bb_core:
+    path: ../packages/bb_core
+
   # State management
   flutter_bloc: ^8.1.6
   equatable: ^2.0.5
