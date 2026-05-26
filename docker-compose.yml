@@ -120,6 +120,11 @@ services:
       EMAIL_USER: ${EMAIL_USER:-}
       EMAIL_PASS: ${EMAIL_PASS:-}
       EMAIL_FROM: ${EMAIL_FROM:-noreply@blancbleu.fr}
+      # Sprint M4 — Firebase Cloud Messaging. Vide par défaut → FCM désactivé
+      # (dégradation gracieuse). Pour activer : poser le JSON du service
+      # account côté hôte et set FIREBASE_SERVICE_ACCOUNT (3 formats acceptés
+      # — JSON inline / base64 / chemin de fichier). Cf. docs/push-notifications.md.
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
     ports:
       - "5000:5000"
     healthcheck:
@@ -160,6 +165,9 @@ services:
       EMAIL_PASS: ${EMAIL_PASS:-}
       EMAIL_FROM: ${EMAIL_FROM:-noreply@blancbleu.fr}
       CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
+      # Sprint M4 — FCM côté worker (le pushWorker consomme la queue push
+      # et appelle pushNotification qui a besoin du service account).
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
     networks:
       - blancbleu-net
 
