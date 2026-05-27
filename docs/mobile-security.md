@@ -128,10 +128,20 @@ warning (4xx) / error (5xx).
 
 ---
 
-## 8. Hardening runtime (root/jailbreak) — statut
+## 8. Hardening runtime (root/jailbreak)
 
-Détection root/jailbreak : **optionnelle**, non activée par défaut (voir §8 du
-sprint M5). À évaluer selon le modèle de menace — pour une app de dispatching
-ambulancier, le pinning + secure storage + obfuscation couvrent l'essentiel.
-Si ajoutée, elle devra rester **non bloquante** (warning + télémétrie Sentry,
-pas un hard-exit qui dégraderait l'accès en intervention d'urgence).
+**Fichier** : `packages/bb_core/lib/src/security/device_integrity.dart` (via
+`flutter_jailbreak_detection`).
+
+Détection **activée** mais **non bloquante** par choix de design : pour une app
+de dispatching ambulancier, un hard-exit sur device compromis dégraderait
+l'accès en intervention d'urgence. À la détection :
+
+- `BbLog.w` (gardé en release),
+- breadcrumb + `Sentry.captureMessage` niveau warning (no-op si DSN absent).
+
+L'app continue. Câblé dans les 2 `main.dart` via `unawaited(...)` après l'init
+Sentry (ne retarde pas le boot). **Dégradation gracieuse** : si le plugin natif
+échoue / n'est pas supporté, la détection est un no-op silencieux (device
+traité comme sain). La décision de restreindre des fonctionnalités sensibles
+reste au métier, pas à cette couche.
