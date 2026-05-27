@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging;
+import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging, SentryInit;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -51,7 +51,15 @@ void main() async {
     // le serveur.
     FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
   }
-  runApp(const BlancBleuDriverApp());
+
+  // Sprint M5 — Sentry opt-in (DSN via --dart-define=SENTRY_DSN=...).
+  // Sans DSN, runApp est lancé directement (dégradation gracieuse).
+  await SentryInit.runWithSentry(
+    flavor: const String.fromEnvironment('FLAVOR', defaultValue: 'dev'),
+    appRunner: () async {
+      runApp(const BlancBleuDriverApp());
+    },
+  );
 }
 
 class BlancBleuDriverApp extends StatelessWidget {

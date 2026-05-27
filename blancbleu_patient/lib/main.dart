@@ -1,4 +1,4 @@
-import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging;
+import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging, SentryInit;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
@@ -36,7 +36,14 @@ void main() async {
     FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
   }
 
-  runApp(const BlancBleuApp());
+  // Sprint M5 — Sentry opt-in (DSN via --dart-define=SENTRY_DSN=...).
+  // Sans DSN, runApp est lancé directement (dégradation gracieuse).
+  await SentryInit.runWithSentry(
+    flavor: const String.fromEnvironment('FLAVOR', defaultValue: 'dev'),
+    appRunner: () async {
+      runApp(const BlancBleuApp());
+    },
+  );
 }
 
 class BlancBleuApp extends StatelessWidget {

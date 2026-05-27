@@ -44,6 +44,10 @@ export 'src/models/tracking_point.dart';
 // utils
 export 'src/utils/logger.dart';
 
+// observability (M5)
+export 'src/observability/sentry_init.dart';
+export 'src/observability/sentry_dio_interceptor.dart';
+
 // storage + network
 export 'src/storage/secure_storage_wrapper.dart';
 export 'src/network/token_manager.dart';
