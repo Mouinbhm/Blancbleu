@@ -1,0 +1,164 @@
+name: BlancBleu Mobile CI
+
+# Sprint M5 etape 7 — CI Flutter pour le package partage bb_core + les 2 apps.
+# Strategie : analyze + test (bb_core) + build APK debug par app sur chaque
+# PR/push touchant le mobile. Le signing RELEASE reste local-only (pas de
+# keystore en CI tant que les GitHub Secrets ne sont pas configures).
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "packages/bb_core/**"
+      - "blancbleu_driver/**"
+      - "blancbleu_patient/**"
+      - ".github/workflows/mobile.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "packages/bb_core/**"
+      - "blancbleu_driver/**"
+      - "blancbleu_patient/**"
+      - ".github/workflows/mobile.yml"
+
+env:
+  # Aligne sur la version locale de dev (3.16.9 / Dart 3.2.x). Eviter de
+  # laisser flotter la version : un Flutter plus recent tire des deps
+  # transitives non validees et casse l'analyze.
+  FLUTTER_VERSION: "3.16.9"
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # 1) Package partage bb_core : analyze + tests unitaires (parsing, etc.)
+  # ──────────────────────────────────────────────────────────────────────────
+  bb-core:
+    name: bb_core (analyze + test)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter ${{ env.FLUTTER_VERSION }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Pub get
+        working-directory: packages/bb_core
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: packages/bb_core
+        run: flutter analyze
+
+      - name: Test
+        working-directory: packages/bb_core
+        run: flutter test
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 2) App Driver : analyze + build APK debug (flavor dev, sans signing)
+  # ──────────────────────────────────────────────────────────────────────────
+  driver:
+    name: Driver (analyze + build debug)
+    runs-on: ubuntu-latest
+    needs: bb-core
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter ${{ env.FLUTTER_VERSION }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Pub get
+        working-directory: blancbleu_driver
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: blancbleu_driver
+        run: flutter analyze
+
+      # Build APK debug du flavor dev : pas de signing requis (debug key),
+      # pas de SENTRY_DSN (degradation gracieuse), pinning desactive en dev.
+      - name: Build APK debug (flavor dev)
+        working-directory: blancbleu_driver
+        run: flutter build apk --debug --flavor dev --dart-define=FLAVOR=dev
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: driver-dev-debug-apk
+          path: blancbleu_driver/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: warn
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3) App Patient : analyze + build APK debug (flavor dev, sans signing)
+  # ──────────────────────────────────────────────────────────────────────────
+  patient:
+    name: Patient (analyze + build debug)
+    runs-on: ubuntu-latest
+    needs: bb-core
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter ${{ env.FLUTTER_VERSION }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Pub get
+        working-directory: blancbleu_patient
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: blancbleu_patient
+        run: flutter analyze
+
+      - name: Build APK debug (flavor dev)
+        working-directory: blancbleu_patient
+        run: flutter build apk --debug --flavor dev --dart-define=FLAVOR=dev
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: patient-dev-debug-apk
+          path: blancbleu_patient/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: warn
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 4) Statut agrege — tous les jobs sont bloquants (mobile est clean)
+  # ──────────────────────────────────────────────────────────────────────────
+  mobile-status:
+    name: Mobile CI Status
+    runs-on: ubuntu-latest
+    needs: [bb-core, driver, patient]
+    if: always()
+
+    steps:
+      - name: Check jobs
+        run: |
+          fail=0
+          [[ "${{ needs.bb-core.result }}" != "success" ]] && { echo "bb-core KO"; fail=1; }
+          [[ "${{ needs.driver.result }}"  != "success" ]] && { echo "driver KO";  fail=1; }
+          [[ "${{ needs.patient.result }}" != "success" ]] && { echo "patient KO"; fail=1; }
+          exit $fail
