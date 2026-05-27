@@ -1,4 +1,6 @@
-import 'package:bb_core/bb_core.dart' show PushService, RemoteMessage, FirebaseMessaging;
+import 'dart:async';
+
+import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging, SentryInit, DeviceIntegrity;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
@@ -14,8 +16,8 @@ import 'services/notification_service.dart';
 /// Top-level + @pragma('vm:entry-point') obligatoire pour FCM.
 @pragma('vm:entry-point')
 Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
-  // ignore: avoid_print
-  print('[FCM bg patient] ${message.messageId} data=${message.data}');
+  // M5 — no-op en release, pas de data brute dans le log (RGPD).
+  BbLog.d('[FCM bg patient] ${message.messageId}');
 }
 
 void main() async {
@@ -36,7 +38,19 @@ void main() async {
     FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
   }
 
-  runApp(const BlancBleuApp());
+  // Sprint M5 — Sentry opt-in (DSN via --dart-define=SENTRY_DSN=...).
+  // Sans DSN, runApp est lancé directement (dégradation gracieuse).
+  const flavor = String.fromEnvironment('FLAVOR', defaultValue: 'dev');
+  await SentryInit.runWithSentry(
+    flavor: flavor,
+    appRunner: () async {
+      runApp(const BlancBleuApp());
+    },
+  );
+
+  // Sprint M5 — Détection root/jailbreak NON bloquante (warning + Sentry).
+  // unawaited : ne retarde pas le boot (contexte intervention d'urgence).
+  unawaited(DeviceIntegrity.reportIfCompromised(flavor: flavor));
 }
 
 class BlancBleuApp extends StatelessWidget {
@@ -89,7 +103,8 @@ void attachPatientFcmHandlers() {
 void _handleFcmDeepLink(RemoteMessage msg) {
   final type = msg.data['type']?.toString();
   final transportId = msg.data['transportId']?.toString();
-  debugPrint('[FCM tap patient] type=$type data=${msg.data}');
+  // M5 — log type seulement (no-op release via BbLog).
+  BbLog.d('[FCM tap patient] type=$type');
 
   final ctx = BlancBleuApp.navigatorKey.currentContext;
   if (ctx == null) return;

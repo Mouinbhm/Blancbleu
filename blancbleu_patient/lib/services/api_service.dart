@@ -44,6 +44,9 @@ class ApiService {
   static Future<void> clearSession() async {
     await _secure.delete(key: _tokenKey);
     await _secure.delete(key: _refreshKey);
+    await _secure.delete(key: _patientKey);
+    // Sprint M5 — efface aussi le legacy SharedPreferences (cas d'utilisateur
+    // qui upgrade depuis une version pre-M5 où le profil était stocké en clair).
     final p = await SharedPreferences.getInstance();
     p.remove(_patientKey);
   }
@@ -71,13 +74,39 @@ class ApiService {
     }
   }
 
-  static Future<void> savePatient(Map<String, dynamic> patient) async =>
-      (await SharedPreferences.getInstance())
-          .setString(_patientKey, jsonEncode(patient));
+  /// Sprint M5 — Profil patient = donnée de santé (mobilité, médecin,
+  /// contact urgence). DOIT être chiffré au repos. Déplacé de
+  /// SharedPreferences (clair) vers secure_storage (chiffré AES côté Android,
+  /// Keychain côté iOS). Migration douce automatique au prochain getCachedPatient.
+  static Future<void> savePatient(Map<String, dynamic> patient) async {
+    await _secure.write(key: _patientKey, value: jsonEncode(patient));
+  }
 
   static Future<Map<String, dynamic>?> getCachedPatient() async {
-    final s = (await SharedPreferences.getInstance()).getString(_patientKey);
-    return s != null ? jsonDecode(s) as Map<String, dynamic> : null;
+    // Sprint M5 — lecture secure storage en priorité.
+    final s = await _secure.read(key: _patientKey);
+    if (s != null) {
+      try { return jsonDecode(s) as Map<String, dynamic>; }
+      catch (_) { return null; }
+    }
+
+    // Migration douce : si un ancien profil est en SharedPreferences (clair),
+    // on le déplace vers secure storage puis on efface l'ancien.
+    final p = await SharedPreferences.getInstance();
+    final legacy = p.getString(_patientKey);
+    if (legacy != null) {
+      try {
+        final decoded = jsonDecode(legacy) as Map<String, dynamic>;
+        await _secure.write(key: _patientKey, value: legacy);
+        await p.remove(_patientKey);
+        return decoded;
+      } catch (_) {
+        // Ancien JSON corrompu — on purge et on retourne null.
+        await p.remove(_patientKey);
+        return null;
+      }
+    }
+    return null;
   }
 
   // ── Headers ────────────────────────────────────────────────────────────────

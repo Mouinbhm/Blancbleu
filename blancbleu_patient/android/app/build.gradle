@@ -28,6 +28,17 @@ if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
 
+// Sprint M5 — Release signing : lit key.properties (gitignored) si present,
+// sinon fallback debug key (pour preserver `flutter run --release` en local
+// sans avoir la prod keystore). Template : key.properties.example.
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withReader('UTF-8') { reader ->
+        keystoreProperties.load(reader)
+    }
+}
+
 android {
     namespace "fr.blancbleu.blancbleu_patient"
     compileSdk 35
@@ -54,9 +65,49 @@ android {
         versionName flutterVersionName
     }
 
+    // Sprint M5 — Flavors env (dev / staging / prod).
+    // Les 3 sont installables en parallele (applicationIdSuffix). Le DSN Sentry
+    // et l'URL API sont injectes via --dart-define au build (cf. mobile-build.md).
+    // Build :
+    //   flutter build apk --flavor dev      --dart-define=FLAVOR=dev
+    //   flutter build apk --flavor staging  --dart-define=FLAVOR=staging --dart-define=SENTRY_DSN=...
+    //   flutter build apk --flavor prod     --dart-define=FLAVOR=prod    --dart-define=SENTRY_DSN=...
+    flavorDimensions "env"
+    productFlavors {
+        dev {
+            dimension "env"
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+        }
+        staging {
+            dimension "env"
+            applicationIdSuffix ".staging"
+            versionNameSuffix "-staging"
+        }
+        prod {
+            dimension "env"
+            // pas de suffix : applicationId = fr.blancbleu.blancbleu_patient
+        }
+    }
+
+    signingConfigs {
+        release {
+            if (keystoreProperties['storeFile']) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            // Si key.properties present -> signing release.
+            // Sinon -> debug key (permet `flutter run --release` local).
+            signingConfig keystoreProperties['storeFile']
+                ? signingConfigs.release
+                : signingConfigs.debug
         }
     }
 }

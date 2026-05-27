@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:bb_core/bb_core.dart' show PushService, RemoteMessage, FirebaseMessaging;
+import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging, SentryInit, DeviceIntegrity;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -26,8 +26,9 @@ import 'shared/theme/app_theme.dart';
 /// vient du bloc `notification` envoyé par le serveur.
 @pragma('vm:entry-point')
 Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
-  // ignore: avoid_print
-  print('[FCM bg] ${message.messageId} data=${message.data}');
+  // M5 — masque `data` via BbLog (et no-op en release). Le bg handler n'a
+  // pas besoin de logger le payload : FCM affiche déjà la notif système.
+  BbLog.d('[FCM bg] ${message.messageId}');
 }
 
 void main() async {
@@ -50,7 +51,21 @@ void main() async {
     // le serveur.
     FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
   }
-  runApp(const BlancBleuDriverApp());
+
+  // Sprint M5 — Sentry opt-in (DSN via --dart-define=SENTRY_DSN=...).
+  // Sans DSN, runApp est lancé directement (dégradation gracieuse).
+  const flavor = String.fromEnvironment('FLAVOR', defaultValue: 'dev');
+  await SentryInit.runWithSentry(
+    flavor: flavor,
+    appRunner: () async {
+      runApp(const BlancBleuDriverApp());
+    },
+  );
+
+  // Sprint M5 — Détection root/jailbreak NON bloquante (warning + Sentry).
+  // unawaited : ne retarde pas le boot, l'app tourne meme sur device compromis
+  // (contexte intervention d'urgence).
+  unawaited(DeviceIntegrity.reportIfCompromised(flavor: flavor));
 }
 
 class BlancBleuDriverApp extends StatelessWidget {
@@ -92,7 +107,9 @@ void _handleFcmDeepLink(RemoteMessage msg) {
   final ctx = nav?.context;
   final type = msg.data['type']?.toString();
   final transportId = msg.data['transportId']?.toString();
-  debugPrint('[FCM tap] type=$type data=${msg.data}');
+  // M5 — log type seulement (transportId est un id Mongo, OK). Pas de `data`
+  // brut pour éviter de fuiter quoi que ce soit dans logcat release.
+  BbLog.d('[FCM tap] type=$type');
 
   if (ctx == null) return;
   // TODO M5 — quand les routes nommees (/transports/:id, /chat, /shift)

@@ -1,0 +1,19 @@
+# Sprint M5 — Template de signing release.
+#
+# Pour signer un APK/AAB de release :
+#   1. Generer une keystore (cf. docs/mobile-build.md) — JAMAIS committe.
+#   2. Copier ce fichier en `key.properties` (gitignored) au meme endroit
+#      (blancbleu_driver/android/key.properties).
+#   3. Remplir les 4 valeurs ci-dessous avec les vraies (gardees secretes).
+#   4. Lancer `flutter build apk --flavor prod --release`.
+#
+# Le build.gradle lit `key.properties` si present ; sinon il fallback sur la
+# debug key (utile pour `flutter run --release` en local sans secret).
+#
+# /!\ Perdre la keystore = impossibilite de publier une mise a jour de l'app
+# sur le Play Store. La conserver dans un coffre-fort (1Password, vault).
+
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=blancbleu_driver
+storeFile=../keystores/blancbleu_driver.jks

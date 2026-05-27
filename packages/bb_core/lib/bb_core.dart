@@ -41,12 +41,23 @@ export 'src/models/prescription.dart';
 export 'src/models/app_notification.dart';
 export 'src/models/tracking_point.dart';
 
+// utils
+export 'src/utils/logger.dart';
+
+// observability (M5)
+export 'src/observability/sentry_init.dart';
+export 'src/observability/sentry_dio_interceptor.dart';
+
+// security (M5) — détection root/jailbreak non bloquante
+export 'src/security/device_integrity.dart';
+
 // storage + network
 export 'src/storage/secure_storage_wrapper.dart';
 export 'src/network/token_manager.dart';
 export 'src/network/error_mapper.dart';
 export 'src/network/dio_client.dart';
 export 'src/network/socket_manager_base.dart';
+export 'src/network/ssl_pinning.dart';
 
 // push (M4)
 export 'src/push/push_service.dart';
