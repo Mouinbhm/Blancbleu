@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging, SentryInit;
+import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging, SentryInit, DeviceIntegrity;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -54,12 +54,18 @@ void main() async {
 
   // Sprint M5 — Sentry opt-in (DSN via --dart-define=SENTRY_DSN=...).
   // Sans DSN, runApp est lancé directement (dégradation gracieuse).
+  const flavor = String.fromEnvironment('FLAVOR', defaultValue: 'dev');
   await SentryInit.runWithSentry(
-    flavor: const String.fromEnvironment('FLAVOR', defaultValue: 'dev'),
+    flavor: flavor,
     appRunner: () async {
       runApp(const BlancBleuDriverApp());
     },
   );
+
+  // Sprint M5 — Détection root/jailbreak NON bloquante (warning + Sentry).
+  // unawaited : ne retarde pas le boot, l'app tourne meme sur device compromis
+  // (contexte intervention d'urgence).
+  unawaited(DeviceIntegrity.reportIfCompromised(flavor: flavor));
 }
 
 class BlancBleuDriverApp extends StatelessWidget {

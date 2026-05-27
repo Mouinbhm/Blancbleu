@@ -20,6 +20,7 @@ dependencies:
   asn1lib: ^1.6.5
   crypto: ^3.0.3
   sentry_flutter: ^8.14.2
+  flutter_jailbreak_detection: ^1.10.0
 
 dev_dependencies:
   flutter_test:

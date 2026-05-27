@@ -48,6 +48,9 @@ export 'src/utils/logger.dart';
 export 'src/observability/sentry_init.dart';
 export 'src/observability/sentry_dio_interceptor.dart';
 
+// security (M5) — détection root/jailbreak non bloquante
+export 'src/security/device_integrity.dart';
+
 // storage + network
 export 'src/storage/secure_storage_wrapper.dart';
 export 'src/network/token_manager.dart';
