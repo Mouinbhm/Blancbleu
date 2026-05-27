@@ -41,6 +41,9 @@ export 'src/models/prescription.dart';
 export 'src/models/app_notification.dart';
 export 'src/models/tracking_point.dart';
 
+// utils
+export 'src/utils/logger.dart';
+
 // storage + network
 export 'src/storage/secure_storage_wrapper.dart';
 export 'src/network/token_manager.dart';

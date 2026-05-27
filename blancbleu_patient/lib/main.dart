@@ -1,4 +1,4 @@
-import 'package:bb_core/bb_core.dart' show PushService, RemoteMessage, FirebaseMessaging;
+import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
@@ -14,8 +14,8 @@ import 'services/notification_service.dart';
 /// Top-level + @pragma('vm:entry-point') obligatoire pour FCM.
 @pragma('vm:entry-point')
 Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
-  // ignore: avoid_print
-  print('[FCM bg patient] ${message.messageId} data=${message.data}');
+  // M5 — no-op en release, pas de data brute dans le log (RGPD).
+  BbLog.d('[FCM bg patient] ${message.messageId}');
 }
 
 void main() async {
@@ -89,7 +89,8 @@ void attachPatientFcmHandlers() {
 void _handleFcmDeepLink(RemoteMessage msg) {
   final type = msg.data['type']?.toString();
   final transportId = msg.data['transportId']?.toString();
-  debugPrint('[FCM tap patient] type=$type data=${msg.data}');
+  // M5 — log type seulement (no-op release via BbLog).
+  BbLog.d('[FCM tap patient] type=$type');
 
   final ctx = BlancBleuApp.navigatorKey.currentContext;
   if (ctx == null) return;

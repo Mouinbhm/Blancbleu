@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:bb_core/bb_core.dart' show BbLog;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -109,15 +110,12 @@ class GpsService {
       if (res.statusCode == 200 || res.statusCode == 201) {
         final ids = pending.map((r) => r['id'] as int).toList();
         await LocalDatabase.instance.markTrackingPointsSynced(ids);
-        // ignore: avoid_print
-        print('[GpsService bg] offline flush OK : ${ids.length} points');
+        BbLog.i('[GpsService bg] offline flush OK : ${ids.length} points');
       } else {
-        // ignore: avoid_print
-        print('[GpsService bg] offline flush HTTP ${res.statusCode}');
+        BbLog.w('[GpsService bg] offline flush HTTP ${res.statusCode}');
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('[GpsService bg] offline flush failed: $e');
+      BbLog.w('[GpsService bg] offline flush failed', err: e);
     }
   }
 
@@ -211,8 +209,7 @@ class GpsService {
               transportId: activeTransportId,
             );
           } catch (e) {
-            // ignore: avoid_print
-            print('[GpsService bg] queue offline failed: $e');
+            BbLog.w('[GpsService bg] queue offline failed', err: e);
           }
         }
       });
