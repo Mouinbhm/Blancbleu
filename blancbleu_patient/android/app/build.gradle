@@ -54,6 +54,31 @@ android {
         versionName flutterVersionName
     }
 
+    // Sprint M5 — Flavors env (dev / staging / prod).
+    // Les 3 sont installables en parallele (applicationIdSuffix). Le DSN Sentry
+    // et l'URL API sont injectes via --dart-define au build (cf. mobile-build.md).
+    // Build :
+    //   flutter build apk --flavor dev      --dart-define=FLAVOR=dev
+    //   flutter build apk --flavor staging  --dart-define=FLAVOR=staging --dart-define=SENTRY_DSN=...
+    //   flutter build apk --flavor prod     --dart-define=FLAVOR=prod    --dart-define=SENTRY_DSN=...
+    flavorDimensions "env"
+    productFlavors {
+        dev {
+            dimension "env"
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+        }
+        staging {
+            dimension "env"
+            applicationIdSuffix ".staging"
+            versionNameSuffix "-staging"
+        }
+        prod {
+            dimension "env"
+            // pas de suffix : applicationId = fr.blancbleu.blancbleu_patient
+        }
+    }
+
     buildTypes {
         release {
             signingConfig signingConfigs.debug
