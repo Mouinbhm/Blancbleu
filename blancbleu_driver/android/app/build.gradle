@@ -29,6 +29,17 @@ if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
 
+// Sprint M5 — Release signing : lit key.properties (gitignored) si present,
+// sinon fallback debug key (pour preserver `flutter run --release` en local
+// sans avoir la prod keystore). Template : key.properties.example.
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withReader('UTF-8') { reader ->
+        keystoreProperties.load(reader)
+    }
+}
+
 android {
     namespace "com.blancbleu.blancbleu_driver"
     compileSdkVersion 34
@@ -80,11 +91,24 @@ android {
         }
     }
 
+    signingConfigs {
+        release {
+            if (keystoreProperties['storeFile']) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig signingConfigs.debug
+            // Si key.properties present -> signing release.
+            // Sinon -> debug key (permet `flutter run --release` local).
+            signingConfig keystoreProperties['storeFile']
+                ? signingConfigs.release
+                : signingConfigs.debug
         }
     }
 }

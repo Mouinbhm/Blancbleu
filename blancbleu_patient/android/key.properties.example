@@ -1,0 +1,12 @@
+# Sprint M5 — Template de signing release.
+#
+# Voir blancbleu_driver/android/key.properties.example pour la procedure
+# detaillee + reference vers docs/mobile-build.md.
+#
+# /!\ Une keystore DIFFERENTE pour chaque app (driver != patient) — Google
+# Play les identifie comme deux apps distinctes (applicationId different).
+
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=blancbleu_patient
+storeFile=../keystores/blancbleu_patient.jks
