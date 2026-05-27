@@ -19,6 +19,7 @@ import 'package:dio/dio.dart';
 
 import '../errors/exceptions.dart';
 import 'error_mapper.dart';
+import 'ssl_pinning.dart';
 import 'token_manager.dart';
 
 class DioClient {
@@ -43,6 +44,10 @@ class DioClient {
     Duration receiveTimeout = const Duration(seconds: 30),
     Future<void> Function()? onRefreshSuccess,
     Future<void> Function()? onAuthFailed,
+    /// Sprint M5 — SSL public-key pinning (SPKI SHA-256 base64).
+    /// Vide ou baseUrl non https → adapter par défaut (dev).
+    /// Voir docs/mobile-security.md pour la procédure d'extraction.
+    List<String> spkiSha256PinsBase64 = const [],
   })  : _tokens = tokens,
         _refreshPath = refreshPath,
         _onRefreshSuccess = onRefreshSuccess,
@@ -53,6 +58,17 @@ class DioClient {
       receiveTimeout: receiveTimeout,
       headers: {'Content-Type': 'application/json'},
     ));
+
+    // Sprint M5 — Si des pins SSL sont fournis ET baseUrl est https, on
+    // installe l'adapter pinné (rejet automatique des certs non matchant).
+    // Sinon adapter Dio par défaut (validation système).
+    final pinnedAdapter = SslPinning.buildPinnedAdapter(
+      spkiSha256PinsBase64: spkiSha256PinsBase64,
+      baseUrl: baseUrl,
+    );
+    if (pinnedAdapter != null) {
+      dio.httpClientAdapter = pinnedAdapter;
+    }
 
     dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {

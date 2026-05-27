@@ -47,6 +47,7 @@ export 'src/network/token_manager.dart';
 export 'src/network/error_mapper.dart';
 export 'src/network/dio_client.dart';
 export 'src/network/socket_manager_base.dart';
+export 'src/network/ssl_pinning.dart';
 
 // push (M4)
 export 'src/push/push_service.dart';
