@@ -1,22 +1,33 @@
 """
-BlancBleu — Service de Scoring Dispatch v2.0
-Recommandation véhicule + chauffeur — scoring multicritère explicable
+BlancBleu — Service de scoring dispatch (système expert pondéré).
 
-Algorithme : scoring pondéré sur 7 critères (score final 0-100)
-Chaque critère est noté 0-100, puis pondéré selon DEFAULT_SCORING_WEIGHTS.
+Ce module est un **système expert rule-based**, PAS un modèle d'apprentissage
+automatique. Aucun entraînement, aucune inférence ML : on calcule un score
+0-100 par véhicule candidat à partir de 7 critères, chacun noté 0-100 selon
+des règles métier écrites en dur dans le code, puis combinés via une moyenne
+pondérée (somme des poids = 1.0).
 
-    Score final = Σ (poids_critère × score_critère)   [total des poids = 1.0]
+    Score final = Σ (poids_critère × score_critère)
 
-Critères :
-  A. distance          (0.25) — proximité GPS véhicule → patient
+Critères et poids par défaut (`DEFAULT_SCORING_WEIGHTS`) :
+  A. distance           (0.25) — proximité GPS véhicule → patient (haversine)
   B. driverAvailability (0.20) — disponibilité du chauffeur
-  C. vehicleTypeMatch  (0.20) — compatibilité type véhicule / mobilité
-  D. planningLoad      (0.15) — charge de planning du véhicule/chauffeur
-  E. traffic           (0.10) — estimation du trafic selon l'heure
-  F. medicalPriority   (0.05) — priorité médicale du transport
-  G. punctualityHistory (0.05) — historique de ponctualité du chauffeur
+  C. vehicleTypeMatch   (0.20) — compatibilité type véhicule / mobilité patient
+  D. planningLoad       (0.15) — charge de planning du véhicule
+  E. traffic            (0.10) — estimation trafic selon l'heure de départ
+  F. medicalPriority    (0.05) — priorité médicale du transport
+  G. punctualityHistory (0.05) — historique de ponctualité chauffeur
 
-L'IA ne prend jamais la décision finale — le dispatcher garde le contrôle.
+Pourquoi rule-based :
+  - explicabilité totale (chaque critère et chaque poids sont lisibles),
+  - stabilité (pas de dérive modèle, pas de besoin de re-train),
+  - aucun jeu de données réel nécessaire pour fonctionner.
+
+Les poids peuvent être surchargés par appel via le payload `weights` (validés
+contre la liste des clés attendues et la somme à 1.0). Cf. `MODEL_CARD.md`
+section 4.5 pour la posture officielle et les limitations.
+
+Le dispatcher humain reste l'autorité finale sur l'affectation.
 """
 
 import logging

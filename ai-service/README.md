@@ -1,20 +1,48 @@
-# BlancBleu — Microservice IA
+# BlancBleu — Microservice de scoring de dispatch + prédicteur de durée (POC)
 
 Microservice Python (FastAPI) pour le transport sanitaire non urgent.
 
-**Port :** 5002  
+> Pour la posture officielle du service (statut POC, données d'entraînement,
+> métriques, limitations, roadmap production), voir [`MODEL_CARD.md`](MODEL_CARD.md).
+
+**Port :** 5002
 **Lancement :** `uvicorn main:app --host 0.0.0.0 --port 5002 --reload`
 
 ---
 
 ## Modules
 
-| Module | Route | Description |
-|--------|-------|-------------|
-| PMT Extraction | `POST /pmt/extract` | OCR + extraction Prescription Médicale de Transport |
-| Smart Dispatch | `POST /dispatch/recommend` | Recommandation véhicule/chauffeur |
-| Optimisation VRP | `POST /routing/optimize` | Tournée OR-Tools |
-| Santé | `GET /health` | État du service et des modules |
+| Module               | Route                      | Implémentation                          |
+| -------------------- | -------------------------- | --------------------------------------- |
+| Extraction PMT       | `POST /pmt/extract`        | Tesseract OCR + regex + spaCy           |
+| Scoring dispatch     | `POST /dispatch/recommend` | **Système expert pondéré (rule-based)** |
+| Prédicteur de durée  | `POST /optimizer/predict`  | XGBoost — **POC, données synthétiques** |
+| Optimisation tournée | `POST /routing/optimize`   | Google OR-Tools (VRP)                   |
+| Info modèle          | `GET  /ai/info`            | Renvoie le MODEL_CARD en JSON           |
+| Santé                | `GET  /health`             | État du service et des modules          |
+
+---
+
+## Limitations actuelles
+
+- **Le scoring de dispatch n'est pas du machine learning** — c'est une
+  somme pondérée de 7 scores calculés par règles métier (`DEFAULT_SCORING_WEIGHTS`
+  dans [`services/dispatch_scorer.py`](services/dispatch_scorer.py)). Pas
+  d'apprentissage, pas d'inférence. Avantage : explicabilité totale.
+- **Le prédicteur de durée est un POC** entraîné sur **1 500 transports
+  synthétiques**, **zéro réels** (cf. [`model/metrics.json`](model/metrics.json)).
+  Les métriques (MAE ≈ 7 min, R² ≈ 0.97) ne reflètent que la validation
+  interne sur le test set synthétique — elles n'indiquent rien sur la
+  performance en production.
+- **Pas de monitoring drift** (ni Evidently, ni MLflow) — toute dérive
+  passerait inaperçue.
+- **Biais d'entraînement inconnu** : les données ont été générées par
+  un script (`scripts/`) avec des règles métier _à dire d'expert_.
+- **Le dispatcher humain reste l'autorité finale** sur l'affectation
+  véhicule/chauffeur ; le scoring est une aide à la décision, pas un
+  système autonome.
+
+Roadmap pour passage en prod : cf. [`MODEL_CARD.md`](MODEL_CARD.md) §5.
 
 ---
 
@@ -51,6 +79,7 @@ python scripts/download_tessdata.py
 ```
 
 Ce script :
+
 - Localise automatiquement le dossier `tessdata`
 - Télécharge `fra.traineddata` (~4.8 Mo) et `eng.traineddata` (~4.1 Mo)
 - Vérifie que les fichiers sont corrects
@@ -62,6 +91,7 @@ tesseract --list-langs
 ```
 
 Résultat attendu :
+
 ```
 List of available languages (3):
 eng
@@ -86,10 +116,10 @@ pip install ortools
 
 ## Variables d'environnement
 
-| Variable | Valeur par défaut | Description |
-|----------|-------------------|-------------|
+| Variable          | Valeur par défaut                         | Description                    |
+| ----------------- | ----------------------------------------- | ------------------------------ |
 | `TESSDATA_PREFIX` | `C:\Program Files\Tesseract-OCR\tessdata` | Dossier des fichiers de langue |
-| `AI_PORT` | `5002` | Port d'écoute |
+| `AI_PORT`         | `5002`                                    | Port d'écoute                  |
 
 La variable `TESSDATA_PREFIX` est configurée automatiquement par le service si elle n'est pas définie.
 
@@ -102,6 +132,7 @@ La variable `TESSDATA_PREFIX` est configurée automatiquement par le service si 
 Le fichier `fra.traineddata` est absent du dossier tessdata.
 
 **Solution :**
+
 ```bash
 python scripts/download_tessdata.py
 ```
@@ -113,6 +144,7 @@ Puis redémarrer le microservice.
 Tesseract n'est pas installé ou le chemin n'est pas correct.
 
 **Vérifier :**
+
 ```bash
 where tesseract
 tesseract --version
