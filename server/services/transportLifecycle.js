@@ -21,6 +21,7 @@ const { haversine } = require("../utils/geoUtils");
 const tarifService = require("./tarifService");
 const transportNotif = require("./transportNotificationService");
 const { withTransactionOrFallback } = require("../utils/withTransaction");
+const { ConflictError } = require("../utils/errors");
 const { delPattern } = require("../utils/redis");
 const featureCollector = require("./featureCollectorService");
 const logger = (() => {
@@ -30,6 +31,11 @@ const logger = (() => {
     return console;
   }
 })();
+
+// Statuts depuis lesquels un transport peut recevoir un véhicule. Cohérent
+// avec TRANSITIONS du state machine : SCHEDULED → ASSIGNED et
+// DRIVER_REJECTED → ASSIGNED (réassignation après refus chauffeur).
+const ASSIGNABLE_TRANSPORT_STATES = ["SCHEDULED", "DRIVER_REJECTED"];
 
 // ── SIMULATION GPS AUTO DÉSACTIVÉE ───────────────────────────────────────────
 // Mettre SIMULATION_GPS_ACTIVE = true pour réactiver (démos PFE).
@@ -74,13 +80,13 @@ async function _transition(transportId, nouveauStatut, metadata = {}, session = 
 
   // ── PART A : Historique riche des statuts ─────────────────────────────────
   transport.statusLog.push({
-    from:          ancienStatut,
-    to:            nouveauStatut,
-    changedBy:     metadata.userId     || null,
-    changedByRole: metadata.userRole   || "système",
-    changedAt:     new Date(),
-    reason:        metadata.reason || metadata.notes || "",
-    metadata:      metadata.extra || {},
+    from: ancienStatut,
+    to: nouveauStatut,
+    changedBy: metadata.userId || null,
+    changedByRole: metadata.userRole || "système",
+    changedAt: new Date(),
+    reason: metadata.reason || metadata.notes || "",
+    metadata: metadata.extra || {},
   });
 
   await transport.save({ session: session || undefined });
@@ -138,50 +144,58 @@ async function _transition(transportId, nouveauStatut, metadata = {}, session = 
   // ce transport (patient app, web Suivi en direct, driver foreground).
   const EVENTS = require("../sockets/events");
   socketService.emitToTransportRoom?.(transport._id, EVENTS.TRANSPORT_STATUS, {
-    transportId:  transport._id,
-    numero:       transport.numero,
-    oldStatus:    entreeJournal.de,
-    newStatus:    nouveauStatut,
+    transportId: transport._id,
+    numero: transport.numero,
+    oldStatus: entreeJournal.de,
+    newStatus: nouveauStatut,
     ancienStatut: entreeJournal.de, // alias FR rétrocompat
     nouveauStatut,
-    progression:  require("./transportStateMachine").TransportStateMachine.progression(nouveauStatut),
+    progression:
+      require("./transportStateMachine").TransportStateMachine.progression(nouveauStatut),
   });
 
   // ── PART E : Notification persistée + push Socket ─────────────────────────
   setImmediate(() => {
-    transportNotif.notifyStatusChanged(
-      transport,
-      ancienStatut,
-      nouveauStatut,
-      { _id: metadata.userId, role: metadata.userRole, email: metadata.utilisateur },
-      metadata.reason || metadata.notes,
-    ).catch((err) => logger.warn("[lifecycle] Notification transport échouée", { err: err.message }));
+    transportNotif
+      .notifyStatusChanged(
+        transport,
+        ancienStatut,
+        nouveauStatut,
+        { _id: metadata.userId, role: metadata.userRole, email: metadata.utilisateur },
+        metadata.reason || metadata.notes,
+      )
+      .catch((err) =>
+        logger.warn("[lifecycle] Notification transport échouée", { err: err.message }),
+      );
   });
 
   // ── Sprint M4 — Push FCM pour les changements de statut clés (patient) ───
   // On évite le spam : seuls les statuts qui changent l'expérience patient
   // déclenchent une push. Le socket suffit pour les autres.
   const PATIENT_PUSH_STATUSES = new Set([
-    "ASSIGNED", "EN_ROUTE_TO_PICKUP", "ARRIVED_AT_PICKUP", "CANCELLED",
+    "ASSIGNED",
+    "EN_ROUTE_TO_PICKUP",
+    "ARRIVED_AT_PICKUP",
+    "CANCELLED",
   ]);
   if (PATIENT_PUSH_STATUSES.has(nouveauStatut) && transport.patient?.email) {
     setImmediate(() => {
       const { pushToPatientEmail } = require("./pushDispatcher");
       const titles = {
-        ASSIGNED:           "Véhicule attribué",
+        ASSIGNED: "Véhicule attribué",
         EN_ROUTE_TO_PICKUP: "Votre ambulance arrive",
-        ARRIVED_AT_PICKUP:  "Votre ambulance est sur place",
-        CANCELLED:          "Transport annulé",
+        ARRIVED_AT_PICKUP: "Votre ambulance est sur place",
+        CANCELLED: "Transport annulé",
       };
       // RGPD : pas de données médicales dans le body (cf. M4 étape 7).
       pushToPatientEmail(transport.patient.email, {
-        type:      "transport_status",
-        title:     titles[nouveauStatut] || "Mise à jour transport",
-        body:      transport.numero ? `Transport ${transport.numero}` : "Nouvelle mise à jour",
+        type: "transport_status",
+        title: titles[nouveauStatut] || "Mise à jour transport",
+        body: transport.numero ? `Transport ${transport.numero}` : "Nouvelle mise à jour",
         channelId: "blancbleu_transport",
         data: {
           transportId: String(transport._id),
-          newStatus:   nouveauStatut,
+          newStatus: nouveauStatut,
         },
       }).catch((err) => logger.warn("[lifecycle] push patient échoué", { err: err.message }));
     });
@@ -194,8 +208,8 @@ async function _transition(transportId, nouveauStatut, metadata = {}, session = 
 function _meta(utilisateur, overrides = {}) {
   return {
     utilisateur: utilisateur?.email || "système",
-    userId:      utilisateur?._id   || null,
-    userRole:    utilisateur?.role  || "système",
+    userId: utilisateur?._id || null,
+    userRole: utilisateur?.role || "système",
     ...overrides,
   };
 }
@@ -215,9 +229,13 @@ async function getTransportTimeline(transportId) {
 // 1. CONFIRMER UN TRANSPORT
 // ══════════════════════════════════════════════════════════════════════════════
 async function confirmerTransport(transportId, utilisateur) {
-  const transport = await _transition(transportId, "CONFIRMED", _meta(utilisateur, {
-    notes: "Transport confirmé",
-  }));
+  const transport = await _transition(
+    transportId,
+    "CONFIRMED",
+    _meta(utilisateur, {
+      notes: "Transport confirmé",
+    }),
+  );
 
   await log({
     action: "STATUT_CHANGED",
@@ -262,9 +280,13 @@ async function planifierTransport(transportId, utilisateur) {
       const { queues, QUEUES } = require("../queues");
       const q = queues[QUEUES.AUTODISPATCH];
       if (!q) return;
-      await q.add("eval", { transportId: String(transportId) }, {
-        jobId: `autodispatch:${transportId}`, // dédoublonnage natif
-      });
+      await q.add(
+        "eval",
+        { transportId: String(transportId) },
+        {
+          jobId: `autodispatch:${transportId}`, // dédoublonnage natif
+        },
+      );
       logger.debug("[lifecycle] job auto-dispatch enqueued", { transportId });
     } catch (err) {
       logger.warn("[lifecycle] auto-dispatch enqueue échoué", { err: err.message });
@@ -312,9 +334,7 @@ async function assignerVehicule(
     });
 
     if (!dispatch.vehicule) {
-      throw new Error(
-        `Aucun véhicule disponible : ${dispatch.justification[0]}`,
-      );
+      throw new Error(`Aucun véhicule disponible : ${dispatch.justification[0]}`);
     }
 
     vehiculeIdFinal = dispatch.vehicule._id;
@@ -341,7 +361,10 @@ async function assignerVehicule(
     }
     // If no shiftId yet, look up the active shift for this chauffeur
     if (!shiftIdFinal) {
-      const activeShift = await DriverShift.findOne({ personnelId: chauffeurIdFinal, status: "ACTIVE" });
+      const activeShift = await DriverShift.findOne({
+        personnelId: chauffeurIdFinal,
+        status: "ACTIVE",
+      });
       if (activeShift) shiftIdFinal = activeShift._id;
     }
   }
@@ -355,31 +378,97 @@ async function assignerVehicule(
     }
   }
 
-  // Writes critiques (Transport + Vehicle + transition) dans une transaction
-  // pour garantir un état cohérent en cas d'échec en cours de processus.
-  const transportUpdated = await withTransactionOrFallback(async (session) => {
-    await Transport.findByIdAndUpdate(
-      transportId,
-      {
-        vehicule: vehiculeIdFinal,
-        chauffeur: chauffeurIdFinal,
-        shiftId: shiftIdFinal,
-        scoreDispatch,
+  // ── Assignation atomique (anti race condition) ──────────────────────────────
+  // En standalone Mongo, withTransactionOrFallback retombe sur des writes sans
+  // session — pas d'isolation, deux dispatchers pouvaient claim le même véhicule
+  // simultanément (chacun voyait `statut: "Disponible"` et `transportEnCours: null`
+  // puis écrasait l'autre). On utilise désormais findOneAndUpdate avec garde
+  // stricte : Mongo garantit l'atomicité au niveau document, donc un seul
+  // appelant peut transitionner le véhicule de "Disponible" → "En service".
+  //
+  // Étape 1 : claim atomique du véhicule. Si déjà occupé → ConflictError 409.
+  // Étape 2 : mise à jour atomique du transport (vehicule/chauffeur/shiftId)
+  //           si statut encore dans la liste autorisée. Sinon → rollback véhicule.
+  // Étape 3 : transition state-machine (statusLog + horodatages + sockets/audit).
+  // Catch global : libère le véhicule (et best-effort revert des champs transport)
+  //                pour tout échec en cours de processus.
+  const claimedVehicle = await Vehicle.findOneAndUpdate(
+    {
+      _id: vehiculeIdFinal,
+      statut: "Disponible",
+      $or: [{ transportEnCours: null }, { transportEnCours: { $exists: false } }],
+    },
+    {
+      $set: {
+        statut: "En service",
+        transportEnCours: transportId,
       },
-      { session: session || undefined },
-    );
+    },
+    { new: true },
+  );
+  if (!claimedVehicle) {
+    throw new ConflictError("Véhicule déjà occupé ou indisponible — un autre transport l'utilise.");
+  }
 
-    // Vehicle stays En service during the shift — just track the current transport
-    await Vehicle.findByIdAndUpdate(
-      vehiculeIdFinal,
-      { statut: "En service", transportEnCours: transportId },
-      { session: session || undefined },
+  let transportUpdated;
+  try {
+    const updatedTransport = await Transport.findOneAndUpdate(
+      {
+        _id: transportId,
+        statut: { $in: ASSIGNABLE_TRANSPORT_STATES },
+      },
+      {
+        $set: {
+          vehicule: vehiculeIdFinal,
+          chauffeur: chauffeurIdFinal,
+          shiftId: shiftIdFinal,
+          scoreDispatch,
+        },
+      },
+      { new: true },
     );
+    if (!updatedTransport) {
+      throw new ConflictError(
+        `Transport non assignable — statut actuel hors de [${ASSIGNABLE_TRANSPORT_STATES.join(", ")}].`,
+      );
+    }
 
-    return _transition(transportId, "ASSIGNED", _meta(utilisateur, {
-      notes: auto ? `Auto-dispatch : ${justification[0]}` : "Assignation manuelle",
-    }), session);
-  });
+    transportUpdated = await _transition(
+      transportId,
+      "ASSIGNED",
+      _meta(utilisateur, {
+        notes: auto ? `Auto-dispatch : ${justification[0]}` : "Assignation manuelle",
+      }),
+    );
+  } catch (err) {
+    // Rollback véhicule (idempotent — la clause transportEnCours: transportId
+    // évite de libérer un véhicule qu'un autre processus aurait re-claimé).
+    await Vehicle.findOneAndUpdate(
+      { _id: vehiculeIdFinal, transportEnCours: transportId },
+      { $set: { statut: "Disponible", transportEnCours: null } },
+    ).catch((rollbackErr) =>
+      logger.error("Rollback véhicule échoué", { err: rollbackErr.message }),
+    );
+    // Best-effort : revert des champs transport si le state-machine a échoué
+    // après l'update partiel (sinon le transport reste avec vehicule pointant
+    // sur un véhicule libéré → état orphelin visible côté UI).
+    await Transport.findOneAndUpdate(
+      {
+        _id: transportId,
+        vehicule: vehiculeIdFinal,
+        statut: { $in: ASSIGNABLE_TRANSPORT_STATES },
+      },
+      {
+        $set: {
+          vehicule: null,
+          chauffeur: null,
+          shiftId: null,
+          scoreDispatch: null,
+        },
+      },
+    ).catch(() => {});
+    throw err;
+  }
 
   socketService.emitUnitAssigned?.({
     intervention: { _id: transport._id, numero: transport.numero },
@@ -396,14 +485,14 @@ async function assignerVehicule(
     setImmediate(() => {
       const { pushToDriver } = require("./pushDispatcher");
       pushToDriver(chauffeurIdFinal, {
-        type:      "transport_assigned",
-        title:     "Nouvelle mission",
-        body:      transport.numero ? `Transport ${transport.numero}` : "Nouveau transport assigné",
+        type: "transport_assigned",
+        title: "Nouvelle mission",
+        body: transport.numero ? `Transport ${transport.numero}` : "Nouveau transport assigné",
         channelId: "blancbleu_critical",
-        priority:  "high",
+        priority: "high",
         data: {
           transportId: String(transport._id),
-          numero:      transport.numero || "",
+          numero: transport.numero || "",
         },
       }).catch((err) => logger.warn("[lifecycle] push driver échoué", { err: err.message }));
     });
@@ -434,11 +523,7 @@ async function marquerEnRoute(transportId, utilisateur) {
 // ══════════════════════════════════════════════════════════════════════════════
 // 5. ARRIVÉ CHEZ LE PATIENT
 // ══════════════════════════════════════════════════════════════════════════════
-async function marquerArriveePatient(
-  transportId,
-  positionActuelle,
-  utilisateur,
-) {
+async function marquerArriveePatient(transportId, positionActuelle, utilisateur) {
   const transport = await _transition(transportId, "ARRIVED_AT_PICKUP", _meta(utilisateur));
 
   // Mettre à jour position du véhicule si fournie
@@ -465,11 +550,7 @@ async function marquerPatientABord(transportId, utilisateur) {
 // ══════════════════════════════════════════════════════════════════════════════
 // 7. ARRIVÉ À DESTINATION
 // ══════════════════════════════════════════════════════════════════════════════
-async function marquerArriveeDestination(
-  transportId,
-  positionActuelle,
-  utilisateur,
-) {
+async function marquerArriveeDestination(transportId, positionActuelle, utilisateur) {
   const transport = await _transition(transportId, "ARRIVED_AT_DESTINATION", _meta(utilisateur));
 
   // Calculer distance parcourue si GPS disponible
@@ -483,8 +564,7 @@ async function marquerArriveeDestination(
     if (transport.vehicule) {
       const vehicle = await Vehicle.findById(transport.vehicule);
       if (vehicle) {
-        vehicle.kilometrage =
-          Math.round((vehicle.kilometrage + dist) * 10) / 10;
+        vehicle.kilometrage = Math.round((vehicle.kilometrage + dist) * 10) / 10;
         await vehicle.save();
       }
     }
@@ -552,20 +632,18 @@ async function completerTransport(transportId, utilisateur) {
         .filter(Boolean)
         .join(" ");
       const lieuLabel =
-        transport.adresseDestination?.nom ||
-        transport.adresseDestination?.ville ||
-        "Non précisé";
+        transport.adresseDestination?.nom || transport.adresseDestination?.ville || "Non précisé";
 
       const facture = await Facture.create({
         transportId: transport._id,
-        patientNom:  transport.patient?.nom  || "",
+        patientNom: transport.patient?.nom || "",
         patientPrenom: transport.patient?.prenom || "",
         motif: transport.motif,
-        montantTotal:   tarif.montantTotal,
-        montantCPAM:    tarif.montantCPAM,
+        montantTotal: tarif.montantTotal,
+        montantCPAM: tarif.montantCPAM,
         montantPatient: tarif.montantPatient,
-        distanceKm:     tarif.distanceKm,
-        typeVehicule:   transport.typeTransport,
+        distanceKm: tarif.distanceKm,
+        typeVehicule: transport.typeTransport,
         statut: "en_attente",
         notes: tarif.details.join("\n"),
       });
@@ -576,18 +654,24 @@ async function completerTransport(transportId, utilisateur) {
       // Notifier patient + admin/comptable qu'une facture est disponible
       const patientId = transport.patientId;
       setImmediate(() => {
-        transportNotif.notifyInvoiceReady(facture, patientId)
-          .catch((err) => logger.warn("[lifecycle] notifyInvoiceReady échoué", { err: err.message }));
+        transportNotif
+          .notifyInvoiceReady(facture, patientId)
+          .catch((err) =>
+            logger.warn("[lifecycle] notifyInvoiceReady échoué", { err: err.message }),
+          );
       });
       // Transition automatique COMPLETED → BILLING_PENDING
       const _util = utilisateur;
-      const _tId  = transportId;
+      const _tId = transportId;
       setImmediate(async () => {
         try {
           await marquerBillingPending(_tId, _util);
           logger.info("Auto-transition BILLING_PENDING", { transport: transport.numero });
         } catch (err) {
-          logger.warn("Auto-transition BILLING_PENDING échouée", { transport: transport.numero, err: err.message });
+          logger.warn("Auto-transition BILLING_PENDING échouée", {
+            transport: transport.numero,
+            err: err.message,
+          });
         }
       });
     }
@@ -610,9 +694,11 @@ async function completerTransport(transportId, utilisateur) {
   // Capture des features pour l'entraînement du DurationPredictor (best-effort,
   // non bloquant, hors transaction — l'erreur ne remet pas en cause la complétion)
   setImmediate(() => {
-    featureCollector.captureTransportFeatures(transport).catch((err) =>
-      logger.warn("[lifecycle] captureTransportFeatures échoué", { err: err.message }),
-    );
+    featureCollector
+      .captureTransportFeatures(transport)
+      .catch((err) =>
+        logger.warn("[lifecycle] captureTransportFeatures échoué", { err: err.message }),
+      );
   });
 
   return { transport };
@@ -622,22 +708,22 @@ async function completerTransport(transportId, utilisateur) {
 // 8b. ATTENTE À DESTINATION (dialyse, chimio, rééducation…)
 //     Statut optionnel — le véhicule reste en mission pendant toute l'attente.
 // ══════════════════════════════════════════════════════════════════════════════
-async function demarrerAttenteDestination(
-  transportId,
-  dureeAttenteMinutes,
-  utilisateur,
-) {
+async function demarrerAttenteDestination(transportId, dureeAttenteMinutes, utilisateur) {
   // Persister la durée estimée avant la transition (best-effort)
   if (dureeAttenteMinutes != null) {
     await Transport.findByIdAndUpdate(transportId, { dureeAttenteMinutes });
   }
 
-  const transport = await _transition(transportId, "WAITING_AT_DESTINATION", _meta(utilisateur, {
-    notes: dureeAttenteMinutes
-      ? `Attente estimée : ${dureeAttenteMinutes} min`
-      : "Attente à destination démarrée",
-    dureeAttenteMinutes,
-  }));
+  const transport = await _transition(
+    transportId,
+    "WAITING_AT_DESTINATION",
+    _meta(utilisateur, {
+      notes: dureeAttenteMinutes
+        ? `Attente estimée : ${dureeAttenteMinutes} min`
+        : "Attente à destination démarrée",
+      dureeAttenteMinutes,
+    }),
+  );
 
   // Le véhicule reste en statut "en_mission" — pas de modification ici.
   logger.info("Attente à destination démarrée", {
@@ -666,16 +752,9 @@ async function demarrerRetourBase(transportId, positionActuelle, utilisateur) {
   const posBase = transport.adresseDepart?.coordonnees;
 
   if (posRef?.lat && posBase?.lat && transport.vehicule) {
-    const distRetourKm = haversine(
-      posRef.lat,
-      posRef.lng,
-      posBase.lat,
-      posBase.lng,
-    );
+    const distRetourKm = haversine(posRef.lat, posRef.lng, posBase.lat, posBase.lng);
     await Vehicle.findByIdAndUpdate(transport.vehicule._id, {
-      kilometrage:
-        Math.round(((transport.vehicule.kilometrage || 0) + distRetourKm) * 10) /
-        10,
+      kilometrage: Math.round(((transport.vehicule.kilometrage || 0) + distRetourKm) * 10) / 10,
     });
     logger.info("Kilométrage retour mis à jour", {
       numero: transport.numero,
@@ -683,7 +762,11 @@ async function demarrerRetourBase(transportId, positionActuelle, utilisateur) {
     });
   }
 
-  const updated = await _transition(transportId, "RETURN_TO_BASE", _meta(utilisateur, { notes: "Retour base en cours" }));
+  const updated = await _transition(
+    transportId,
+    "RETURN_TO_BASE",
+    _meta(utilisateur, { notes: "Retour base en cours" }),
+  );
 
   logger.info("Retour base démarré", { numero: transport.numero });
   return { transport: updated };
@@ -703,10 +786,15 @@ async function marquerNoShow(transportId, raison, utilisateur) {
     transport.raisonNoShow = raisonFinale;
     await transport.save({ session: session || undefined });
 
-    const updatedDoc = await _transition(transportId, "NO_SHOW", _meta(utilisateur, {
-      notes: raisonFinale,
-      reason: raisonFinale,
-    }), session);
+    const updatedDoc = await _transition(
+      transportId,
+      "NO_SHOW",
+      _meta(utilisateur, {
+        notes: raisonFinale,
+        reason: raisonFinale,
+      }),
+      session,
+    );
 
     if (updatedDoc.vehicule) {
       await Vehicle.findByIdAndUpdate(
@@ -736,10 +824,15 @@ async function annulerTransport(transportId, raison, utilisateur) {
     transport.raisonAnnulation = raisonFinale;
     await transport.save({ session: session || undefined });
 
-    const updatedDoc = await _transition(transportId, "CANCELLED", _meta(utilisateur, {
-      raisonAnnulation: raisonFinale,
-      reason: raisonFinale,
-    }), session);
+    const updatedDoc = await _transition(
+      transportId,
+      "CANCELLED",
+      _meta(utilisateur, {
+        raisonAnnulation: raisonFinale,
+        reason: raisonFinale,
+      }),
+      session,
+    );
 
     if (updatedDoc.vehicule) {
       await Vehicle.findByIdAndUpdate(
@@ -758,13 +851,8 @@ async function annulerTransport(transportId, raison, utilisateur) {
 // ══════════════════════════════════════════════════════════════════════════════
 // 11. REPROGRAMMER
 // ══════════════════════════════════════════════════════════════════════════════
-async function reprogrammerTransport(
-  transportId,
-  { nouvelleDate, raison },
-  utilisateur,
-) {
-  if (!nouvelleDate)
-    throw new Error("Nouvelle date obligatoire pour reprogrammer");
+async function reprogrammerTransport(transportId, { nouvelleDate, raison }, utilisateur) {
+  if (!nouvelleDate) throw new Error("Nouvelle date obligatoire pour reprogrammer");
 
   const transport = await Transport.findById(transportId);
   if (!transport) throw new Error("Transport introuvable");
@@ -772,11 +860,15 @@ async function reprogrammerTransport(
   transport.raisonReprogrammation = raison || "Reprogrammé à la demande";
   await transport.save();
 
-  const updated = await _transition(transportId, "RESCHEDULED", _meta(utilisateur, {
-    raisonReprogrammation: transport.raisonReprogrammation,
-    reason: transport.raisonReprogrammation,
-    nouvelleDate,
-  }));
+  const updated = await _transition(
+    transportId,
+    "RESCHEDULED",
+    _meta(utilisateur, {
+      raisonReprogrammation: transport.raisonReprogrammation,
+      reason: transport.raisonReprogrammation,
+      nouvelleDate,
+    }),
+  );
 
   // Libérer le véhicule si assigné
   if (updated.vehicule) {
@@ -815,13 +907,19 @@ async function cloturerFacturation(transportId, factureId, utilisateur) {
   // Accepte COMPLETED → BILLED (rétrocompat) ou BILLING_PENDING → BILLED (flux étendu)
   const { TransportStateMachine: TSM } = require("./transportStateMachine");
   if (!TSM.canTransition(transport.statut, "BILLED")) {
-    throw new Error(`Transition invalide : ${transport.statut} → BILLED. Autorisées : ${(require("./transportStateMachine").TRANSITIONS[transport.statut] || []).join(", ")}`);
+    throw new Error(
+      `Transition invalide : ${transport.statut} → BILLED. Autorisées : ${(require("./transportStateMachine").TRANSITIONS[transport.statut] || []).join(", ")}`,
+    );
   }
 
-  const updated = await _transition(transportId, "BILLED", _meta(utilisateur, {
-    notes: `Clôture CPAM — facture ${factureId || transport.facture}`,
-    factureId: factureId || transport.facture,
-  }));
+  const updated = await _transition(
+    transportId,
+    "BILLED",
+    _meta(utilisateur, {
+      notes: `Clôture CPAM — facture ${factureId || transport.facture}`,
+      factureId: factureId || transport.facture,
+    }),
+  );
 
   await log({
     action: "STATUT_CHANGED",
@@ -850,9 +948,13 @@ async function cloturerFacturation(transportId, factureId, utilisateur) {
 // 13. ACCEPTER LA MISSION (chauffeur) — ASSIGNED → DRIVER_ACCEPTED
 // ══════════════════════════════════════════════════════════════════════════════
 async function accepterDriver(transportId, utilisateur) {
-  const transport = await _transition(transportId, "DRIVER_ACCEPTED", _meta(utilisateur, {
-    notes: "Mission acceptée par le chauffeur",
-  }));
+  const transport = await _transition(
+    transportId,
+    "DRIVER_ACCEPTED",
+    _meta(utilisateur, {
+      notes: "Mission acceptée par le chauffeur",
+    }),
+  );
   logger.info("Mission acceptée", { numero: transport.numero });
   return { transport };
 }
@@ -861,10 +963,14 @@ async function accepterDriver(transportId, utilisateur) {
 // 14. REFUSER LA MISSION (chauffeur) — ASSIGNED → DRIVER_REJECTED
 // ══════════════════════════════════════════════════════════════════════════════
 async function refuserDriver(transportId, raison, utilisateur) {
-  const transport = await _transition(transportId, "DRIVER_REJECTED", _meta(utilisateur, {
-    notes: raison || "Mission refusée par le chauffeur",
-    reason: raison || "Mission refusée par le chauffeur",
-  }));
+  const transport = await _transition(
+    transportId,
+    "DRIVER_REJECTED",
+    _meta(utilisateur, {
+      notes: raison || "Mission refusée par le chauffeur",
+      reason: raison || "Mission refusée par le chauffeur",
+    }),
+  );
   // Libérer le véhicule pour réassignation
   if (transport.vehicule) {
     await Vehicle.findByIdAndUpdate(transport.vehicule, {
@@ -880,9 +986,13 @@ async function refuserDriver(transportId, raison, utilisateur) {
 // 15. FACTURATION EN COURS — COMPLETED → BILLING_PENDING
 // ══════════════════════════════════════════════════════════════════════════════
 async function marquerBillingPending(transportId, utilisateur) {
-  const transport = await _transition(transportId, "BILLING_PENDING", _meta(utilisateur, {
-    notes: "Facturation en cours de traitement",
-  }));
+  const transport = await _transition(
+    transportId,
+    "BILLING_PENDING",
+    _meta(utilisateur, {
+      notes: "Facturation en cours de traitement",
+    }),
+  );
   logger.info("Billing pending", { numero: transport.numero });
   return { transport };
 }
@@ -891,16 +1001,24 @@ async function marquerBillingPending(transportId, utilisateur) {
 // 16. MARQUER PAYÉ — BILLED → PAID
 // ══════════════════════════════════════════════════════════════════════════════
 async function marquerPaid(transportId, utilisateur) {
-  const transport = await _transition(transportId, "PAID", _meta(utilisateur, {
-    notes: "Paiement reçu",
-  }));
+  const transport = await _transition(
+    transportId,
+    "PAID",
+    _meta(utilisateur, {
+      notes: "Paiement reçu",
+    }),
+  );
 
   await log({
     action: "STATUT_CHANGED",
     origine: "HUMAIN",
     utilisateur,
     ressource: { type: "Transport", id: transport._id, reference: transport.numero },
-    details: { avant: { statut: "BILLED" }, apres: { statut: "PAID" }, message: `Transport ${transport.numero} payé` },
+    details: {
+      avant: { statut: "BILLED" },
+      apres: { statut: "PAID" },
+      message: `Transport ${transport.numero} payé`,
+    },
   });
 
   logger.info("Transport marqué payé", { numero: transport.numero });
@@ -912,11 +1030,15 @@ async function marquerPaid(transportId, utilisateur) {
 // 17. MARQUER ÉCHOUÉ — tout statut non terminal → FAILED
 // ══════════════════════════════════════════════════════════════════════════════
 async function marquerFailed(transportId, raison, utilisateur) {
-  const transport = await _transition(transportId, "FAILED", _meta(utilisateur, {
-    raisonEchec: raison || "Échec du transport",
-    notes: raison || "Échec du transport",
-    reason: raison || "Échec du transport",
-  }));
+  const transport = await _transition(
+    transportId,
+    "FAILED",
+    _meta(utilisateur, {
+      raisonEchec: raison || "Échec du transport",
+      notes: raison || "Échec du transport",
+      reason: raison || "Échec du transport",
+    }),
+  );
 
   // Libérer le véhicule si encore assigné
   if (transport.vehicule) {
@@ -933,18 +1055,31 @@ async function marquerFailed(transportId, raison, utilisateur) {
 // ══════════════════════════════════════════════════════════════════════════════
 // PART B — SIGNATURE PATIENT / PREUVE DE PRISE EN CHARGE
 // ══════════════════════════════════════════════════════════════════════════════
-async function addSignature(transportId, { signedByName, signatureBase64, signatureImageUrl, consentText }, utilisateur) {
+async function addSignature(
+  transportId,
+  { signedByName, signatureBase64, signatureImageUrl, consentText },
+  utilisateur,
+) {
   const transport = await Transport.findById(transportId);
   if (!transport) throw new Error("Transport introuvable");
 
-  const statutsValides = ["ARRIVED_AT_DESTINATION", "COMPLETED", "BILLING_PENDING", "BILLED", "PAID"];
+  const statutsValides = [
+    "ARRIVED_AT_DESTINATION",
+    "COMPLETED",
+    "BILLING_PENDING",
+    "BILLED",
+    "PAID",
+  ];
   if (!statutsValides.includes(transport.statut)) {
-    throw new Error(`Signature impossible au statut ${transport.statut}. Statuts autorisés : ${statutsValides.join(", ")}`);
+    throw new Error(
+      `Signature impossible au statut ${transport.statut}. Statuts autorisés : ${statutsValides.join(", ")}`,
+    );
   }
 
   if (transport.proofOfCare?.signed) {
     const isAdmin = utilisateur?.role === "admin";
-    if (!isAdmin) throw new Error("Ce transport a déjà une signature. Seul un admin peut la remplacer.");
+    if (!isAdmin)
+      throw new Error("Ce transport a déjà une signature. Seul un admin peut la remplacer.");
   }
 
   // Limite base64 : 2 MB
@@ -953,28 +1088,29 @@ async function addSignature(transportId, { signedByName, signatureBase64, signat
   }
 
   transport.proofOfCare = {
-    signed:            true,
-    signedAt:          new Date(),
-    signedByName:      signedByName || "",
+    signed: true,
+    signedAt: new Date(),
+    signedByName: signedByName || "",
     signatureImageUrl: signatureImageUrl || "",
-    signatureBase64:   signatureBase64   || "",
-    driverId:          transport.chauffeur || null,
-    patientId:         transport.patientId || null,
-    consentText:       consentText || "Je certifie avoir été transporté conformément à ma demande.",
+    signatureBase64: signatureBase64 || "",
+    driverId: transport.chauffeur || null,
+    patientId: transport.patientId || null,
+    consentText: consentText || "Je certifie avoir été transporté conformément à ma demande.",
   };
   await transport.save();
 
   // Émettre dans la room transport:{id} pour la mise à jour temps réel
   socketService.emitToTransportRoom?.(transport._id, "transport:signature_added", {
-    transportId:  transport._id,
-    numero:       transport.numero,
+    transportId: transport._id,
+    numero: transport.numero,
     signedByName: signedByName || "",
-    signedAt:     transport.proofOfCare.signedAt,
+    signedAt: transport.proofOfCare.signedAt,
   });
 
   // Notification persistée admin + dispatcher
   setImmediate(() => {
-    transportNotif.notifySignatureAdded(transport)
+    transportNotif
+      .notifySignatureAdded(transport)
       .catch((err) => logger.warn("[lifecycle] notifySignatureAdded échoué", { err: err.message }));
   });
 
@@ -985,7 +1121,10 @@ async function addSignature(transportId, { signedByName, signatureBase64, signat
 // ══════════════════════════════════════════════════════════════════════════════
 // PART C — GESTION DOCUMENTS PMT
 // ══════════════════════════════════════════════════════════════════════════════
-async function uploadPmtDocument(transportId, { fileUrl, fileName, uploadedBy, triggerOcr = false }) {
+async function uploadPmtDocument(
+  transportId,
+  { fileUrl, fileName, uploadedBy, triggerOcr = false },
+) {
   const transport = await Transport.findById(transportId);
   if (!transport) throw new Error("Transport introuvable");
 
@@ -1014,7 +1153,11 @@ async function uploadPmtDocument(transportId, { fileUrl, fileName, uploadedBy, t
           { _id: transportId, "pmtDocuments._id": addedDoc._id },
           { $set: { "pmtDocuments.$.ocrStatus": "done", "pmtDocuments.$.extractedData": result } },
         );
-        socketService.emitPmtExtraite?.({ transportId, documentId: addedDoc._id, extractedData: result });
+        socketService.emitPmtExtraite?.({
+          transportId,
+          documentId: addedDoc._id,
+          extractedData: result,
+        });
         logger.info("OCR PMT terminé", { transportId, fileName });
       } catch (err) {
         await Transport.findOneAndUpdate(
