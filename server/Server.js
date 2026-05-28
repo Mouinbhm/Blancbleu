@@ -294,6 +294,37 @@ async function migrateStatuts() {
   if (total > 0) logger.info(`Migration statuts terminée — ${total} document(s) mis à jour`);
 }
 
+// ─── Handlers globaux : erreurs non capturees ────────────────────────────────
+// Filet de derniere chance pour les setImmediate(...) fire-and-forget de
+// services/transportLifecycle.js (et apparentes) qui peuvent throw sans
+// qu'aucun .catch() ne soit branche dessus. Sans ces handlers, le process
+// crash silencieusement ou laisse une UnhandledPromiseRejection orpheline.
+//
+// try/catch interne -> empeche une exception du logger/Sentry de redeclencher
+// le handler (boucle infinie). En NODE_ENV=test on saute process.exit pour ne
+// pas tuer Jest. unref() : ne tient pas l'event loop ouvert pour rien.
+process.on("unhandledRejection", (reason) => {
+  try {
+    const err = reason instanceof Error ? reason : new Error(String(reason));
+    logger.error("unhandledRejection", { err: err.message, stack: err.stack });
+    Sentry?.captureException(err);
+  } catch (_) {
+    /* swallow — pas de boucle */
+  }
+});
+
+process.on("uncaughtException", (err) => {
+  try {
+    logger.error("uncaughtException", { err: err.message, stack: err.stack });
+    Sentry?.captureException(err);
+  } catch (_) {
+    /* swallow — pas de boucle */
+  }
+  if (process.env.NODE_ENV !== "test") {
+    setTimeout(() => process.exit(1), 1000).unref();
+  }
+});
+
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   mongoose
