@@ -8,7 +8,9 @@
 module.exports = {
   "server/**/*.js": [
     "prettier --write",
-    "eslint --fix --no-error-on-unmatched-pattern",
+    // eslint n'est pas installe au root — on utilise le binaire de server/
+    // pour rester aligne sur la config eslint du package (server/eslint.config.js).
+    "npm --prefix server exec -- eslint --fix --no-error-on-unmatched-pattern",
   ],
   "client/src/**/*.{js,jsx}": [
     "prettier --write",

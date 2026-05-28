@@ -143,7 +143,7 @@ if (process.env.NODE_ENV !== "production") setupSwagger(app);
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/gdpr", require("./routes/gdpr"));
-app.use("/api/patients", require("./routes/patients"));           // ← NOUVEAU
+app.use("/api/patients", require("./routes/patients")); // ← NOUVEAU
 app.use("/api/prescriptions", require("./routes/prescriptions")); // ← NOUVEAU
 app.use("/api/transports", require("./routes/transports"));
 app.use("/api/vehicles", require("./routes/vehicles"));
@@ -173,10 +173,10 @@ app.use("/api/patient", require("./routes/patient"));
 
 // ── Routes driver app ──────────────────────────────────────────────────────────
 app.use("/api/v1/personnel/auth", require("./routes/personnelAuth.routes"));
-app.use("/api/v1/driver",         require("./routes/driver.routes"));
-app.use("/api/v1/shifts",         require("./routes/shift.routes"));
-app.use("/api/v1/tracking",       require("./routes/tracking.routes"));
-app.use("/api/v1/messages",       require("./routes/messages.routes"));
+app.use("/api/v1/driver", require("./routes/driver.routes"));
+app.use("/api/v1/shifts", require("./routes/shift.routes"));
+app.use("/api/v1/tracking", require("./routes/tracking.routes"));
+app.use("/api/v1/messages", require("./routes/messages.routes"));
 
 // ── Fichiers uploads protégés (PMT, signatures, avatars) ─────────────────────
 app.use("/uploads", require("./routes/uploads"));
@@ -189,15 +189,15 @@ if (process.env.NODE_ENV !== "test") {
     logger.info("[BullBoard] non monté (Redis désactivé → queues stubs)");
   } else {
     try {
-      const { createBullBoard }     = require("@bull-board/api");
-      const { BullMQAdapter }       = require("@bull-board/api/bullMQAdapter");
-      const { ExpressAdapter }      = require("@bull-board/express");
-      const { protect, authorize }  = require("./middleware/auth");
+      const { createBullBoard } = require("@bull-board/api");
+      const { BullMQAdapter } = require("@bull-board/api/bullMQAdapter");
+      const { ExpressAdapter } = require("@bull-board/express");
+      const { protect, authorize } = require("./middleware/auth");
 
       const serverAdapter = new ExpressAdapter();
       serverAdapter.setBasePath("/api/admin/queues");
       createBullBoard({
-        queues:        Object.values(queues).map((q) => new BullMQAdapter(q)),
+        queues: Object.values(queues).map((q) => new BullMQAdapter(q)),
         serverAdapter,
       });
       app.use("/api/admin/queues", protect, authorize("admin"), serverAdapter.getRouter());
@@ -208,8 +208,12 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 // ─── Admin one-shot migration (dev only) ─────────────────────────────────────
+// Protégée par JWT + rôle admin : sans ces middlewares, n'importe qui sur le
+// LAN dev/staging pouvait déclencher la migration de statuts (modification en
+// masse des vehicles + transports).
 if (process.env.NODE_ENV !== "production") {
-  app.post("/api/admin/migrate-statuts", async (req, res) => {
+  const { protect, authorize } = require("./middleware/auth");
+  app.post("/api/admin/migrate-statuts", protect, authorize("admin"), async (req, res) => {
     try {
       await migrateStatuts();
       res.json({ message: "Migration terminée" });
@@ -260,26 +264,30 @@ async function migrateStatuts() {
   const db = mongoose.connection;
 
   const vehicleMap = {
-    "disponible":  "Disponible",
-    "en_mission":  "En service",
-    "maintenance": "Maintenance",
-    "hors_service":"Hors service",
+    disponible: "Disponible",
+    en_mission: "En service",
+    maintenance: "Maintenance",
+    hors_service: "Hors service",
   };
   let total = 0;
   for (const [old, newVal] of Object.entries(vehicleMap)) {
-    const r = await db.collection("vehicles").updateMany({ statut: old }, { $set: { statut: newVal } });
+    const r = await db
+      .collection("vehicles")
+      .updateMany({ statut: old }, { $set: { statut: newVal } });
     total += r.modifiedCount;
   }
 
   const personnelMap = {
     "en-service": "Disponible",
-    "conge":      "Congé",
-    "formation":  "Formation",
-    "maladie":    "Maladie",
-    "inactif":    "Inactif",
+    conge: "Congé",
+    formation: "Formation",
+    maladie: "Maladie",
+    inactif: "Inactif",
   };
   for (const [old, newVal] of Object.entries(personnelMap)) {
-    const r = await db.collection("personnels").updateMany({ statut: old }, { $set: { statut: newVal } });
+    const r = await db
+      .collection("personnels")
+      .updateMany({ statut: old }, { $set: { statut: newVal } });
     total += r.modifiedCount;
   }
 
@@ -322,7 +330,11 @@ if (require.main === module) {
   // Mettre SIMULATION_ACTIVE = true pour réactiver (démos PFE).
   // La simulation déplace les véhicules toutes les 8s dans la zone Nice.
   const SIMULATION_ACTIVE = false;
-  if (SIMULATION_ACTIVE && process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "test") {
+  if (
+    SIMULATION_ACTIVE &&
+    process.env.NODE_ENV !== "production" &&
+    process.env.NODE_ENV !== "test"
+  ) {
     const sim = require("./services/simulationService");
     setTimeout(() => sim.demarrer(), 5000);
   }
