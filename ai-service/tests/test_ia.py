@@ -303,6 +303,63 @@ class TestHealthEndpoint:
         assert data["version"] == "1.0.0"
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# SUITE 4 — Model card (positionnement honnête POC)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestAiInfoEndpoint:
+    """GET /ai/info — vérifie le warning POC + la structure attendue."""
+
+    def test_ai_info_returns_200(self, client):
+        res = client.get("/ai/info")
+        assert res.status_code == 200
+
+    def test_ai_info_warning_present_and_explicit(self, client):
+        """Le champ 'warning' doit signaler explicitement le statut POC + synthétique."""
+        data = client.get("/ai/info").json()
+        assert "warning" in data
+        warning = data["warning"]
+        assert isinstance(warning, str) and len(warning) > 0
+        # Le warning doit mentionner POC + synthétique pour ne pas survendre.
+        assert "POC" in warning
+        assert "synthétique" in warning.lower()
+
+    def test_ai_info_production_ready_false(self, client):
+        data = client.get("/ai/info").json()
+        assert data["production_ready"] is False
+        assert data["status"] == "POC"
+
+    def test_ai_info_dispatch_marque_rule_based(self, client):
+        """Le module dispatch_recommend doit être explicitement rule-based, ml=False."""
+        data = client.get("/ai/info").json()
+        dispatch = data["modules"]["dispatch_recommend"]
+        assert dispatch["type"] == "rule-based"
+        assert dispatch["ml"] is False
+
+    def test_ai_info_duration_predictor_marque_poc(self, client):
+        """Le module duration_predictor doit être marqué ml=True ET production_ready=False."""
+        data = client.get("/ai/info").json()
+        pred = data["modules"]["duration_predictor"]
+        assert pred["ml"] is True
+        assert pred["production_ready"] is False
+
+    def test_ai_info_training_data_real_zero(self, client):
+        """training_data.real doit être 0 (alerte si on a glissé sur des données réelles non documentées)."""
+        data = client.get("/ai/info").json()
+        assert data["training_data"]["real"] == 0
+        assert data["training_data"]["synthetic"] >= 1
+
+    def test_ai_info_limitations_listees(self, client):
+        data = client.get("/ai/info").json()
+        assert isinstance(data["limitations"], list)
+        assert len(data["limitations"]) >= 3
+
+    def test_ai_info_roadmap_listee(self, client):
+        data = client.get("/ai/info").json()
+        assert isinstance(data["roadmap"], list)
+        assert len(data["roadmap"]) >= 3
+
+
 class TestDispatchEndpoint:
     def _payload_assis_vsl(self):
         return {
