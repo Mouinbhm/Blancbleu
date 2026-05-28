@@ -4,24 +4,28 @@
  */
 
 const mongoose = require("mongoose");
-const path      = require("path");
+const path = require("path");
 const Transport = require("../models/Transport");
 const Notification = require("../models/Notification");
-const Vehicle   = require("../models/Vehicle");
-const Patient   = require("../models/Patient");
+const Vehicle = require("../models/Vehicle");
+const Patient = require("../models/Patient");
 const lifecycle = require("../services/transportLifecycle");
 const { audit } = require("../services/auditService");
 const { TransportStateMachine } = require("../services/transportStateMachine");
 const recurrenceService = require("../services/recurrenceService");
 const { hashDeterministic } = require("../utils/hashing");
-const tarifService      = require("../services/tarifService");
+const tarifService = require("../services/tarifService");
 const { geocodeTransport } = require("../utils/geocodeUtils");
 const { generateMissionPdf } = require("../services/missionPdfService");
-const transportNotif    = require("../services/transportNotificationService");
+const transportNotif = require("../services/transportNotificationService");
 const { fileUrl: resolveFileUrl } = require("../middleware/upload");
 
 const logger = (() => {
-  try { return require("../utils/logger"); } catch { return console; }
+  try {
+    return require("../utils/logger");
+  } catch {
+    return console;
+  }
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -51,8 +55,7 @@ const estimerTarif = async (req, res, next) => {
     }
     if (!lat1 || !lng1 || !lat2 || !lng2) {
       return res.status(400).json({
-        message:
-          "Coordonnées GPS manquantes : lat1, lng1, lat2, lng2 sont obligatoires",
+        message: "Coordonnées GPS manquantes : lat1, lng1, lat2, lng2 sont obligatoires",
       });
     }
 
@@ -75,9 +78,7 @@ const estimerTarif = async (req, res, next) => {
       allerRetour: allerRetour === "true",
       heureRDV: heureRDV || null,
       dateTransport: dateTransport ? new Date(dateTransport) : new Date(),
-      tauxPriseEnCharge: tauxPriseEnCharge
-        ? parseInt(tauxPriseEnCharge, 10)
-        : 65,
+      tauxPriseEnCharge: tauxPriseEnCharge ? parseInt(tauxPriseEnCharge, 10) : 65,
     };
 
     const estimation = await tarifService.calculerTarif(transportFictif);
@@ -115,7 +116,10 @@ const getTransports = async (req, res, next) => {
     const filter = { deletedAt: null };
 
     if (statut) {
-      const statuts = String(statut).split(",").map((s) => s.trim()).filter(Boolean);
+      const statuts = String(statut)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       filter.statut = statuts.length === 1 ? statuts[0] : { $in: statuts };
     }
     if (typeTransport) filter.typeTransport = typeTransport;
@@ -138,7 +142,7 @@ const getTransports = async (req, res, next) => {
     } else if (dateDebut || dateFin) {
       filter.dateTransport = {};
       if (dateDebut) filter.dateTransport.$gte = new Date(dateDebut);
-      if (dateFin)   filter.dateTransport.$lte = new Date(dateFin + "T23:59:59");
+      if (dateFin) filter.dateTransport.$lte = new Date(dateFin + "T23:59:59");
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -172,47 +176,39 @@ const getTransports = async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────────────────────
 const getStats = async (req, res, next) => {
   try {
-    const [
-      total,
-      enCours,
-      planifies,
-      completes,
-      annules,
-      noShows,
-      parType,
-      parMotif,
-    ] = await Promise.all([
-      Transport.countDocuments({ deletedAt: null }),
-      Transport.countDocuments({
-        deletedAt: null,
-        statut: {
-          $in: [
-            "ASSIGNED",
-            "EN_ROUTE_TO_PICKUP",
-            "ARRIVED_AT_PICKUP",
-            "PATIENT_ON_BOARD",
-            "ARRIVED_AT_DESTINATION",
-          ],
-        },
-      }),
-      Transport.countDocuments({
-        deletedAt: null,
-        statut: { $in: ["REQUESTED", "CONFIRMED", "SCHEDULED"] },
-      }),
-      Transport.countDocuments({ deletedAt: null, statut: "COMPLETED" }),
-      Transport.countDocuments({ deletedAt: null, statut: "CANCELLED" }),
-      Transport.countDocuments({ deletedAt: null, statut: "NO_SHOW" }),
-      Transport.aggregate([
-        { $match: { deletedAt: null } },
-        { $group: { _id: "$typeTransport", count: { $sum: 1 } } },
-      ]),
-      Transport.aggregate([
-        { $match: { deletedAt: null } },
-        { $group: { _id: "$motif", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 5 },
-      ]),
-    ]);
+    const [total, enCours, planifies, completes, annules, noShows, parType, parMotif] =
+      await Promise.all([
+        Transport.countDocuments({ deletedAt: null }),
+        Transport.countDocuments({
+          deletedAt: null,
+          statut: {
+            $in: [
+              "ASSIGNED",
+              "EN_ROUTE_TO_PICKUP",
+              "ARRIVED_AT_PICKUP",
+              "PATIENT_ON_BOARD",
+              "ARRIVED_AT_DESTINATION",
+            ],
+          },
+        }),
+        Transport.countDocuments({
+          deletedAt: null,
+          statut: { $in: ["REQUESTED", "CONFIRMED", "SCHEDULED"] },
+        }),
+        Transport.countDocuments({ deletedAt: null, statut: "COMPLETED" }),
+        Transport.countDocuments({ deletedAt: null, statut: "CANCELLED" }),
+        Transport.countDocuments({ deletedAt: null, statut: "NO_SHOW" }),
+        Transport.aggregate([
+          { $match: { deletedAt: null } },
+          { $group: { _id: "$typeTransport", count: { $sum: 1 } } },
+        ]),
+        Transport.aggregate([
+          { $match: { deletedAt: null } },
+          { $group: { _id: "$motif", count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $limit: 5 },
+        ]),
+      ]);
 
     res.json({
       total,
@@ -234,15 +230,18 @@ const getTransport = async (req, res, next) => {
       .populate("vehicule", "nom type statut immatriculation position carburant kilometrage")
       .populate("chauffeur", "nom prenom email telephone")
       .populate("createdBy", "nom prenom")
-      .populate("patientId", "nom prenom telephone mobilite numeroPatient oxygene brancardage accompagnateur contactUrgence")
-      .populate("prescriptionId", "numero statut motif dateEmission dateExpiration medecin validee");
+      .populate(
+        "patientId",
+        "nom prenom telephone mobilite numeroPatient oxygene brancardage accompagnateur contactUrgence",
+      )
+      .populate(
+        "prescriptionId",
+        "numero statut motif dateEmission dateExpiration medecin validee",
+      );
 
-    if (!transport)
-      return res.status(404).json({ message: "Transport introuvable" });
+    if (!transport) return res.status(404).json({ message: "Transport introuvable" });
 
-    const transitions = TransportStateMachine.transitionsPossibles(
-      transport.statut,
-    );
+    const transitions = TransportStateMachine.transitionsPossibles(transport.statut);
     const progression = TransportStateMachine.progression(transport.statut);
 
     res.json({ ...transport.toJSON(), transitions, progression });
@@ -263,13 +262,13 @@ const createTransport = async (req, res, next) => {
     // Si le formulaire a déjà envoyé des coordonnées (via autocomplétion BAN),
     // on ne refait pas d'appel réseau. Sinon, on tente de les obtenir côté serveur.
     const departSansGPS = !body.adresseDepart?.coordonnees?.lat;
-    const destSansGPS   = !body.adresseDestination?.coordonnees?.lat;
+    const destSansGPS = !body.adresseDestination?.coordonnees?.lat;
 
     if (departSansGPS || destSansGPS) {
       try {
         const [geoDepart, geoDest] = await geocodeTransport(
           departSansGPS ? body.adresseDepart : null,
-          destSansGPS   ? body.adresseDestination : null,
+          destSansGPS ? body.adresseDestination : null,
         );
 
         if (departSansGPS && geoDepart) {
@@ -323,10 +322,10 @@ const createTransport = async (req, res, next) => {
           // Chercher par hash déterministe — numeroSecu est chiffré (AES-GCM non-déterministe)
           conditions.push({ numeroSecuHash: hashDeterministic(patientData.numeroSecu) });
         }
-        const nomEsc    = patientData.nom.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const nomEsc = patientData.nom.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const prenomEsc = (patientData.prenom || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         conditions.push({
-          nom:    { $regex: new RegExp(`^${nomEsc}$`, "i") },
+          nom: { $regex: new RegExp(`^${nomEsc}$`, "i") },
           prenom: { $regex: new RegExp(`^${prenomEsc}$`, "i") },
         });
 
@@ -339,18 +338,18 @@ const createTransport = async (req, res, next) => {
           }
         } else {
           const nouveauPatient = await Patient.create({
-            nom:            patientData.nom,
-            prenom:         patientData.prenom         || "",
-            dateNaissance:  patientData.dateNaissance  || null,
-            telephone:      patientData.telephone      || "",
-            numeroSecu:     patientData.numeroSecu?.trim() || "",
-            mobilite:       patientData.mobilite       || "ASSIS",
-            oxygene:        patientData.oxygene        || false,
-            brancardage:    patientData.brancardage    || false,
+            nom: patientData.nom,
+            prenom: patientData.prenom || "",
+            dateNaissance: patientData.dateNaissance || null,
+            telephone: patientData.telephone || "",
+            numeroSecu: patientData.numeroSecu?.trim() || "",
+            mobilite: patientData.mobilite || "ASSIS",
+            oxygene: patientData.oxygene || false,
+            brancardage: patientData.brancardage || false,
             accompagnateur: patientData.accompagnateur || false,
-            antecedents:    patientData.antecedents    || "",
-            notes:          patientData.notes          || "",
-            actif:          true,
+            antecedents: patientData.antecedents || "",
+            notes: patientData.notes || "",
+            actif: true,
           });
           await Transport.findByIdAndUpdate(transport._id, { patientId: nouveauPatient._id });
           logger.info(`[Patient] Auto-créé : ${patientData.nom} ${patientData.prenom || ""}`, {
@@ -386,28 +385,17 @@ const creerTransportsRecurrents = async (req, res, next) => {
     const { recurrence, ...baseData } = req.body;
 
     // Validation minimale avant de déléguer au service
-    if (
-      !recurrence ||
-      !recurrence.joursSemaine ||
-      !recurrence.dateFin
-    ) {
+    if (!recurrence || !recurrence.joursSemaine || !recurrence.dateFin) {
       return res.status(400).json({
-        message:
-          "Les paramètres de récurrence sont obligatoires : joursSemaine et dateFin",
+        message: "Les paramètres de récurrence sont obligatoires : joursSemaine et dateFin",
       });
     }
 
-    const resultat = await recurrenceService.creerSerieRecurrente(
-      baseData,
-      recurrence,
-      req.user,
-    );
+    const resultat = await recurrenceService.creerSerieRecurrente(baseData, recurrence, req.user);
 
     res.status(201).json({
       message: `Série créée avec succès : ${resultat.nbOccurrences} transport(s) généré(s)${
-        resultat.nbExclus > 0
-          ? `, ${resultat.nbExclus} jour(s) férié(s) exclu(s)`
-          : ""
+        resultat.nbExclus > 0 ? `, ${resultat.nbExclus} jour(s) férié(s) exclu(s)` : ""
       }`,
       nbOccurrences: resultat.nbOccurrences,
       nbExclus: resultat.nbExclus,
@@ -436,8 +424,12 @@ const creerTransportsRecurrents = async (req, res, next) => {
 // PATCH /api/transports/:id — Modifier un transport (champs autorisés uniquement)
 // ─────────────────────────────────────────────────────────────────────────────
 const UPDATE_WHITELIST = [
-  "notes", "heureDepart", "allerRetour",
-  "adresseDepart", "adresseDestination", "tauxPriseEnCharge",
+  "notes",
+  "heureDepart",
+  "allerRetour",
+  "adresseDepart",
+  "adresseDestination",
+  "tauxPriseEnCharge",
 ];
 
 const updateTransport = async (req, res, next) => {
@@ -446,13 +438,11 @@ const updateTransport = async (req, res, next) => {
     for (const key of UPDATE_WHITELIST) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     }
-    const transport = await Transport.findByIdAndUpdate(
-      req.params.id,
-      updates,
-      { new: true, runValidators: true },
-    );
-    if (!transport)
-      return res.status(404).json({ message: "Transport introuvable" });
+    const transport = await Transport.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+      runValidators: true,
+    });
+    if (!transport) return res.status(404).json({ message: "Transport introuvable" });
     res.json(transport);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -465,8 +455,7 @@ const updateTransport = async (req, res, next) => {
 const deleteTransport = async (req, res, next) => {
   try {
     const transport = await Transport.findById(req.params.id);
-    if (!transport)
-      return res.status(404).json({ message: "Transport introuvable" });
+    if (!transport) return res.status(404).json({ message: "Transport introuvable" });
     await Transport.findByIdAndUpdate(req.params.id, { deletedAt: new Date() });
     logger.info("Transport supprimé (soft-delete)", {
       numero: transport.numero,
@@ -524,11 +513,7 @@ const arriveePatient = async (req, res, next) => {
   try {
     const errDate = await _verifierDateTerrain(req.params.id, req.body);
     if (errDate) return res.status(400).json(errDate);
-    const r = await lifecycle.marquerArriveePatient(
-      req.params.id,
-      req.body.position,
-      req.user,
-    );
+    const r = await lifecycle.marquerArriveePatient(req.params.id, req.body.position, req.user);
     res.json(r);
   } catch (e) {
     _handleErr(res, next, e);
@@ -548,11 +533,7 @@ const arriveeDestination = async (req, res, next) => {
   try {
     const errDate = await _verifierDateTerrain(req.params.id, req.body);
     if (errDate) return res.status(400).json(errDate);
-    const r = await lifecycle.marquerArriveeDestination(
-      req.params.id,
-      req.body.position,
-      req.user,
-    );
+    const r = await lifecycle.marquerArriveeDestination(req.params.id, req.body.position, req.user);
     res.json(r);
   } catch (e) {
     _handleErr(res, next, e);
@@ -570,11 +551,7 @@ const completer = async (req, res, next) => {
 };
 const noShow = async (req, res, next) => {
   try {
-    const r = await lifecycle.marquerNoShow(
-      req.params.id,
-      req.body.raison,
-      req.user,
-    );
+    const r = await lifecycle.marquerNoShow(req.params.id, req.body.raison, req.user);
     res.json(r);
   } catch (e) {
     _handleErr(res, next, e);
@@ -582,11 +559,7 @@ const noShow = async (req, res, next) => {
 };
 const annuler = async (req, res, next) => {
   try {
-    const r = await lifecycle.annulerTransport(
-      req.params.id,
-      req.body.raison,
-      req.user,
-    );
+    const r = await lifecycle.annulerTransport(req.params.id, req.body.raison, req.user);
     res.json(r);
   } catch (e) {
     _handleErr(res, next, e);
@@ -594,11 +567,7 @@ const annuler = async (req, res, next) => {
 };
 const reprogrammer = async (req, res, next) => {
   try {
-    const r = await lifecycle.reprogrammerTransport(
-      req.params.id,
-      req.body,
-      req.user,
-    );
+    const r = await lifecycle.reprogrammerTransport(req.params.id, req.body, req.user);
     res.json(r);
   } catch (e) {
     _handleErr(res, next, e);
@@ -635,46 +604,64 @@ const accepterDriver = async (req, res, next) => {
   try {
     const r = await lifecycle.accepterDriver(req.params.id, req.user);
     res.json(r);
-  } catch (e) { _handleErr(res, next, e); }
+  } catch (e) {
+    _handleErr(res, next, e);
+  }
 };
 
 const refuserDriver = async (req, res, next) => {
   try {
     const r = await lifecycle.refuserDriver(req.params.id, req.body.raison, req.user);
     res.json(r);
-  } catch (e) { _handleErr(res, next, e); }
+  } catch (e) {
+    _handleErr(res, next, e);
+  }
 };
 
 const billingPending = async (req, res, next) => {
   try {
     const r = await lifecycle.marquerBillingPending(req.params.id, req.user);
     res.json(r);
-  } catch (e) { _handleErr(res, next, e); }
+  } catch (e) {
+    _handleErr(res, next, e);
+  }
 };
 
 const paid = async (req, res, next) => {
   if (!["superviseur", "admin"].includes(req.user?.role)) {
-    return res.status(403).json({ message: "Marquage payé réservé aux superviseurs et administrateurs" });
+    return res
+      .status(403)
+      .json({ message: "Marquage payé réservé aux superviseurs et administrateurs" });
   }
   try {
     const r = await lifecycle.marquerPaid(req.params.id, req.user);
     res.json(r);
-  } catch (e) { _handleErr(res, next, e); }
+  } catch (e) {
+    _handleErr(res, next, e);
+  }
 };
 
 const fail = async (req, res, next) => {
   try {
     const r = await lifecycle.marquerFailed(req.params.id, req.body.raison, req.user);
     res.json(r);
-  } catch (e) { _handleErr(res, next, e); }
+  } catch (e) {
+    _handleErr(res, next, e);
+  }
 };
 
 const facturer = async (req, res, next) => {
   if (!["superviseur", "admin"].includes(req.user?.role)) {
-    return res.status(403).json({ message: "Clôture CPAM réservée aux superviseurs et administrateurs" });
+    return res
+      .status(403)
+      .json({ message: "Clôture CPAM réservée aux superviseurs et administrateurs" });
   }
   try {
-    const { referenceFacture, factureId: factureIdBody, prescriptionId: prescriptionIdBody } = req.body;
+    const {
+      referenceFacture,
+      factureId: factureIdBody,
+      prescriptionId: prescriptionIdBody,
+    } = req.body;
     const Facture = require("../models/Facture");
 
     const transport = await Transport.findById(req.params.id);
@@ -688,15 +675,14 @@ const facturer = async (req, res, next) => {
       logger.warn("calculerTarif échoué, fallback 10 km", { err: tarifErr.message });
       tarif = await tarifService.calculerTarif({
         ...transport.toObject(),
-        adresseDepart:      { coordonnees: null },
+        adresseDepart: { coordonnees: null },
         adresseDestination: { coordonnees: null },
       });
     }
 
     // montantBase = forfait + (prix/km × distance facturée)
-    const montantBase = Math.round(
-      (tarif.bareme.forfait + tarif.bareme.prixKm * tarif.distanceFacturee) * 100,
-    ) / 100;
+    const montantBase =
+      Math.round((tarif.bareme.forfait + tarif.bareme.prixKm * tarif.distanceFacturee) * 100) / 100;
 
     // ── Résoudre l'ObjectId facture ───────────────────────────────────────────
     let factureIdValide = transport.facture || null;
@@ -713,11 +699,15 @@ const facturer = async (req, res, next) => {
     if (!resolvedPatientId) {
       const PatientModel = require("../models/Patient");
       if (transport.createdBy) {
-        const p = await PatientModel.findOne({ userId: transport.createdBy, deletedAt: null }).select("_id").lean();
+        const p = await PatientModel.findOne({ userId: transport.createdBy, deletedAt: null })
+          .select("_id")
+          .lean();
         if (p) resolvedPatientId = p._id;
       }
       if (!resolvedPatientId && transport.patient?.email) {
-        const p = await PatientModel.findOne({ email: transport.patient.email, deletedAt: null }).select("_id").lean();
+        const p = await PatientModel.findOne({ email: transport.patient.email, deletedAt: null })
+          .select("_id")
+          .lean();
         if (p) resolvedPatientId = p._id;
       }
     }
@@ -725,25 +715,25 @@ const facturer = async (req, res, next) => {
     if (!factureIdValide) {
       // Créer la facture avec les vrais montants calculés
       const nouvelleFacture = await Facture.create({
-        transportId:       transport._id,
-        patientId:         resolvedPatientId,
-        patientNom:        transport.patient?.nom   || "",
-        patientPrenom:     transport.patient?.prenom || "",
-        motif:             transport.motif    || "",
-        typeVehicule:      transport.typeTransport || "VSL",
-        allerRetour:       transport.allerRetour   || false,
-        distanceKm:        tarif.distanceFacturee,
+        transportId: transport._id,
+        patientId: resolvedPatientId,
+        patientNom: transport.patient?.nom || "",
+        patientPrenom: transport.patient?.prenom || "",
+        motif: transport.motif || "",
+        typeVehicule: transport.typeTransport || "VSL",
+        allerRetour: transport.allerRetour || false,
+        distanceKm: tarif.distanceFacturee,
         montantBase,
-        majoration:        tarif.supplements,
+        majoration: tarif.supplements,
         tauxPriseEnCharge: tarif.tauxPriseEnCharge,
         // montantTotal, montantCPAM, montantPatient calculés par le hook pre-save
-        statut:            "emise",
-        dateEmission:      new Date(),
-        referenceExterne:  referenceFacture || null,
-        detailsCalcul:     {
+        statut: "emise",
+        dateEmission: new Date(),
+        referenceExterne: referenceFacture || null,
+        detailsCalcul: {
           sourceDistance: tarif.sourceDistance,
-          bareme:         tarif.bareme,
-          lignes:         tarif.details,
+          bareme: tarif.bareme,
+          lignes: tarif.details,
         },
         notes: referenceFacture ? `Réf. CPAM : ${referenceFacture}` : "",
       });
@@ -752,28 +742,28 @@ const facturer = async (req, res, next) => {
       await Transport.findByIdAndUpdate(transport._id, { facture: factureIdValide });
 
       logger.info("Facture créée — clôture BILLED", {
-        transport:     transport.numero,
-        facture:       nouvelleFacture.numero,
-        montantTotal:  nouvelleFacture.montantTotal,
-        distanceKm:    tarif.distanceFacturee,
-        source:        tarif.sourceDistance,
+        transport: transport.numero,
+        facture: nouvelleFacture.numero,
+        montantTotal: nouvelleFacture.montantTotal,
+        distanceKm: tarif.distanceFacturee,
+        source: tarif.sourceDistance,
       });
     } else {
       // Mettre à jour les montants de la facture existante
       // findByIdAndUpdate ne déclenche pas le hook pre-save → setter tous les champs
       const updateExistante = {
-        distanceKm:        tarif.distanceFacturee,
+        distanceKm: tarif.distanceFacturee,
         montantBase,
-        majoration:        tarif.supplements,
+        majoration: tarif.supplements,
         tauxPriseEnCharge: tarif.tauxPriseEnCharge,
-        montantTotal:      tarif.montantTotal,
-        montantCPAM:       tarif.montantCPAM,
-        montantPatient:    tarif.montantPatient,
-        referenceExterne:  referenceFacture || undefined,
-        detailsCalcul:     {
+        montantTotal: tarif.montantTotal,
+        montantCPAM: tarif.montantCPAM,
+        montantPatient: tarif.montantPatient,
+        referenceExterne: referenceFacture || undefined,
+        detailsCalcul: {
           sourceDistance: tarif.sourceDistance,
-          bareme:         tarif.bareme,
-          lignes:         tarif.details,
+          bareme: tarif.bareme,
+          lignes: tarif.details,
         },
       };
       // Compléter patientId si absent sur la facture existante
@@ -786,8 +776,8 @@ const facturer = async (req, res, next) => {
       await Facture.findByIdAndUpdate(factureIdValide, updateExistante);
 
       logger.info("Facture existante mise à jour — clôture BILLED", {
-        transport:    transport.numero,
-        factureId:    factureIdValide,
+        transport: transport.numero,
+        factureId: factureIdValide,
         montantTotal: tarif.montantTotal,
       });
     }
@@ -834,7 +824,9 @@ async function _verifierDateTerrain(transportId, body = {}) {
   if (estJourJ) return null;
 
   const dateStr = new Date(t.dateTransport).toLocaleDateString("fr-FR", {
-    day: "numeric", month: "long", year: "numeric",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
   });
   return {
     message: `Ce transport est planifié le ${dateStr}. Les actions terrain ne sont disponibles qu'à cette date.`,
@@ -844,15 +836,14 @@ async function _verifierDateTerrain(transportId, body = {}) {
 }
 
 function _handleErr(res, next, e) {
-  if (e.message?.includes("introuvable"))
-    return res.status(404).json({ message: e.message });
-  if (
-    e.message?.includes("Transition invalide") ||
-    e.message?.includes("Conditions non remplies")
-  )
+  // Erreurs typées (AppError + sous-classes) — statusCode porté par la classe.
+  if (e && typeof e.statusCode === "number") {
+    return res.status(e.statusCode).json({ message: e.message });
+  }
+  if (e.message?.includes("introuvable")) return res.status(404).json({ message: e.message });
+  if (e.message?.includes("Transition invalide") || e.message?.includes("Conditions non remplies"))
     return res.status(422).json({ message: e.message });
-  if (e.message?.includes("Aucun véhicule"))
-    return res.status(409).json({ message: e.message });
+  if (e.message?.includes("Aucun véhicule")) return res.status(409).json({ message: e.message });
   return next(e);
 }
 
@@ -863,7 +854,9 @@ const getTimeline = async (req, res, next) => {
   try {
     const timeline = await lifecycle.getTransportTimeline(req.params.id);
     res.json({ success: true, timeline });
-  } catch (e) { _handleErr(res, next, e); }
+  } catch (e) {
+    _handleErr(res, next, e);
+  }
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -874,7 +867,13 @@ const addSignature = async (req, res, next) => {
     const { signedByName, signatureBase64, consentText } = req.body;
 
     if (!signedByName?.trim()) {
-      return res.status(400).json({ success: false, message: "Le nom du signataire est requis", code: "MISSING_SIGNER_NAME" });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Le nom du signataire est requis",
+          code: "MISSING_SIGNER_NAME",
+        });
     }
 
     // Si un fichier a été uploadé via multer, l'utiliser en priorité
@@ -889,10 +888,16 @@ const addSignature = async (req, res, next) => {
       req.user,
     );
 
-    res.json({ success: true, message: "Signature enregistrée avec succès", proofOfCare: transport.proofOfCare });
+    res.json({
+      success: true,
+      message: "Signature enregistrée avec succès",
+      proofOfCare: transport.proofOfCare,
+    });
   } catch (e) {
     if (e.message?.includes("Signature impossible") || e.message?.includes("déjà une signature"))
-      return res.status(422).json({ success: false, message: e.message, code: "SIGNATURE_NOT_ALLOWED" });
+      return res
+        .status(422)
+        .json({ success: false, message: e.message, code: "SIGNATURE_NOT_ALLOWED" });
     if (e.message?.includes("taille maximale"))
       return res.status(413).json({ success: false, message: e.message, code: "FILE_TOO_LARGE" });
     _handleErr(res, next, e);
@@ -905,16 +910,18 @@ const addSignature = async (req, res, next) => {
 const uploadPmt = async (req, res, next) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ success: false, message: "Fichier requis (champ 'file')", code: "MISSING_FILE" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Fichier requis (champ 'file')", code: "MISSING_FILE" });
     }
 
     const relPath = `pmt/${req.file.filename}`;
-    const url     = resolveFileUrl(req, relPath);
+    const url = resolveFileUrl(req, relPath);
     const triggerOcr = req.body.triggerOcr === "true" || req.body.triggerOcr === true;
 
     const { transport } = await lifecycle.uploadPmtDocument(req.params.id, {
-      fileUrl:    url,
-      fileName:   req.file.originalname,
+      fileUrl: url,
+      fileName: req.file.originalname,
       uploadedBy: req.user._id,
       triggerOcr,
     });
@@ -923,16 +930,21 @@ const uploadPmt = async (req, res, next) => {
 
     const addedDoc = transport.pmtDocuments[transport.pmtDocuments.length - 1];
     res.status(201).json({ success: true, message: "PMT ajoutée avec succès", document: addedDoc });
-  } catch (e) { _handleErr(res, next, e); }
+  } catch (e) {
+    _handleErr(res, next, e);
+  }
 };
 
 // GET /api/transports/:id/pmt
 const getPmt = async (req, res, next) => {
   try {
     const transport = await Transport.findById(req.params.id).select("pmtDocuments numero");
-    if (!transport) return res.status(404).json({ success: false, message: "Transport introuvable" });
+    if (!transport)
+      return res.status(404).json({ success: false, message: "Transport introuvable" });
     res.json({ success: true, documents: transport.pmtDocuments || [] });
-  } catch (e) { _handleErr(res, next, e); }
+  } catch (e) {
+    _handleErr(res, next, e);
+  }
 };
 
 // DELETE /api/transports/:id/pmt/:docId
@@ -954,27 +966,32 @@ const exportPdf = async (req, res, next) => {
   try {
     // Contrôle d'accès : admin, dispatcher, superviseur, ou chauffeur assigné
     const transport = await Transport.findById(req.params.id).select("chauffeur patientId");
-    if (!transport) return res.status(404).json({ success: false, message: "Transport introuvable" });
+    if (!transport)
+      return res.status(404).json({ success: false, message: "Transport introuvable" });
 
-    const user   = req.user;
+    const user = req.user;
     const isStaff = ["admin", "dispatcher", "superviseur"].includes(user.role);
     const isDriver = transport.chauffeur?.toString() === user._id?.toString();
     const isPatient = transport.patientId?.toString() === user._id?.toString();
 
     if (!isStaff && !isDriver && !isPatient) {
-      return res.status(403).json({ success: false, message: "Accès non autorisé à ce document", code: "FORBIDDEN" });
+      return res
+        .status(403)
+        .json({ success: false, message: "Accès non autorisé à ce document", code: "FORBIDDEN" });
     }
 
     const pdfBuffer = await generateMissionPdf(req.params.id);
-    const numero    = transport.numero || req.params.id;
+    const numero = transport.numero || req.params.id;
 
     res.set({
-      "Content-Type":        "application/pdf",
+      "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="mission_${numero}.pdf"`,
-      "Content-Length":      pdfBuffer.length,
+      "Content-Length": pdfBuffer.length,
     });
     res.send(pdfBuffer);
-  } catch (e) { _handleErr(res, next, e); }
+  } catch (e) {
+    _handleErr(res, next, e);
+  }
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -982,15 +999,12 @@ const exportPdf = async (req, res, next) => {
 // ══════════════════════════════════════════════════════════════════════════════
 const getNotifications = async (req, res, next) => {
   try {
-    const user   = req.user;
-    const limit  = Math.min(50, parseInt(req.query.limit) || 20);
+    const user = req.user;
+    const limit = Math.min(50, parseInt(req.query.limit) || 20);
     const onlyUnread = req.query.unread === "true";
 
     const query = {
-      $or: [
-        { recipientId:   user._id   },
-        { recipientRole: user.role  },
-      ],
+      $or: [{ recipientId: user._id }, { recipientRole: user.role }],
     };
     if (onlyUnread) query.read = false;
 
@@ -1002,7 +1016,9 @@ const getNotifications = async (req, res, next) => {
     const unreadCount = await Notification.countDocuments({ ...query, read: false });
 
     res.json({ success: true, notifications, unreadCount });
-  } catch (e) { _handleErr(res, next, e); }
+  } catch (e) {
+    _handleErr(res, next, e);
+  }
 };
 
 // PATCH /api/transports/notifications/:id/read
@@ -1010,7 +1026,9 @@ const markNotificationRead = async (req, res, next) => {
   try {
     await Notification.findByIdAndUpdate(req.params.id, { read: true, readAt: new Date() });
     res.json({ success: true, message: "Notification marquée comme lue" });
-  } catch (e) { _handleErr(res, next, e); }
+  } catch (e) {
+    _handleErr(res, next, e);
+  }
 };
 
 // PATCH /api/transports/notifications/read-all
@@ -1022,7 +1040,9 @@ const markAllNotificationsRead = async (req, res, next) => {
       { $set: { read: true, readAt: new Date() } },
     );
     res.json({ success: true, message: "Toutes les notifications marquées comme lues" });
-  } catch (e) { _handleErr(res, next, e); }
+  } catch (e) {
+    _handleErr(res, next, e);
+  }
 };
 
 module.exports = {

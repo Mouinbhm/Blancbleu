@@ -9,11 +9,11 @@
  */
 
 const DispatchRecommendation = require("../models/DispatchRecommendation");
-const Transport              = require("../models/Transport");
-const transportLifecycle     = require("../services/transportLifecycle");
-const auditService           = require("../services/auditService");
-const socketService          = require("../services/socketService");
-const logger                 = require("../utils/logger");
+const Transport = require("../models/Transport");
+const transportLifecycle = require("../services/transportLifecycle");
+const auditService = require("../services/auditService");
+const socketService = require("../services/socketService");
+const logger = require("../utils/logger");
 
 // ── GET /api/ai/dispatch/auto/queue ─────────────────────────────────────────
 exports.getQueue = async (req, res) => {
@@ -24,8 +24,9 @@ exports.getQueue = async (req, res) => {
       .sort({ generatedAt: -1 })
       .limit(limit)
       .populate({
-        path:   "transportId",
-        select: "numero statut motif typeTransport dateTransport heureRDV patient adresseDepart adresseDestination",
+        path: "transportId",
+        select:
+          "numero statut motif typeTransport dateTransport heureRDV patient adresseDepart adresseDestination",
       })
       .lean();
 
@@ -36,12 +37,12 @@ exports.getQueue = async (req, res) => {
       count: valid.length,
       proposals: valid.map((r) => ({
         recommendationId: r._id,
-        generatedAt:      r.generatedAt,
-        source:           r.source,
-        transport:        r.transportId,
-        best:             r.bestRecommendation,
-        alternatives:     (r.recommendations || []).slice(1, 3),
-        summary:          r.summary,
+        generatedAt: r.generatedAt,
+        source: r.source,
+        transport: r.transportId,
+        best: r.bestRecommendation,
+        alternatives: (r.recommendations || []).slice(1, 3),
+        summary: r.summary,
       })),
     });
   } catch (err) {
@@ -83,7 +84,7 @@ exports.accept = async (req, res) => {
     const { transport: updated } = await transportLifecycle.assignerVehicule(
       transport._id,
       {
-        vehiculeId:  best.vehiculeId,
+        vehiculeId: best.vehiculeId,
         chauffeurId: best.chauffeurId || null,
       },
       userCtx,
@@ -91,20 +92,20 @@ exports.accept = async (req, res) => {
 
     await DispatchRecommendation.findByIdAndUpdate(rec._id, {
       $set: {
-        "decision.status":           "accepted",
-        "decision.decidedAt":        new Date(),
-        "decision.decidedBy":        req.user._id,
-        "decision.finalVehiculeId":  best.vehiculeId,
+        "decision.status": "accepted",
+        "decision.decidedAt": new Date(),
+        "decision.decidedBy": req.user._id,
+        "decision.finalVehiculeId": best.vehiculeId,
         "decision.finalChauffeurId": best.chauffeurId || null,
       },
     });
 
     await auditService.log({
-      action:    "AUTO_DISPATCH_PROPOSAL",
-      origine:   "HUMAIN",
+      action: "AUTO_DISPATCH_PROPOSAL",
+      origine: "HUMAIN",
       utilisateur: userCtx,
       ressource: { type: "Transport", id: transport._id, reference: transport.numero },
-      details:   {
+      details: {
         message: `Proposition auto-dispatch validée par ${req.user.email}`,
         metadata: { recommendationId: String(rec._id), score: best.score },
       },
@@ -112,9 +113,9 @@ exports.accept = async (req, res) => {
 
     socketService.getIO?.()?.to("role:dispatcher").emit("autoDispatch:proposal_decided", {
       recommendationId: rec._id,
-      transportId:      transport._id,
-      decision:         "accepted",
-      decidedBy:        req.user.email,
+      transportId: transport._id,
+      decision: "accepted",
+      decidedBy: req.user.email,
     });
 
     res.json({
@@ -123,6 +124,10 @@ exports.accept = async (req, res) => {
     });
   } catch (err) {
     logger.error("[autoDispatch] accept", { err: err.message });
+    // ConflictError (véhicule déjà occupé / transport non assignable) → 409
+    if (err && typeof err.statusCode === "number") {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
     res.status(500).json({ message: err.message });
   }
 };
@@ -145,27 +150,27 @@ exports.reject = async (req, res) => {
 
     await DispatchRecommendation.findByIdAndUpdate(rec._id, {
       $set: {
-        "decision.status":          "rejected",
-        "decision.decidedAt":       new Date(),
-        "decision.decidedBy":       req.user._id,
+        "decision.status": "rejected",
+        "decision.decidedAt": new Date(),
+        "decision.decidedBy": req.user._id,
         "decision.rejectionReason": raison.trim(),
       },
     });
 
     await auditService.log({
-      action:    "AUTO_DISPATCH_REJECTED",
-      origine:   "HUMAIN",
+      action: "AUTO_DISPATCH_REJECTED",
+      origine: "HUMAIN",
       utilisateur: { _id: req.user._id, email: req.user.email, role: req.user.role },
       ressource: { type: "Transport", id: rec.transportId, reference: String(rec.transportId) },
-      details:   { message: `Proposition rejetée : ${raison}` },
+      details: { message: `Proposition rejetée : ${raison}` },
     });
 
     socketService.getIO?.()?.to("role:dispatcher").emit("autoDispatch:proposal_decided", {
       recommendationId: rec._id,
-      transportId:      rec.transportId,
-      decision:         "rejected",
-      decidedBy:        req.user.email,
-      reason:           raison,
+      transportId: rec.transportId,
+      decision: "rejected",
+      decidedBy: req.user.email,
+      reason: raison,
     });
 
     res.json({ success: true });

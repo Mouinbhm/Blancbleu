@@ -58,8 +58,13 @@ const patientSchema = new mongoose.Schema(
     contactUrgence: { type: contactUrgenceSchema, default: () => ({}) },
 
     // ── Informations complémentaires ──────────────────────────────────────────
-    antecedents: { type: String, default: "" },
-    allergies: { type: String, default: "" },
+    // RGPD art. 9 — chiffrement at-rest (AES-256-GCM) des données médicales.
+    // Chiffrement/déchiffrement transparents via les hooks pre('save') /
+    // post('init') plus bas (même pattern que numeroSecu). select:false : pas
+    // remonté par défaut, les readers concernés doivent faire
+    // `.select("+antecedents +allergies")`. Cf. docs/rgpd.md §chiffrement.
+    antecedents: { type: String, default: "", select: false },
+    allergies: { type: String, default: "", select: false },
     preferences: { type: String, default: "" },
     notes: { type: String, default: "" },
 
@@ -87,44 +92,44 @@ const patientSchema = new mongoose.Schema(
 
     // ── RGPD — Consentements ──────────────────────────────────────────────────
     gdpr: {
-      consentGiven:          { type: Boolean, default: false },
-      consentDate:           { type: Date,    default: null  },
-      consentVersion:        { type: String,  default: ""    },
-      consentSource:         { type: String,  default: ""    }, // "web", "mobile", "papier"
+      consentGiven: { type: Boolean, default: false },
+      consentDate: { type: Date, default: null },
+      consentVersion: { type: String, default: "" },
+      consentSource: { type: String, default: "" }, // "web", "mobile", "papier"
       dataProcessingPurpose: [{ type: String }],
-      marketingConsent:      { type: Boolean, default: false },
-      medicalDataConsent:    { type: Boolean, default: false },
-      dataRetentionUntil:    { type: Date,    default: null  },
-      anonymized:            { type: Boolean, default: false },
-      anonymizedAt:          { type: Date,    default: null  },
-      anonymizedBy:          { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-      deletionRequested:     { type: Boolean, default: false },
-      deletionRequestedAt:   { type: Date,    default: null  },
-      deletionRequestedBy:   { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-      deletionReason:        { type: String,  default: ""    },
+      marketingConsent: { type: Boolean, default: false },
+      medicalDataConsent: { type: Boolean, default: false },
+      dataRetentionUntil: { type: Date, default: null },
+      anonymized: { type: Boolean, default: false },
+      anonymizedAt: { type: Date, default: null },
+      anonymizedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      deletionRequested: { type: Boolean, default: false },
+      deletionRequestedAt: { type: Date, default: null },
+      deletionRequestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      deletionReason: { type: String, default: "" },
     },
 
     // ── Historique des consentements ──────────────────────────────────────────
     consentHistory: [
       {
-        consentType: { type: String, default: "" },       // "data_processing", "medical", "marketing"
-        accepted:    { type: Boolean, required: true },
-        version:     { type: String,  default: ""    },
-        source:      { type: String,  default: ""    },   // "web", "mobile", "papier"
-        ipAddress:   { type: String,  default: ""    },
-        userAgent:   { type: String,  default: ""    },
-        changedAt:   { type: Date,    default: Date.now },
-        changedBy:   { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        consentType: { type: String, default: "" }, // "data_processing", "medical", "marketing"
+        accepted: { type: Boolean, required: true },
+        version: { type: String, default: "" },
+        source: { type: String, default: "" }, // "web", "mobile", "papier"
+        ipAddress: { type: String, default: "" },
+        userAgent: { type: String, default: "" },
+        changedAt: { type: Date, default: Date.now },
+        changedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
       },
     ],
 
     // ── Historique des accès au dossier ───────────────────────────────────────
     accessHistory: [
       {
-        accessedBy:  { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-        role:        { type: String, default: "" },
-        accessedAt:  { type: Date,   default: Date.now },
-        reason:      { type: String, default: "" },       // "consultation", "transport", "export"
+        accessedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        role: { type: String, default: "" },
+        accessedAt: { type: Date, default: Date.now },
+        reason: { type: String, default: "" }, // "consultation", "transport", "export"
       },
     ],
   },
@@ -141,20 +146,28 @@ patientSchema.index({ deletedAt: 1 });
 patientSchema.index({ "gdpr.anonymized": 1 });
 patientSchema.index({ "gdpr.deletionRequested": 1 });
 
-// ── Chiffrement du numéro de sécurité sociale (AES-256-GCM) ──────────────────
+// ── Chiffrement at-rest AES-256-GCM (RGPD art. 9 — données santé) ────────────
+// numeroSecu : hash HMAC-SHA256 séparé pour recherche (cf. plus haut).
+// antecedents / allergies : pas de hash, pas recherchables (free-text médical).
 patientSchema.pre("save", function (next) {
   if (this.isModified("numeroSecu") && this.numeroSecu) {
     // Hash calculé sur la valeur EN CLAIR avant chiffrement (HMAC-SHA256 déterministe)
     this.numeroSecuHash = hashDeterministic(this.numeroSecu);
     this.numeroSecu = encrypt(this.numeroSecu);
   }
+  if (this.isModified("antecedents") && this.antecedents) {
+    this.antecedents = encrypt(this.antecedents);
+  }
+  if (this.isModified("allergies") && this.allergies) {
+    this.allergies = encrypt(this.allergies);
+  }
   next();
 });
 
 patientSchema.post("init", function (doc) {
-  if (doc.numeroSecu) {
-    doc.numeroSecu = decrypt(doc.numeroSecu);
-  }
+  if (doc.numeroSecu) doc.numeroSecu = decrypt(doc.numeroSecu);
+  if (doc.antecedents) doc.antecedents = decrypt(doc.antecedents);
+  if (doc.allergies) doc.allergies = decrypt(doc.allergies);
 });
 
 // ── Numéro patient atomique : PAT-YYYYMMDD-XXXX ──────────────────────────────

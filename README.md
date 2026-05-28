@@ -46,13 +46,14 @@
 
 - **Application web** (React) — interface dispatcher/admin pour gérer le cycle de vie complet d'un transport : réservation, assignation de véhicule, suivi GPS temps réel, facturation
 - **Application mobile** (Flutter) — interface patient pour réserver un transport, suivre son ambulance en direct, gérer ses prescriptions et consulter ses factures (Android & iOS)
-- **Microservice IA** (FastAPI / Python) — extraction automatique des PMT par OCR, recommandation de dispatch et optimisation de tournées
+- **Microservice IA** (FastAPI / Python) — scoring de dispatch (système expert rule-based), prédicteur de durée (POC ML), extraction de PMT par OCR, optimisation de tournées (cf. [`ai-service/MODEL_CARD.md`](ai-service/MODEL_CARD.md) pour la posture officielle)
 
 ---
 
 ## Fonctionnalités
 
 ### Transport & Dispatch
+
 - Création de transports avec géocodage automatique des adresses (BAN / data.gouv.fr)
 - Machine d'état complète : `REQUESTED → CONFIRMED → SCHEDULED → ASSIGNED → EN_ROUTE → ARRIVED → ON_BOARD → AT_DESTINATION → COMPLETED → BILLED`
 - Transports récurrents (dialyse, chimiothérapie, radiothérapie)
@@ -60,21 +61,26 @@
 - Simulation GPS temps réel (5 phases : dépôt → patient → hôpital)
 
 ### Gestion de flotte
+
 - Suivi des véhicules (VSL, TPMR, Ambulance) en temps réel
 - Carte interactive (Leaflet + OSRM routing)
 - Historique de missions par véhicule
 
 ### Module IA (FastAPI)
-- Extraction et validation automatique des PMT par OCR
-- Recommandation de dispatch (choix du véhicule optimal)
-- Optimisation de tournées
+
+- **Scoring de dispatch** — système expert pondéré (rule-based, 7 critères, 0 ML) : choix du véhicule sur la base de règles métier explicables. Le dispatcher reste l'autorité finale.
+- **Prédicteur de durée** — POC ML (XGBoost) entraîné sur 1 500 transports **synthétiques**, 0 réels. Non destiné à la production tant que des données réelles ne sont pas collectées (cf. roadmap dans [`MODEL_CARD.md`](ai-service/MODEL_CARD.md)).
+- **Extraction PMT par OCR** — Tesseract + regex + spaCy.
+- **Optimisation de tournées** — Google OR-Tools (VRP).
 
 ### Gestion administrative
+
 - Patients, prescriptions, personnel, équipements, maintenances
 - Comptabilité & facturation
 - Planning journalier et hebdomadaire
 
 ### Application mobile patient (Flutter)
+
 - Réservation d'un transport depuis le smartphone (Android & iOS)
 - Suivi GPS en temps réel de l'ambulance assignée (flutter_map)
 - Consultation et dépôt de prescriptions médicales (PMT)
@@ -84,6 +90,7 @@
 - Interface Material 3 adaptée aux patients
 
 ### Système & Sécurité
+
 - Authentification JWT avec refresh tokens (cookies httpOnly)
 - Gestion des utilisateurs par l'admin : création, activation/désactivation, réinitialisation de mot de passe
 - Email de bienvenue avec identifiants temporaires + changement forcé au premier login
@@ -121,31 +128,33 @@
 
 ## Stack technique
 
-| Couche | Technologies |
-|---|---|
-| **Web (Frontend)** | React 19, React Router 7, Tailwind CSS 3, Leaflet, Chart.js, Socket.io-client |
-| **Mobile** | Flutter 3, Dart, flutter_map, flutter_stripe, shared_preferences, google_fonts |
-| **Backend** | Node.js 20, Express 4, Socket.IO 4, Winston, Swagger UI |
-| **Base de données** | MongoDB 7, Mongoose 8 |
-| **Authentification** | JWT (access + refresh token), bcryptjs, cookies httpOnly |
-| **IA** | FastAPI (Python), Tesseract OCR |
-| **Cartographie** | Leaflet, React-Leaflet, flutter_map, OSRM routing, BAN géocodage |
-| **Paiement** | Stripe (flutter_stripe) |
-| **Email** | Nodemailer (SMTP) |
-| **Infrastructure** | Docker, Docker Compose |
-| **Tests** | Jest (backend), React Testing Library (frontend), flutter_test |
+| Couche               | Technologies                                                                   |
+| -------------------- | ------------------------------------------------------------------------------ |
+| **Web (Frontend)**   | React 19, React Router 7, Tailwind CSS 3, Leaflet, Chart.js, Socket.io-client  |
+| **Mobile**           | Flutter 3, Dart, flutter_map, flutter_stripe, shared_preferences, google_fonts |
+| **Backend**          | Node.js 20, Express 4, Socket.IO 4, Winston, Swagger UI                        |
+| **Base de données**  | MongoDB 7, Mongoose 8                                                          |
+| **Authentification** | JWT (access + refresh token), bcryptjs, cookies httpOnly                       |
+| **IA**               | FastAPI (Python), Tesseract OCR                                                |
+| **Cartographie**     | Leaflet, React-Leaflet, flutter_map, OSRM routing, BAN géocodage               |
+| **Paiement**         | Stripe (flutter_stripe)                                                        |
+| **Email**            | Nodemailer (SMTP)                                                              |
+| **Infrastructure**   | Docker, Docker Compose                                                         |
+| **Tests**            | Jest (backend), React Testing Library (frontend), flutter_test                 |
 
 ---
 
 ## Prérequis
 
 **Web & Backend**
+
 - **Node.js** ≥ 20.x · **npm** ≥ 9.x
 - **MongoDB** (Atlas ou instance locale) — ou **Docker**
 - **Python** ≥ 3.10 (microservice IA — optionnel)
 - **Git**
 
 **Application mobile**
+
 - **Flutter SDK** ≥ 3.x ([installation](https://docs.flutter.dev/get-started/install))
 - **Android Studio** ou **Xcode** (émulateur ou appareil physique)
 - **Dart SDK** ≥ 3.2 (inclus dans Flutter)
@@ -184,7 +193,7 @@ npm install
 npm start          # http://localhost:3000
 ```
 
-### 5. Microservice IA *(optionnel)*
+### 5. Microservice IA _(optionnel)_
 
 ```bash
 cd ai-service
@@ -238,20 +247,20 @@ static const String baseUrl = 'https://api.blancbleu.fr/api';
 
 ### Screens disponibles
 
-| Screen | Description |
-|---|---|
-| `LoginScreen` | Connexion patient |
-| `SignupScreen` | Inscription |
-| `HomeScreen` | Tableau de bord patient |
-| `NouveauTransportScreen` | Réserver un transport |
-| `TransportsScreen` | Historique des transports |
-| `TransportDetailScreen` | Détail d'un transport |
-| `TrackingScreen` | Suivi GPS temps réel |
-| `PrescriptionsScreen` | Gestion des PMT |
-| `NouvelleOrdonnanceScreen` | Déposer une prescription |
-| `FacturesScreen` | Factures & paiements |
-| `ProfileScreen` | Profil utilisateur |
-| `NotificationsScreen` | Notifications |
+| Screen                     | Description               |
+| -------------------------- | ------------------------- |
+| `LoginScreen`              | Connexion patient         |
+| `SignupScreen`             | Inscription               |
+| `HomeScreen`               | Tableau de bord patient   |
+| `NouveauTransportScreen`   | Réserver un transport     |
+| `TransportsScreen`         | Historique des transports |
+| `TransportDetailScreen`    | Détail d'un transport     |
+| `TrackingScreen`           | Suivi GPS temps réel      |
+| `PrescriptionsScreen`      | Gestion des PMT           |
+| `NouvelleOrdonnanceScreen` | Déposer une prescription  |
+| `FacturesScreen`           | Factures & paiements      |
+| `ProfileScreen`            | Profil utilisateur        |
+| `NotificationsScreen`      | Notifications             |
 
 ---
 
@@ -306,7 +315,7 @@ node scripts/create-admin.js
 
 > Les comptes suivants sont créés **uniquement par un administrateur connecté** depuis la page `Utilisateurs → Nouvel utilisateur`. L'employé reçoit automatiquement ses identifiants par email et est forcé de changer son mot de passe à la première connexion.
 
-### Données de démonstration *(développement uniquement)*
+### Données de démonstration _(développement uniquement)_
 
 Pour peupler la base avec 6 transports et 6 véhicules de démonstration géolocalisés à Nice :
 
@@ -340,14 +349,14 @@ docker-compose down
 docker-compose down -v
 ```
 
-| Service | URL |
-|---|---|
-| Frontend React | http://localhost |
-| API REST | http://localhost:5000/api |
-| Documentation Swagger | http://localhost:5000/api/docs |
-| Microservice IA | http://localhost:5002 |
-| Health check | http://localhost:5000/api/health |
-| Métriques Prometheus | http://localhost:5000/metrics (header `X-Metrics-Token`) |
+| Service               | URL                                                      |
+| --------------------- | -------------------------------------------------------- |
+| Frontend React        | http://localhost                                         |
+| API REST              | http://localhost:5000/api                                |
+| Documentation Swagger | http://localhost:5000/api/docs                           |
+| Microservice IA       | http://localhost:5002                                    |
+| Health check          | http://localhost:5000/api/health                         |
+| Métriques Prometheus  | http://localhost:5000/metrics (header `X-Metrics-Token`) |
 
 ### Démarrage en mode production
 
@@ -372,21 +381,21 @@ http://localhost:5000/api/docs
 
 ### Principales routes
 
-| Méthode | Endpoint | Description | Accès |
-|---|---|---|---|
-| `POST` | `/api/auth/login` | Connexion | Public |
-| `POST` | `/api/auth/register` | Créer un compte | Admin |
-| `GET` | `/api/auth/users` | Lister les utilisateurs | Admin |
-| `GET` | `/api/transports` | Lister les transports | Privé |
-| `POST` | `/api/transports` | Créer un transport | Privé |
-| `PATCH` | `/api/transports/:id/assign` | Assigner un véhicule | Privé |
-| `PATCH` | `/api/transports/:id/complete` | Compléter un transport | Privé |
-| `GET` | `/api/vehicles` | Lister les véhicules | Privé |
-| `GET` | `/api/planning/daily` | Planning du jour | Privé |
-| `POST` | `/api/ai/pmt/extract` | Extraction PMT par OCR | Privé |
-| `POST` | `/api/ai/dispatch/:id` | Recommandation de véhicule | Privé |
-| `GET` | `/api/analytics/dashboard` | Statistiques générales | Privé |
-| `GET` | `/api/health` | Health check | Public |
+| Méthode | Endpoint                       | Description                | Accès  |
+| ------- | ------------------------------ | -------------------------- | ------ |
+| `POST`  | `/api/auth/login`              | Connexion                  | Public |
+| `POST`  | `/api/auth/register`           | Créer un compte            | Admin  |
+| `GET`   | `/api/auth/users`              | Lister les utilisateurs    | Admin  |
+| `GET`   | `/api/transports`              | Lister les transports      | Privé  |
+| `POST`  | `/api/transports`              | Créer un transport         | Privé  |
+| `PATCH` | `/api/transports/:id/assign`   | Assigner un véhicule       | Privé  |
+| `PATCH` | `/api/transports/:id/complete` | Compléter un transport     | Privé  |
+| `GET`   | `/api/vehicles`                | Lister les véhicules       | Privé  |
+| `GET`   | `/api/planning/daily`          | Planning du jour           | Privé  |
+| `POST`  | `/api/ai/pmt/extract`          | Extraction PMT par OCR     | Privé  |
+| `POST`  | `/api/ai/dispatch/:id`         | Recommandation de véhicule | Privé  |
+| `GET`   | `/api/analytics/dashboard`     | Statistiques générales     | Privé  |
+| `GET`   | `/api/health`                  | Health check               | Public |
 
 ---
 
@@ -459,14 +468,14 @@ npm run test:e2e
 
 ## Documentation opérationnelle
 
-| Document | Contenu |
-|---|---|
-| [docs/operations.md](docs/operations.md) | Déploiement prod, sauvegardes, monitoring, scaling, runbook incidents |
-| [docs/security.md](docs/security.md) | Auth, secrets, audit, dépendances, divulgation responsable |
-| [docs/rgpd.md](docs/rgpd.md) | Bases légales, durées de conservation, droits des personnes, sous-traitants |
-| [docs/ia-dispatch-scoring.md](docs/ia-dispatch-scoring.md) | Algorithme de scoring dispatch |
-| [docs/ia-duration-predictor.md](docs/ia-duration-predictor.md) | Modèle de prédiction de durée |
-| [docs/ocr-benchmark.md](docs/ocr-benchmark.md) | Benchmark OCR PMT |
+| Document                                                       | Contenu                                                                     |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| [docs/operations.md](docs/operations.md)                       | Déploiement prod, sauvegardes, monitoring, scaling, runbook incidents       |
+| [docs/security.md](docs/security.md)                           | Auth, secrets, audit, dépendances, divulgation responsable                  |
+| [docs/rgpd.md](docs/rgpd.md)                                   | Bases légales, durées de conservation, droits des personnes, sous-traitants |
+| [docs/ia-dispatch-scoring.md](docs/ia-dispatch-scoring.md)     | Algorithme de scoring dispatch                                              |
+| [docs/ia-duration-predictor.md](docs/ia-duration-predictor.md) | Modèle de prédiction de durée                                               |
+| [docs/ocr-benchmark.md](docs/ocr-benchmark.md)                 | Benchmark OCR PMT                                                           |
 
 ---
 
