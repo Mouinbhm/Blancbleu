@@ -11,7 +11,7 @@
  * - Art. 20 RGPD : droit à la portabilité
  * - Art. L123-22 Code commerce : conservation 10 ans
  */
-const Patient   = require("../models/Patient");
+const Patient = require("../models/Patient");
 const Transport = require("../models/Transport");
 const auditService = require("./auditService");
 
@@ -23,10 +23,10 @@ function anonEmail(patientId) {
 
 function userCtx(user, req) {
   return {
-    id:    user?._id || user?.id,
+    id: user?._id || user?.id,
     email: user?.email || "système",
-    role:  user?.role  || "système",
-    ip:    req?.ip || req?.connection?.remoteAddress || "",
+    role: user?.role || "système",
+    ip: req?.ip || req?.connection?.remoteAddress || "",
   };
 }
 
@@ -56,10 +56,10 @@ async function recordPatientConsent(patientId, consentData, user, req) {
   if (!patient.gdpr) patient.gdpr = {};
 
   if (consentType === "data_processing") {
-    patient.gdpr.consentGiven    = accepted;
-    patient.gdpr.consentDate     = accepted ? now : patient.gdpr.consentDate;
-    patient.gdpr.consentVersion  = version;
-    patient.gdpr.consentSource   = source;
+    patient.gdpr.consentGiven = accepted;
+    patient.gdpr.consentDate = accepted ? now : patient.gdpr.consentDate;
+    patient.gdpr.consentVersion = version;
+    patient.gdpr.consentSource = source;
   }
   if (consentType === "medical") {
     patient.gdpr.medicalDataConsent = accepted;
@@ -74,7 +74,10 @@ async function recordPatientConsent(patientId, consentData, user, req) {
     action: "PATIENT_CONSENT_UPDATED",
     utilisateur: userCtx(user, req),
     ressource: { type: "Patient", id: patient._id, reference: patient.numeroPatient },
-    details: { metadata: { consentType, accepted, version }, message: `Consentement "${consentType}" mis à jour` },
+    details: {
+      metadata: { consentType, accepted, version },
+      message: `Consentement "${consentType}" mis à jour`,
+    },
   });
 
   return patient;
@@ -111,7 +114,9 @@ async function recordPatientAccess(patientId, user, reason = "consultation") {
   await Patient.findByIdAndUpdate(patientId, {
     $push: {
       accessHistory: {
-        $each: [{ accessedBy: user?._id || user?.id, role: user?.role, accessedAt: new Date(), reason }],
+        $each: [
+          { accessedBy: user?._id || user?.id, role: user?.role, accessedAt: new Date(), reason },
+        ],
         $slice: -200, // limite à 200 entrées
       },
     },
@@ -123,59 +128,75 @@ async function recordPatientAccess(patientId, user, reason = "consultation") {
 // ─────────────────────────────────────────────────────────────────────────────
 async function getPatientDataExport(patientId, user, req) {
   const Prescription = require("../models/Prescription");
-  const Facture      = require("../models/Facture");
+  const Facture = require("../models/Facture");
 
   const [patient, transports, prescriptions, factures] = await Promise.all([
-    Patient.findById(patientId).lean(),
+    // RGPD Art. 20 — export complet. Pas de .lean() pour bénéficier de
+    // post('init') (déchiffrement transparent antecedents/allergies).
+    Patient.findById(patientId).select("+antecedents +allergies"),
     Transport.find({ patientId, deletedAt: null })
-      .select("numero statut dateTransport heureRDV adresseDepart adresseDestination motif typeTransport distanceKm createdAt")
+      .select(
+        "numero statut dateTransport heureRDV adresseDepart adresseDestination motif typeTransport distanceKm createdAt",
+      )
       .lean(),
-    Prescription.find({ patientId }).select("numero statut motif dateEmission medecin fichier createdAt").lean(),
-    Facture.find({ patientId }).select("numero montantTotal montantCPAM statut dateEmission datePaiement createdAt").lean(),
+    Prescription.find({ patientId })
+      .select("numero statut motif dateEmission medecin fichier createdAt")
+      .lean(),
+    Facture.find({ patientId })
+      .select("numero montantTotal montantCPAM statut dateEmission datePaiement createdAt")
+      .lean(),
   ]);
 
   if (!patient) throw new Error("Patient introuvable");
 
   const payload = {
-    exportedAt:    new Date().toISOString(),
-    notice:        "Export de données patient — Ambulances Blanc Bleu (RGPD Art. 20)",
+    exportedAt: new Date().toISOString(),
+    notice: "Export de données patient — Ambulances Blanc Bleu (RGPD Art. 20)",
     patient: {
-      id:             patient._id,
-      numeroPatient:  patient.numeroPatient,
-      nom:            patient.nom,
-      prenom:         patient.prenom,
-      dateNaissance:  patient.dateNaissance,
-      genre:          patient.genre,
-      telephone:      patient.telephone,
-      email:          patient.email,
-      adresse:        patient.adresse,
-      numeroSecu:     patient.numeroSecu ? "*** (chiffré)" : null,
-      caisse:         patient.caisse,
-      mutuelle:       patient.mutuelle,
-      mobilite:       patient.mobilite,
-      antecedents:    patient.antecedents,
-      allergies:      patient.allergies,
-      createdAt:      patient.createdAt,
+      id: patient._id,
+      numeroPatient: patient.numeroPatient,
+      nom: patient.nom,
+      prenom: patient.prenom,
+      dateNaissance: patient.dateNaissance,
+      genre: patient.genre,
+      telephone: patient.telephone,
+      email: patient.email,
+      adresse: patient.adresse,
+      numeroSecu: patient.numeroSecu ? "*** (chiffré)" : null,
+      caisse: patient.caisse,
+      mutuelle: patient.mutuelle,
+      mobilite: patient.mobilite,
+      antecedents: patient.antecedents,
+      allergies: patient.allergies,
+      createdAt: patient.createdAt,
     },
-    consentements:    patient.gdpr || {},
+    consentements: patient.gdpr || {},
     historique_consentements: (patient.consentHistory || []).map((c) => ({
       consentType: c.consentType,
-      accepted:    c.accepted,
-      version:     c.version,
-      source:      c.source,
-      changedAt:   c.changedAt,
+      accepted: c.accepted,
+      version: c.version,
+      source: c.source,
+      changedAt: c.changedAt,
     })),
     transports,
     prescriptions,
     factures,
-    note_legale: "Les données médicales et comptables sont conservées 10 ans (Art. L123-22 Code de commerce).",
+    note_legale:
+      "Les données médicales et comptables sont conservées 10 ans (Art. L123-22 Code de commerce).",
   };
 
   await auditService.log({
     action: "PATIENT_EXPORTED",
     utilisateur: userCtx(user, req),
     ressource: { type: "Patient", id: patient._id, reference: patient.numeroPatient },
-    details: { metadata: { transports: transports.length, prescriptions: prescriptions.length, factures: factures.length }, message: `Export données patient ${patient.numeroPatient}` },
+    details: {
+      metadata: {
+        transports: transports.length,
+        prescriptions: prescriptions.length,
+        factures: factures.length,
+      },
+      message: `Export données patient ${patient.numeroPatient}`,
+    },
   });
 
   return payload;
@@ -190,17 +211,17 @@ async function anonymizePatient(patientId, user, reason, req) {
   if (patient.gdpr?.anonymized) throw new Error("Ce patient est déjà anonymisé");
 
   const userId = user?._id || user?.id;
-  const now    = new Date();
+  const now = new Date();
 
   // Anonymiser les champs identifiants dans les transports
   await Transport.updateMany(
     { patientId: patient._id },
     {
       $set: {
-        "patient.nom":       "[ANONYMISÉ]",
-        "patient.prenom":    "[ANONYMISÉ]",
+        "patient.nom": "[ANONYMISÉ]",
+        "patient.prenom": "[ANONYMISÉ]",
         "patient.telephone": "",
-        "patient.email":     "",
+        "patient.email": "",
       },
     },
   );
@@ -214,21 +235,21 @@ async function anonymizePatient(patientId, user, reason, req) {
 
   // Anonymiser le dossier patient — conserver l'ID, les données de santé anonymisées
   Object.assign(patient, {
-    nom:            "ANONYMIZED",
-    prenom:         "PATIENT",
-    email:          anonEmail(patient._id),
-    telephone:      null,
-    adresse:        { rue: "", ville: "", codePostal: "" },
-    numeroSecu:     "",
+    nom: "ANONYMIZED",
+    prenom: "PATIENT",
+    email: anonEmail(patient._id),
+    telephone: null,
+    adresse: { rue: "", ville: "", codePostal: "" },
+    numeroSecu: "",
     contactUrgence: { nom: "", telephone: "", lien: "" },
-    actif:          false,
-    antecedents:    "",
-    allergies:      "",
-    notes:          "",
-    preferences:    "",
-    "gdpr.anonymized":        true,
-    "gdpr.anonymizedAt":      now,
-    "gdpr.anonymizedBy":      userId,
+    actif: false,
+    antecedents: "",
+    allergies: "",
+    notes: "",
+    preferences: "",
+    "gdpr.anonymized": true,
+    "gdpr.anonymizedAt": now,
+    "gdpr.anonymizedBy": userId,
     "gdpr.deletionRequested": false,
   });
 
@@ -238,7 +259,10 @@ async function anonymizePatient(patientId, user, reason, req) {
     action: "PATIENT_ANONYMIZED",
     utilisateur: userCtx(user, req),
     ressource: { type: "Patient", id: patient._id, reference: patient.numeroPatient },
-    details: { metadata: { reason }, message: `Patient anonymisé — raison : ${reason || "non précisée"}` },
+    details: {
+      metadata: { reason },
+      message: `Patient anonymisé — raison : ${reason || "non précisée"}`,
+    },
   });
 
   return patient;
@@ -255,10 +279,10 @@ async function requestPatientDeletion(patientId, user, reason, req) {
   const userId = user?._id || user?.id;
 
   patient.gdpr = patient.gdpr || {};
-  patient.gdpr.deletionRequested    = true;
-  patient.gdpr.deletionRequestedAt  = new Date();
-  patient.gdpr.deletionRequestedBy  = userId;
-  patient.gdpr.deletionReason       = reason || "";
+  patient.gdpr.deletionRequested = true;
+  patient.gdpr.deletionRequestedAt = new Date();
+  patient.gdpr.deletionRequestedBy = userId;
+  patient.gdpr.deletionReason = reason || "";
 
   await patient.save();
 
@@ -266,7 +290,10 @@ async function requestPatientDeletion(patientId, user, reason, req) {
     action: "PATIENT_DELETION_REQUESTED",
     utilisateur: userCtx(user, req),
     ressource: { type: "Patient", id: patient._id, reference: patient.numeroPatient },
-    details: { metadata: { reason }, message: `Demande suppression enregistrée — ${reason || "raison non précisée"}` },
+    details: {
+      metadata: { reason },
+      message: `Demande suppression enregistrée — ${reason || "raison non précisée"}`,
+    },
   });
 
   return patient;
@@ -280,9 +307,9 @@ async function cancelDeletionRequest(patientId, user, req) {
   if (!patient) throw new Error("Patient introuvable");
 
   patient.gdpr = patient.gdpr || {};
-  patient.gdpr.deletionRequested   = false;
+  patient.gdpr.deletionRequested = false;
   patient.gdpr.deletionRequestedAt = null;
-  patient.gdpr.deletionReason      = "";
+  patient.gdpr.deletionReason = "";
 
   await patient.save();
 

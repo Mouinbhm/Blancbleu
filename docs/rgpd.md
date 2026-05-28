@@ -10,23 +10,23 @@ Conformité au Règlement Général sur la Protection des Données (UE 2016/679)
 
 ## 1. Responsable de traitement
 
-- **Raison sociale** : Ambulances Blanc Bleu *(à compléter)*
+- **Raison sociale** : Ambulances Blanc Bleu _(à compléter)_
 - **Adresse** : 59 Boulevard Madeleine, Nice
-- **Représentant légal** : *(à compléter)*
-- **DPO** : *(à désigner — obligatoire pour traitement de données de santé à grande échelle, art. 37 RGPD)*
+- **Représentant légal** : _(à compléter)_
+- **DPO** : _(à désigner — obligatoire pour traitement de données de santé à grande échelle, art. 37 RGPD)_
 
 ---
 
 ## 2. Bases légales (art. 6 + art. 9 RGPD)
 
-| Traitement | Base légale art. 6 | Base légale art. 9 |
-|---|---|---|
-| Réservation de transport sanitaire | Exécution d'un contrat (b) | Soins médicaux (h) |
-| Facturation CPAM | Obligation légale (c) | Soins médicaux (h) |
-| Audit log sécurité | Intérêt légitime (f) | — (pas de donnée santé dans logs) |
-| Notifications email/push | Exécution du contrat (b) | — |
-| Statistiques internes | Intérêt légitime (f) | Recherche en santé (j) si étendu |
-| OCR PMT (extraction prescription) | Exécution du contrat (b) | Soins médicaux (h) |
+| Traitement                         | Base légale art. 6         | Base légale art. 9                |
+| ---------------------------------- | -------------------------- | --------------------------------- |
+| Réservation de transport sanitaire | Exécution d'un contrat (b) | Soins médicaux (h)                |
+| Facturation CPAM                   | Obligation légale (c)      | Soins médicaux (h)                |
+| Audit log sécurité                 | Intérêt légitime (f)       | — (pas de donnée santé dans logs) |
+| Notifications email/push           | Exécution du contrat (b)   | —                                 |
+| Statistiques internes              | Intérêt légitime (f)       | Recherche en santé (j) si étendu  |
+| OCR PMT (extraction prescription)  | Exécution du contrat (b)   | Soins médicaux (h)                |
 
 ---
 
@@ -55,16 +55,16 @@ Conformité au Règlement Général sur la Protection des Données (UE 2016/679)
 
 ## 4. Durées de conservation
 
-| Type | Durée | Justification |
-|---|---|---|
-| Dossier patient actif | Durée de la relation + 5 ans | Code de la santé publique |
-| Dossier patient inactif | 20 ans après dernier transport | Archivage médical (R.1112-7 CSP) |
-| Factures | 10 ans | Code de commerce L123-22 |
-| Prescription scannée (PMT) | Idem dossier patient | Pièce du dossier médical |
-| Audit log sécurité | 12 mois | CNIL recommandation |
-| Logs techniques (winston) | 30 jours | Debug + DLP |
-| Compte personnel ex-employé | 5 ans après départ | Prescription prud'homale |
-| Sessions JWT révoquées | 7 jours | Durée du refresh token |
+| Type                        | Durée                          | Justification                    |
+| --------------------------- | ------------------------------ | -------------------------------- |
+| Dossier patient actif       | Durée de la relation + 5 ans   | Code de la santé publique        |
+| Dossier patient inactif     | 20 ans après dernier transport | Archivage médical (R.1112-7 CSP) |
+| Factures                    | 10 ans                         | Code de commerce L123-22         |
+| Prescription scannée (PMT)  | Idem dossier patient           | Pièce du dossier médical         |
+| Audit log sécurité          | 12 mois                        | CNIL recommandation              |
+| Logs techniques (winston)   | 30 jours                       | Debug + DLP                      |
+| Compte personnel ex-employé | 5 ans après départ             | Prescription prud'homale         |
+| Sessions JWT révoquées      | 7 jours                        | Durée du refresh token           |
 
 Mise en œuvre : à automatiser via un job worker `gdprPurge` (à implémenter).
 
@@ -74,21 +74,21 @@ Mise en œuvre : à automatiser via un job worker `gdprPurge` (à implémenter).
 
 ### Endpoints implémentés (`/api/gdpr/*`)
 
-| Droit | Endpoint | Délai légal |
-|---|---|---|
-| Accès (art. 15) | `GET /api/gdpr/export` | 1 mois |
-| Rectification (art. 16) | `PATCH /api/patients/:id` (par dispatcher) | 1 mois |
-| Effacement (art. 17) | `DELETE /api/gdpr/account` | 1 mois |
-| Limitation (art. 18) | demande manuelle au DPO | 1 mois |
-| Portabilité (art. 20) | `GET /api/gdpr/export?format=json` | 1 mois |
-| Opposition (art. 21) | demande manuelle au DPO | 1 mois |
+| Droit                   | Endpoint                                   | Délai légal |
+| ----------------------- | ------------------------------------------ | ----------- |
+| Accès (art. 15)         | `GET /api/gdpr/export`                     | 1 mois      |
+| Rectification (art. 16) | `PATCH /api/patients/:id` (par dispatcher) | 1 mois      |
+| Effacement (art. 17)    | `DELETE /api/gdpr/account`                 | 1 mois      |
+| Limitation (art. 18)    | demande manuelle au DPO                    | 1 mois      |
+| Portabilité (art. 20)   | `GET /api/gdpr/export?format=json`         | 1 mois      |
+| Opposition (art. 21)    | demande manuelle au DPO                    | 1 mois      |
 
 ### Anonymisation vs suppression
 
 - **Suppression compte patient** → données identifiantes purgées, mais **traces transport
   conservées sous forme pseudonymisée** (obligation comptable + santé). Le lien avec une
   personne réelle disparaît.
-- **Email du droit à l'effacement** : envoyer à `dpo@blancbleu.fr` *(à configurer)*.
+- **Email du droit à l'effacement** : envoyer à `dpo@blancbleu.fr` _(à configurer)_.
 
 ---
 
@@ -96,8 +96,49 @@ Mise en œuvre : à automatiser via un job worker `gdprPurge` (à implémenter).
 
 Voir [security.md](security.md) pour le détail technique.
 
+### 6.1 Chiffrement des données médicales at-rest (art. 9 RGPD)
+
+**Algorithme** : AES-256-GCM (IV aléatoire 96 bits, tag d'authentification 128 bits).
+Implémenté dans [server/utils/encryption.js](../server/utils/encryption.js). Clé maître
+fournie via `ENCRYPTION_KEY` (32 bytes base64).
+
+**Champs chiffrés** (donnée stockée = ciphertext, déchiffrement transparent via
+hooks Mongoose `pre('save')` / `post('init')`) :
+
+| Modèle         | Champs                                            | Notes                                                                                                                                                                                                                                      |
+| -------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Patient`      | `numeroSecu`, `antecedents`, `allergies`          | `numeroSecu` + hash HMAC-SHA256 séparé pour recherche. `antecedents` / `allergies` : `select: false`.                                                                                                                                      |
+| `Transport`    | `patient.antecedents`, `patient.allergies`        | Sub-document, `select: false`. Chiffrement sur hooks du sub-schema.                                                                                                                                                                        |
+| `Prescription` | `commentaireDispatcher`, `notes`                  | `select: false`.                                                                                                                                                                                                                           |
+| `Personnel`    | `numeroPermis`, `salaireBrutEnc`, `salaireNetEnc` | `select: false`. Les `salaire*` Number en clair sont **conservés** pour les agrégations Mongo natives ; les shadow `*Enc` sont synchronisés au save. Dette : canonicaliser vers le chiffré uniquement en refondant comptabiliteController. |
+
+**Lecture** : les controllers/services qui ont besoin de ces champs doivent les
+forcer via `.select("+antecedents +allergies")` (ou path équivalent pour les
+sub-docs). Sans select, Mongoose renvoie `undefined` — privacy par défaut.
+
+**Migration des données existantes** :
+
+```bash
+# Backup OBLIGATOIRE avant migration
+mongodump --uri "$MONGO_URI" --out backup-$(date +%Y%m%d)
+
+# Migration idempotente (skip les valeurs déjà au format iv:tag:cipher b64)
+ENCRYPTION_KEY=... MONGO_URI=... npm --prefix server run db:encrypt-medical
+# ou avec --dry-run pour simuler
+```
+
+Le script [server/scripts/encrypt-medical-fields.js](../server/scripts/encrypt-medical-fields.js)
+bypass les hooks Mongoose (utilise `Model.collection`) pour éviter le double
+chiffrement, et détecte les valeurs déjà chiffrées via le pattern format.
+
+**Test du round-trip** : [server/**tests**/integration/encryptionMedicalFields.test.js](../server/__tests__/integration/encryptionMedicalFields.test.js)
+vérifie write → ciphertext en DB → read = plaintext (et idempotence du save).
+
+### 6.2 Autres mesures
+
 Mesures clés RGPD :
-- Chiffrement en base des champs sensibles (NIR, secrets 2FA) via AES-256-GCM.
+
+- Chiffrement en base des champs sensibles (cf. §6.1 ci-dessus).
 - TLS obligatoire en prod (délégué reverse proxy).
 - Authentification à deux facteurs pour rôles admin/dispatcher/superviseur.
 - Audit log complet sur actions sensibles, conservé 12 mois.
@@ -112,13 +153,13 @@ Mesures clés RGPD :
 Recenser ici tous les sous-traitants avec accès à des données personnelles. À mettre à jour
 à chaque ajout de service externe.
 
-| Sous-traitant | Données traitées | Localisation | DPA signé ? |
-|---|---|---|---|
-| Hébergeur infra (à définir : OVH, Scaleway, AWS Paris…) | Toutes | UE | À vérifier |
-| Stripe (paiements) | Identité + montants | UE/US (clauses contractuelles) | Oui (DPA Stripe par défaut) |
-| SMTP transactionnel (Gmail, Mailjet, Sendinblue…) | Email, contenu emails | UE selon fournisseur | À vérifier |
-| Sentry (errors) | Logs techniques pseudonymisés | UE possible (sentry.io EU region) | DPA dispo |
-| Mapbox / OSRM / data.gouv (géocodage) | Adresses (pas de PII patient direct) | Variable | À vérifier |
+| Sous-traitant                                           | Données traitées                     | Localisation                      | DPA signé ?                 |
+| ------------------------------------------------------- | ------------------------------------ | --------------------------------- | --------------------------- |
+| Hébergeur infra (à définir : OVH, Scaleway, AWS Paris…) | Toutes                               | UE                                | À vérifier                  |
+| Stripe (paiements)                                      | Identité + montants                  | UE/US (clauses contractuelles)    | Oui (DPA Stripe par défaut) |
+| SMTP transactionnel (Gmail, Mailjet, Sendinblue…)       | Email, contenu emails                | UE selon fournisseur              | À vérifier                  |
+| Sentry (errors)                                         | Logs techniques pseudonymisés        | UE possible (sentry.io EU region) | DPA dispo                   |
+| Mapbox / OSRM / data.gouv (géocodage)                   | Adresses (pas de PII patient direct) | Variable                          | À vérifier                  |
 
 > Aucun appel API IA externe (OpenAI, Anthropic, etc.) : tout est local (FastAPI + Tesseract).
 
@@ -176,6 +217,6 @@ Template à maintenir : tableur ou outil dédié (Pridatect, OneTrust, Dastra…
 
 ## Contacts
 
-- DPO : `dpo@blancbleu.fr` *(à configurer)*
-- Demandes RGPD utilisateurs : `gdpr@blancbleu.fr` *(à configurer)*
+- DPO : `dpo@blancbleu.fr` _(à configurer)_
+- Demandes RGPD utilisateurs : `gdpr@blancbleu.fr` _(à configurer)_
 - CNIL : <https://www.cnil.fr/fr/plaintes>
