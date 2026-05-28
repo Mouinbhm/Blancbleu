@@ -10,12 +10,13 @@
 
 const TEST_USERS = {
   admin: {
-    email:    process.env.E2E_ADMIN_EMAIL    || "admin@blancbleu.fr",
-    password: process.env.E2E_ADMIN_PASSWORD || "admin1234",
+    email:    process.env.E2E_ADMIN_EMAIL    || "belhajmouin@gmail.com",
+    password: process.env.E2E_ADMIN_PASSWORD || "admin123",
   },
   dispatcher: {
+    // Aligné sur server/seed.js (dispatcher123, pas dispatcher1234).
     email:    process.env.E2E_DISPATCHER_EMAIL    || "dispatcher@blancbleu.fr",
-    password: process.env.E2E_DISPATCHER_PASSWORD || "dispatcher1234",
+    password: process.env.E2E_DISPATCHER_PASSWORD || "dispatcher123",
   },
 };
 

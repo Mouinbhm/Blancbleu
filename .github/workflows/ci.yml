@@ -236,10 +236,12 @@ jobs:
   # 7) E2E Playwright (PR vers main uniquement, best-effort)
   # ──────────────────────────────────────────────────────────────────────────
   e2e:
-    name: E2E Playwright
+    name: E2E Playwright (critical-path)
     runs-on: ubuntu-latest
-    continue-on-error: true   # WIP — stack difficile à stabiliser en CI
+    # BLOCKING — pas de continue-on-error. Le job échoue si critical-path
+    # casse, et `ci-status` (job 8) en dépend désormais.
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    timeout-minutes: 20
 
     services:
       mongo:
@@ -248,6 +250,17 @@ jobs:
       redis:
         image: redis:7-alpine
         ports: ["6379:6379"]
+
+    env:
+      MONGO_URI: mongodb://localhost:27017/blancbleu_e2e
+      JWT_SECRET: e2e-secret-blancbleu-ci
+      ENCRYPTION_KEY: ZTJlLXNlY3JldC1ibGFuY2JsZXUtY2ktcGFkZGVkLWtleS0= # 32B base64
+      REDIS_URL: redis://localhost:6379
+      NODE_ENV: test
+      AI_API_URL: http://localhost:5002 # unused, microservice IA non démarré en E2E
+      CI: "true"
+      REACT_APP_API_URL: http://localhost:5000/api
+      E2E_BASE_URL: http://localhost:3000
 
     steps:
       - uses: actions/checkout@v4
@@ -260,18 +273,61 @@ jobs:
       - name: Install root deps
         run: npm ci
 
-      - name: Install browser
-        run: npx playwright install --with-deps chromium
-
       - name: Install server + client deps
         run: |
-          npm --prefix server  ci
-          npm --prefix client  ci
+          npm --prefix server ci
+          npm --prefix client ci
 
-      # NOTE : un vrai run E2E nécessite de démarrer server + client + IA
-      # + seed des données. À documenter dans un job dédié quand stabilisé.
-      - name: Smoke (playwright --list)
-        run: npx playwright test --list --config=e2e/playwright.config.js
+      - name: Install Playwright browser (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Start backend (port 5000) en arrière-plan
+        run: |
+          npm --prefix server start > server.log 2>&1 &
+          # Attend /api/health (poll max 60s)
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:5000/api/health > /dev/null; then
+              echo "Backend prêt"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Backend n'a pas répondu à /api/health en 60s"
+          tail -50 server.log
+          exit 1
+
+      - name: Seed E2E
+        run: node e2e/fixtures/seed.js
+
+      - name: Build & serve frontend (production build, port 3000)
+        run: |
+          npm --prefix client run build
+          npx --yes serve -s client/build -l 3000 > client.log 2>&1 &
+          # Attend le port 3000
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000 > /dev/null; then
+              echo "Frontend prêt"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Frontend n'a pas répondu en 30s"
+          tail -50 client.log
+          exit 1
+
+      - name: Run Playwright critical-path
+        run: npx playwright test --config=e2e/playwright.config.js
+
+      - name: Upload Playwright report (toujours, même en succès)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
   # ──────────────────────────────────────────────────────────────────────────
   # 8) Résumé / badge — bloque seulement sur les jobs critiques
@@ -290,9 +346,15 @@ jobs:
           [[ "${{ needs.test-server.result }}"  != "success" ]] && { echo "test-server KO";  fail=1; }
           [[ "${{ needs.test-ia.result }}"      != "success" ]] && { echo "test-ia KO";      fail=1; }
           [[ "${{ needs.build-client.result }}" != "success" ]] && { echo "build-client KO"; fail=1; }
+          # e2e est désormais bloquant — critical-path doit passer pour merger.
+          # Note : "skipped" est tolérée (le job ne s'exécute que sur PR vers main).
+          if [[ "${{ needs.e2e.result }}" != "success" && "${{ needs.e2e.result }}" != "skipped" ]]; then
+            echo "e2e KO"
+            fail=1
+          fi
           # Jobs non bloquants (visibilité seulement) :
           echo "lint=${{ needs.lint.result }} (informatif)"
           echo "audit=${{ needs.audit.result }} (informatif)"
           echo "docker-build=${{ needs.docker-build.result }} (informatif)"
-          echo "e2e=${{ needs.e2e.result }} (informatif)"
+          # e2e n'est plus informatif — bloquant ci-dessus.
           exit $fail

@@ -6,29 +6,32 @@ import { transportService } from "../../services/api";
 import { predictDuree } from "../../services/optimizerService";
 
 const _MOTIF_MAP = {
-  "Chimiothérapie":         "Chimiotherapie",
-  "Radiothérapie":          "Consultation",
-  "Rééducation":            "Consultation",
+  Chimiothérapie: "Chimiotherapie",
+  Radiothérapie: "Consultation",
+  Rééducation: "Consultation",
   "Sortie hospitalisation": "Hospitalisation",
-  "Analyse":                "Consultation",
-  "Autre":                  "Consultation",
+  Analyse: "Consultation",
+  Autre: "Consultation",
 };
 
 function _buildInput(transport) {
   if (!transport) return null;
-  const heure = Math.max(6, Math.min(20, parseInt((transport.heureRDV || "09:00").split(":")[0]) || 8));
+  const heure = Math.max(
+    6,
+    Math.min(20, parseInt((transport.heureRDV || "09:00").split(":")[0]) || 8),
+  );
   const dateT = transport.dateTransport ? new Date(transport.dateTransport) : new Date();
   const jourJS = dateT.getDay();
   return {
-    distance_km:          12.0,
-    heure_depart:         heure,
-    jour_semaine:         jourJS === 0 ? 6 : jourJS - 1,
-    mobilite:             transport.patient?.mobilite || "ASSIS",
-    type_vehicule:        transport.typeTransport || "VSL",
-    type_etablissement:   "hopital_public",
-    motif:                _MOTIF_MAP[transport.motif] || transport.motif || "Consultation",
-    aller_retour:         transport.allerRetour || false,
-    nb_patients:          1,
+    distance_km: 12.0,
+    heure_depart: heure,
+    jour_semaine: jourJS === 0 ? 6 : jourJS - 1,
+    mobilite: transport.patient?.mobilite || "ASSIS",
+    type_vehicule: transport.typeTransport || "VSL",
+    type_etablissement: "hopital_public",
+    motif: _MOTIF_MAP[transport.motif] || transport.motif || "Consultation",
+    aller_retour: transport.allerRetour || false,
+    nb_patients: 1,
     experience_chauffeur: 0.5,
   };
 }
@@ -39,13 +42,22 @@ function DurationMinibage({ transport }) {
 
   useEffect(() => {
     const input = _buildInput(transport);
-    if (!input) { setLoading(false); return; }
+    if (!input) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     predictDuree(input)
-      .then((d) => { if (!cancelled && d?.duree_minutes) setDuree(d.duree_minutes); })
+      .then((d) => {
+        if (!cancelled && d?.duree_minutes) setDuree(d.duree_minutes);
+      })
       .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
@@ -56,7 +68,9 @@ function DurationMinibage({ transport }) {
   if (!duree) return null;
   return (
     <div className="flex items-center gap-1 text-xs text-indigo-600 font-mono font-semibold bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full w-fit">
-      <span className="material-symbols-outlined" style={{ fontSize: 12 }}>smart_toy</span>
+      <span className="material-symbols-outlined" style={{ fontSize: 12 }}>
+        smart_toy
+      </span>
       ~{duree} min
     </div>
   );
@@ -79,26 +93,26 @@ const fmtDate = (d) =>
 
 // Actions disponibles selon le statut courant
 const ACTIONS = {
-  REQUESTED:              [{ label: "Confirmer",    fn: "confirmer",  color: "blue"   }],
-  CONFIRMED:              [{ label: "Planifier",    fn: "planifier",  color: "indigo" }],
-  SCHEDULED:              [],
-  ASSIGNED:               [],
-  EN_ROUTE_TO_PICKUP:     [],
-  ARRIVED_AT_PICKUP:      [{ label: "Patient à bord", fn: "patientABord", color: "cyan" }],
-  PATIENT_ON_BOARD:       [],
-  ARRIVED_AT_DESTINATION: [{ label: "Terminer",    fn: "completer",  color: "green"  }],
-  COMPLETED:              [],
-  CANCELLED:              [],
-  NO_SHOW:                [],
-  RESCHEDULED:            [{ label: "Confirmer",    fn: "confirmer",  color: "blue"   }],
+  REQUESTED: [{ label: "Confirmer", fn: "confirmer", color: "blue" }],
+  CONFIRMED: [{ label: "Planifier", fn: "planifier", color: "indigo" }],
+  SCHEDULED: [],
+  ASSIGNED: [],
+  EN_ROUTE_TO_PICKUP: [],
+  ARRIVED_AT_PICKUP: [{ label: "Patient à bord", fn: "patientABord", color: "cyan" }],
+  PATIENT_ON_BOARD: [],
+  ARRIVED_AT_DESTINATION: [{ label: "Terminer", fn: "completer", color: "green" }],
+  COMPLETED: [],
+  CANCELLED: [],
+  NO_SHOW: [],
+  RESCHEDULED: [{ label: "Confirmer", fn: "confirmer", color: "blue" }],
 };
 
 const BTN_COLOR = {
-  blue:   "bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200",
+  blue: "bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200",
   indigo: "bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200",
-  cyan:   "bg-cyan-50 text-cyan-700 hover:bg-cyan-100 border-cyan-200",
-  green:  "bg-green-50 text-green-700 hover:bg-green-100 border-green-200",
-  red:    "bg-red-50 text-red-700 hover:bg-red-100 border-red-200",
+  cyan: "bg-cyan-50 text-cyan-700 hover:bg-cyan-100 border-cyan-200",
+  green: "bg-green-50 text-green-700 hover:bg-green-100 border-green-200",
+  red: "bg-red-50 text-red-700 hover:bg-red-100 border-red-200",
 };
 
 export default function TransportCard({ transport, onRefresh }) {
@@ -127,13 +141,14 @@ export default function TransportCard({ transport, onRefresh }) {
     }
   };
 
-  const peutAnnuler = !["COMPLETED", "CANCELLED", "NO_SHOW"].includes(
-    transport.statut,
-  );
+  const peutAnnuler = !["COMPLETED", "CANCELLED", "NO_SHOW"].includes(transport.statut);
 
   return (
     <div
       onClick={() => navigate(`/transports/${String(transport._id || transport.id)}`)}
+      data-testid="transport-card"
+      data-transport-numero={transport.numero}
+      data-transport-statut={transport.statut}
       className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-all cursor-pointer group"
     >
       {/* En-tête */}
@@ -146,13 +161,13 @@ export default function TransportCard({ transport, onRefresh }) {
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <p className="font-mono text-xs text-slate-400 truncate">
-                {transport.numero}
-              </p>
+              <p className="font-mono text-xs text-slate-400 truncate">{transport.numero}</p>
               {/* Badge série récurrente */}
               {transport.recurrence?.active && transport.recurrence?.joursSemaine?.length > 0 && (
                 <span className="inline-flex items-center gap-0.5 bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none flex-shrink-0">
-                  <span className="material-symbols-outlined" style={{ fontSize: 10 }}>repeat</span>
+                  <span className="material-symbols-outlined" style={{ fontSize: 10 }}>
+                    repeat
+                  </span>
                   Récurrent
                 </span>
               )}
@@ -168,25 +183,17 @@ export default function TransportCard({ transport, onRefresh }) {
       {/* Infos */}
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
-          <span className="material-symbols-outlined text-sm text-slate-400">
-            medical_services
-          </span>
+          <span className="material-symbols-outlined text-sm text-slate-400">medical_services</span>
           {transport.motif}
         </div>
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
-          <span className="material-symbols-outlined text-sm text-slate-400">
-            schedule
-          </span>
+          <span className="material-symbols-outlined text-sm text-slate-400">schedule</span>
           {fmtDate(transport.dateTransport)} · {fmtHeure(transport.heureRDV)}
         </div>
         <div className="flex items-center gap-1.5 text-xs text-slate-500 col-span-2 truncate">
-          <span className="material-symbols-outlined text-sm text-slate-400">
-            location_on
-          </span>
+          <span className="material-symbols-outlined text-sm text-slate-400">location_on</span>
           <span className="truncate">
-            {transport.adresseDestination?.nom ||
-              transport.adresseDestination?.rue ||
-              "—"}
+            {transport.adresseDestination?.nom || transport.adresseDestination?.rue || "—"}
             {transport.adresseDestination?.service
               ? ` · ${transport.adresseDestination.service}`
               : ""}
@@ -197,9 +204,7 @@ export default function TransportCard({ transport, onRefresh }) {
       {/* Véhicule assigné */}
       {transport.vehicule && (
         <div className="flex items-center gap-1.5 text-xs text-purple-600 mb-3 bg-purple-50 rounded-lg px-3 py-1.5">
-          <span className="material-symbols-outlined text-sm">
-            airport_shuttle
-          </span>
+          <span className="material-symbols-outlined text-sm">airport_shuttle</span>
           {transport.vehicule?.nom || transport.vehicule?.immatriculation || "Véhicule assigné"}
         </div>
       )}
