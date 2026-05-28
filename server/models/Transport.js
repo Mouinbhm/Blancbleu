@@ -8,6 +8,7 @@
 const mongoose = require("mongoose");
 const { STATUTS, LABELS } = require("../services/transportStateMachine");
 const Counter = require("./Counter");
+const { encrypt, decrypt } = require("../utils/encryption");
 
 const journalSchema = new mongoose.Schema(
   {
@@ -23,13 +24,13 @@ const journalSchema = new mongoose.Schema(
 // Historique riche des changements de statut (PART A)
 const statusLogEntrySchema = new mongoose.Schema(
   {
-    from:          { type: String, default: null },
-    to:            { type: String, required: true },
-    changedBy:     { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    from: { type: String, default: null },
+    to: { type: String, required: true },
+    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     changedByRole: { type: String, default: "système" },
-    changedAt:     { type: Date, default: Date.now },
-    reason:        { type: String, default: "" },
-    metadata:      { type: mongoose.Schema.Types.Mixed, default: {} },
+    changedAt: { type: Date, default: Date.now },
+    reason: { type: String, default: "" },
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { _id: true },
 );
@@ -37,11 +38,15 @@ const statusLogEntrySchema = new mongoose.Schema(
 // Document PMT attaché au transport (PART C)
 const pmtDocumentSchema = new mongoose.Schema(
   {
-    fileUrl:       { type: String, required: true },
-    fileName:      { type: String, default: "" },
-    uploadedAt:    { type: Date, default: Date.now },
-    uploadedBy:    { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-    ocrStatus:     { type: String, enum: ["pending", "processing", "done", "error", "skipped"], default: "pending" },
+    fileUrl: { type: String, required: true },
+    fileName: { type: String, default: "" },
+    uploadedAt: { type: Date, default: Date.now },
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    ocrStatus: {
+      type: String,
+      enum: ["pending", "processing", "done", "error", "skipped"],
+      default: "pending",
+    },
     extractedData: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { _id: true },
@@ -86,11 +91,35 @@ const patientSchema = new mongoose.Schema(
     oxygene: { type: Boolean, default: false },
     brancardage: { type: Boolean, default: false },
     accompagnateur: { type: Boolean, default: false },
-    antecedents: { type: String, default: "" },
+    // RGPD art. 9 — données médicales chiffrées at-rest (AES-256-GCM).
+    // Hooks pre('save')/post('init') déclarés sur le subdoc plus bas — fires
+    // automatiquement quand le parent Transport est sauvegardé/hydraté.
+    // select:false sur la path `patient.antecedents` est appliqué via le
+    // sub-schema (les readers font `.select("+patient.antecedents ...")`).
+    antecedents: { type: String, default: "", select: false },
+    allergies: { type: String, default: "", select: false },
     notes: { type: String, default: "" },
   },
   { _id: false },
 );
+
+// ── Chiffrement at-rest du subdoc patient (RGPD art. 9) ──────────────────────
+// Les hooks sur subSchema fires automatiquement quand le parent Transport
+// save / init. isModified suit le path complet `antecedents` au niveau du
+// subdoc lui-même (pas `patient.antecedents`).
+patientSchema.pre("save", function (next) {
+  if (this.isModified("antecedents") && this.antecedents) {
+    this.antecedents = encrypt(this.antecedents);
+  }
+  if (this.isModified("allergies") && this.allergies) {
+    this.allergies = encrypt(this.allergies);
+  }
+  next();
+});
+patientSchema.post("init", function (doc) {
+  if (doc.antecedents) doc.antecedents = decrypt(doc.antecedents);
+  if (doc.allergies) doc.allergies = decrypt(doc.allergies);
+});
 
 const prescriptionSchema = new mongoose.Schema(
   {
@@ -197,22 +226,30 @@ const transportSchema = new mongoose.Schema(
     // L'historique complet est désormais dans la collection DispatchRecommendation.
     aiDispatch: {
       recommendedVehicleId: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle", default: null },
-      recommendedDriverId:  { type: mongoose.Schema.Types.ObjectId, ref: "Personnel", default: null },
-      vehicleName:          { type: String, default: "" },
-      driverName:           { type: String, default: "" },
-      score:                { type: Number, default: null },          // 0-100
-      criteriaScores:       { type: mongoose.Schema.Types.Mixed, default: null },
-      explanation:          [{ type: String }],
-      risks:                [{ type: String }],
-      warnings:             [{ type: String }],
-      source:               { type: String, default: "ia" },          // "ia" | "fallback"
-      fallbackUsed:         { type: Boolean, default: false },
-      generatedAt:          { type: Date, default: null },
+      recommendedDriverId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Personnel",
+        default: null,
+      },
+      vehicleName: { type: String, default: "" },
+      driverName: { type: String, default: "" },
+      score: { type: Number, default: null }, // 0-100
+      criteriaScores: { type: mongoose.Schema.Types.Mixed, default: null },
+      explanation: [{ type: String }],
+      risks: [{ type: String }],
+      warnings: [{ type: String }],
+      source: { type: String, default: "ia" }, // "ia" | "fallback"
+      fallbackUsed: { type: Boolean, default: false },
+      generatedAt: { type: Date, default: null },
       acceptedByDispatcher: { type: Boolean, default: null },
-      acceptedAt:           { type: Date, default: null },
-      rejectedReason:       { type: String, default: "" },
+      acceptedAt: { type: Date, default: null },
+      rejectedReason: { type: String, default: "" },
       // Référence vers le document DispatchRecommendation correspondant
-      lastRecommendationId: { type: mongoose.Schema.Types.ObjectId, ref: "DispatchRecommendation", default: null },
+      lastRecommendationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "DispatchRecommendation",
+        default: null,
+      },
     },
 
     // ── Horodatages ───────────────────────────────────────────────────────────
@@ -227,13 +264,13 @@ const transportSchema = new mongoose.Schema(
     heurePriseEnCharge: { type: Date },
     heureArriveeDestination: { type: Date },
     // ── Horodatages v1.1 ─────────────────────────────────────────────────
-    heureDebutAttente: { type: Date },    // WAITING_AT_DESTINATION
-    heureDepartRetour: { type: Date },    // RETURN_TO_BASE
-    heureFacturation: { type: Date },     // BILLED
+    heureDebutAttente: { type: Date }, // WAITING_AT_DESTINATION
+    heureDepartRetour: { type: Date }, // RETURN_TO_BASE
+    heureFacturation: { type: Date }, // BILLED
     // ── Horodatages v1.2 — facturation étendue ────────────────────────────
     heureBillingPending: { type: Date },
-    heurePaiement: { type: Date },        // PAID
-    heureEchec: { type: Date },           // FAILED
+    heurePaiement: { type: Date }, // PAID
+    heureEchec: { type: Date }, // FAILED
     // ─────────────────────────────────────────────────────────────────────
     heureTerminee: { type: Date },
     heureAnnulation: { type: Date },
@@ -308,34 +345,37 @@ const transportSchema = new mongoose.Schema(
     // ── Driver app fields ─────────────────────────────────────────────────────
     statusHistory: [
       {
-        status:    { type: String },
+        status: { type: String },
         timestamp: { type: Date, default: Date.now },
-        driverId:  { type: mongoose.Schema.Types.ObjectId, ref: "Personnel", default: null },
-        note:      { type: String, default: "" },
+        driverId: { type: mongoose.Schema.Types.ObjectId, ref: "Personnel", default: null },
+        note: { type: String, default: "" },
         _id: false,
       },
     ],
-    driverSignedAt:          { type: Date, default: null },
-    patientSignatureBase64:  { type: String, default: null },
-    driverSignatureBase64:   { type: String, default: null },
-    pmtPhotoUrl:             { type: String, default: null },
-    estimatedArrival:        { type: Date, default: null },
-    actualPickupTime:        { type: Date, default: null },
-    actualDropoffTime:       { type: Date, default: null },
+    driverSignedAt: { type: Date, default: null },
+    patientSignatureBase64: { type: String, default: null },
+    driverSignatureBase64: { type: String, default: null },
+    pmtPhotoUrl: { type: String, default: null },
+    estimatedArrival: { type: Date, default: null },
+    actualPickupTime: { type: Date, default: null },
+    actualDropoffTime: { type: Date, default: null },
 
     // ── PART A : Historique riche des statuts ─────────────────────────────────
     statusLog: [statusLogEntrySchema],
 
     // ── PART B : Preuve de prise en charge / Signature patient ────────────────
     proofOfCare: {
-      signed:             { type: Boolean, default: false },
-      signedAt:           { type: Date, default: null },
-      signedByName:       { type: String, default: "" },
-      signatureImageUrl:  { type: String, default: "" },  // chemin fichier
-      signatureBase64:    { type: String, default: "" },  // fallback base64 (max 2 MB)
-      driverId:           { type: mongoose.Schema.Types.ObjectId, ref: "Personnel", default: null },
-      patientId:          { type: mongoose.Schema.Types.ObjectId, ref: "Patient",   default: null },
-      consentText:        { type: String, default: "Je certifie avoir été transporté conformément à ma demande." },
+      signed: { type: Boolean, default: false },
+      signedAt: { type: Date, default: null },
+      signedByName: { type: String, default: "" },
+      signatureImageUrl: { type: String, default: "" }, // chemin fichier
+      signatureBase64: { type: String, default: "" }, // fallback base64 (max 2 MB)
+      driverId: { type: mongoose.Schema.Types.ObjectId, ref: "Personnel", default: null },
+      patientId: { type: mongoose.Schema.Types.ObjectId, ref: "Patient", default: null },
+      consentText: {
+        type: String,
+        default: "Je certifie avoir été transporté conformément à ma demande.",
+      },
     },
 
     // ── PART C : Documents PMT attachés ──────────────────────────────────────
@@ -405,16 +445,35 @@ transportSchema.virtual("label").get(function () {
 transportSchema.virtual("progression").get(function () {
   // Miroir exact de TransportStateMachine.progression() — mis à jour en v1.2
   const ordre = [
-    "REQUESTED", "CONFIRMED", "SCHEDULED", "ASSIGNED",
-    "DRIVER_ACCEPTED", "EN_ROUTE_TO_PICKUP", "ARRIVED_AT_PICKUP",
-    "PATIENT_ON_BOARD", "ARRIVED_AT_DESTINATION", "WAITING_AT_DESTINATION",
-    "RETURN_TO_BASE", "COMPLETED", "BILLING_PENDING", "BILLED", "PAID",
+    "REQUESTED",
+    "CONFIRMED",
+    "SCHEDULED",
+    "ASSIGNED",
+    "DRIVER_ACCEPTED",
+    "EN_ROUTE_TO_PICKUP",
+    "ARRIVED_AT_PICKUP",
+    "PATIENT_ON_BOARD",
+    "ARRIVED_AT_DESTINATION",
+    "WAITING_AT_DESTINATION",
+    "RETURN_TO_BASE",
+    "COMPLETED",
+    "BILLING_PENDING",
+    "BILLED",
+    "PAID",
   ];
   const idx = ordre.indexOf(this.statut);
   return idx === -1 ? null : Math.round((idx / (ordre.length - 1)) * 100);
 });
 transportSchema.virtual("estTermine").get(function () {
-  return ["COMPLETED", "BILLING_PENDING", "BILLED", "PAID", "CANCELLED", "NO_SHOW", "FAILED"].includes(this.statut);
+  return [
+    "COMPLETED",
+    "BILLING_PENDING",
+    "BILLED",
+    "PAID",
+    "CANCELLED",
+    "NO_SHOW",
+    "FAILED",
+  ].includes(this.statut);
 });
 transportSchema.set("toJSON", { virtuals: true });
 transportSchema.set("toObject", { virtuals: true });

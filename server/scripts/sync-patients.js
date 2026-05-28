@@ -14,16 +14,16 @@ require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
 
 const mongoose = require("mongoose");
 const Transport = require("../models/Transport");
-const Patient   = require("../models/Patient");
+const Patient = require("../models/Patient");
 
 const DRY_RUN = process.argv.includes("--dry-run");
 
-const RESET  = "\x1b[0m";
-const GREEN  = "\x1b[32m";
+const RESET = "\x1b[0m";
+const GREEN = "\x1b[32m";
 const YELLOW = "\x1b[33m";
-const RED    = "\x1b[31m";
-const CYAN   = "\x1b[36m";
-const DIM    = "\x1b[2m";
+const RED = "\x1b[31m";
+const CYAN = "\x1b[36m";
+const DIM = "\x1b[2m";
 
 async function chercherPatientExistant(p) {
   const conditions = [];
@@ -35,8 +35,10 @@ async function chercherPatientExistant(p) {
 
   // Priorité 2 : nom + prénom (insensible à la casse)
   conditions.push({
-    nom:    { $regex: new RegExp(`^${p.nom.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
-    prenom: { $regex: new RegExp(`^${(p.prenom || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+    nom: { $regex: new RegExp(`^${p.nom.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+    prenom: {
+      $regex: new RegExp(`^${(p.prenom || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+    },
   });
 
   return Patient.findOne({ $or: conditions });
@@ -48,15 +50,18 @@ async function sync() {
   if (DRY_RUN) console.log(`${YELLOW}[DRY-RUN] Aucune modification ne sera effectuée${RESET}`);
   console.log("");
 
+  // RGPD : patient.antecedents / patient.allergies sont chiffrés + select:false.
+  // On retire .lean() pour bénéficier de post('init') sur le sub-schema patient
+  // (déchiffrement transparent) et on force le select des champs cachés.
   const transports = await Transport.find({
     "patient.nom": { $exists: true, $ne: null },
-  }).lean();
+  }).select("+patient.antecedents +patient.allergies");
 
   console.log(`📋 ${transports.length} transport(s) à analyser\n`);
 
-  let crees    = 0;
+  let crees = 0;
   let existants = 0;
-  let erreurs  = 0;
+  let erreurs = 0;
 
   for (const t of transports) {
     const p = t.patient;
@@ -66,7 +71,9 @@ async function sync() {
     try {
       existe = await chercherPatientExistant(p);
     } catch (err) {
-      console.log(`${RED}✗ Recherche échouée pour ${p.nom} ${p.prenom || ""} : ${err.message}${RESET}`);
+      console.log(
+        `${RED}✗ Recherche échouée pour ${p.nom} ${p.prenom || ""} : ${err.message}${RESET}`,
+      );
       erreurs++;
       continue;
     }
@@ -90,18 +97,18 @@ async function sync() {
 
     try {
       const nouveauPatient = await Patient.create({
-        nom:           p.nom,
-        prenom:        p.prenom        || "",
+        nom: p.nom,
+        prenom: p.prenom || "",
         dateNaissance: p.dateNaissance || null,
-        telephone:     p.telephone     || "",
-        numeroSecu:    p.numeroSecu && p.numeroSecu.trim() ? p.numeroSecu.trim() : "",
-        mobilite:      p.mobilite      || "ASSIS",
-        oxygene:       p.oxygene       || false,
-        brancardage:   p.brancardage   || false,
-        accompagnateur:p.accompagnateur|| false,
-        antecedents:   p.antecedents   || "",
-        notes:         p.notes         || "",
-        actif:         true,
+        telephone: p.telephone || "",
+        numeroSecu: p.numeroSecu && p.numeroSecu.trim() ? p.numeroSecu.trim() : "",
+        mobilite: p.mobilite || "ASSIS",
+        oxygene: p.oxygene || false,
+        brancardage: p.brancardage || false,
+        accompagnateur: p.accompagnateur || false,
+        antecedents: p.antecedents || "",
+        notes: p.notes || "",
+        actif: true,
       });
 
       // Relier le transport à ce patient

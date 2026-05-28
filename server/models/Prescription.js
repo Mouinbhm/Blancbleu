@@ -5,6 +5,7 @@
  */
 const mongoose = require("mongoose");
 const Counter = require("./Counter");
+const { encrypt, decrypt } = require("../utils/encryption");
 
 const medecinSchema = new mongoose.Schema(
   {
@@ -60,7 +61,9 @@ const prescriptionSchema = new mongoose.Schema(
     },
 
     // ── Commentaire dispatcher (statut incomplet) ─────────────────────────────
-    commentaireDispatcher: { type: String, default: "" },
+    // RGPD art. 9 — peut contenir des éléments médicaux contextualisants.
+    // Chiffré at-rest (AES-256-GCM) + select:false. Cf. docs/rgpd.md.
+    commentaireDispatcher: { type: String, default: "", select: false },
 
     // ── Origine ───────────────────────────────────────────────────────────────
     source: {
@@ -97,12 +100,12 @@ const prescriptionSchema = new mongoose.Schema(
         enum: ["pending", "processing", "processed", "failed"],
         default: "pending",
       },
-      confiance:    { type: Number, min: 0, max: 1, default: null },
+      confiance: { type: Number, min: 0, max: 1, default: null },
       donneesExtraites: { type: mongoose.Schema.Types.Mixed, default: null },
       champsIncertains: [{ type: String }],
-      erreurs:      [{ type: String }],
-      traiteAt:     { type: Date, default: null },
-      fournisseur:  { type: String, default: "tesseract+spacy" },
+      erreurs: [{ type: String }],
+      traiteAt: { type: Date, default: null },
+      fournisseur: { type: String, default: "tesseract+spacy" },
     },
 
     // ── Validation workflow ───────────────────────────────────────────────────
@@ -112,21 +115,21 @@ const prescriptionSchema = new mongoose.Schema(
         enum: ["en_attente", "corrige", "valide", "rejete"],
         default: "en_attente",
       },
-      validePar:    { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-      valideAt:     { type: Date, default: null },
+      validePar: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      valideAt: { type: Date, default: null },
       notesCorrection: { type: String, default: "" },
       donneesOriginales: { type: mongoose.Schema.Types.Mixed, default: null },
-      donneesCorrigees:  { type: mongoose.Schema.Types.Mixed, default: null },
-      motifRejet:   { type: String, default: "" },
+      donneesCorrigees: { type: mongoose.Schema.Types.Mixed, default: null },
+      motifRejet: { type: String, default: "" },
     },
 
     // ── Document numérique ────────────────────────────────────────────────────
     document: {
-      fileUrl:     { type: String, default: "" },
-      fileName:    { type: String, default: "" },
-      mimeType:    { type: String, default: "" },
-      uploadedAt:  { type: Date, default: null },
-      uploadedBy:  { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      fileUrl: { type: String, default: "" },
+      fileName: { type: String, default: "" },
+      mimeType: { type: String, default: "" },
+      uploadedAt: { type: Date, default: null },
+      uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     },
 
     // ── Lien transport (optionnel) ────────────────────────────────────────────
@@ -140,19 +143,35 @@ const prescriptionSchema = new mongoose.Schema(
     // ── Historique de validation ──────────────────────────────────────────────
     validationHistory: [
       {
-        action:     { type: String },
-        par:        { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-        at:         { type: Date, default: Date.now },
-        notes:      { type: String, default: "" },
-        donnees:    { type: mongoose.Schema.Types.Mixed, default: null },
+        action: { type: String },
+        par: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        at: { type: Date, default: Date.now },
+        notes: { type: String, default: "" },
+        donnees: { type: mongoose.Schema.Types.Mixed, default: null },
       },
     ],
 
-    notes: { type: String, default: "" },
+    // RGPD art. 9 — notes libres pouvant inclure des observations médicales.
+    notes: { type: String, default: "", select: false },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );
+
+// ── Chiffrement at-rest AES-256-GCM (RGPD art. 9) ───────────────────────────
+prescriptionSchema.pre("save", function (next) {
+  if (this.isModified("commentaireDispatcher") && this.commentaireDispatcher) {
+    this.commentaireDispatcher = encrypt(this.commentaireDispatcher);
+  }
+  if (this.isModified("notes") && this.notes) {
+    this.notes = encrypt(this.notes);
+  }
+  next();
+});
+prescriptionSchema.post("init", function (doc) {
+  if (doc.commentaireDispatcher) doc.commentaireDispatcher = decrypt(doc.commentaireDispatcher);
+  if (doc.notes) doc.notes = decrypt(doc.notes);
+});
 
 // ── Index ─────────────────────────────────────────────────────────────────────
 prescriptionSchema.index({ patientId: 1, statut: 1 });

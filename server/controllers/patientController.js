@@ -2,12 +2,12 @@
  * BlancBleu — Patient Controller v2.0
  * CRUD + stats + RGPD complet (consentements, export, anonymisation, audit).
  */
-const Patient      = require("../models/Patient");
-const Transport    = require("../models/Transport");
-const logger       = require("../utils/logger");
-const gdprSvc      = require("../services/patientGdprService");
-const privacySvc   = require("../services/patientPrivacyService");
-const { audit }    = require("../services/auditService");
+const Patient = require("../models/Patient");
+const Transport = require("../models/Transport");
+const logger = require("../utils/logger");
+const gdprSvc = require("../services/patientGdprService");
+const privacySvc = require("../services/patientPrivacyService");
+const { audit } = require("../services/auditService");
 const { hashDeterministic } = require("../utils/hashing");
 
 const safeMsg = (err) =>
@@ -19,8 +19,8 @@ const errStd = (res, err, status = 500) => {
   logger.error("patientController", { err: err.message });
   res.status(status).json({
     success: false,
-    message: status === 500 ? safeMsg(err) : (err.message || "Erreur interne"),
-    code:    status === 404 ? "NOT_FOUND" : status === 403 ? "FORBIDDEN" : "SERVER_ERROR",
+    message: status === 500 ? safeMsg(err) : err.message || "Erreur interne",
+    code: status === 404 ? "NOT_FOUND" : status === 403 ? "FORBIDDEN" : "SERVER_ERROR",
   });
 };
 
@@ -29,10 +29,10 @@ const _err = errStd;
 
 function userCtx(req) {
   return {
-    id:    req.user?._id,
+    id: req.user?._id,
     email: req.user?.email || "système",
-    role:  req.user?.role  || "système",
-    ip:    req.ip || "",
+    role: req.user?.role || "système",
+    ip: req.ip || "",
   };
 }
 
@@ -88,7 +88,13 @@ exports.getPatients = async (req, res) => {
 // ── GET /api/patients/:id ─────────────────────────────────────────────────────
 exports.getPatient = async (req, res) => {
   try {
-    const patient = await Patient.findOne({ _id: req.params.id, deletedAt: null });
+    // RGPD : antecedents/allergies sont select:false (chiffrés). On les force
+    // sur cet endpoint qui affiche le détail patient (consommé par dispatcher
+    // et chauffeur qui en ont besoin — le filtrage final par rôle est fait
+    // par patientPrivacyService.sanitizePatientForRole).
+    const patient = await Patient.findOne({ _id: req.params.id, deletedAt: null }).select(
+      "+antecedents +allergies",
+    );
     if (!patient) return res.status(404).json({ message: "Patient introuvable" });
 
     // Enregistrer l'accès (non-bloquant)
@@ -97,7 +103,9 @@ exports.getPatient = async (req, res) => {
 
     // Historique transports
     const transports = await Transport.find({ patientId: patient._id, deletedAt: null })
-      .select("numero motif statut dateTransport heureRDV typeTransport adresseDestination recurrence")
+      .select(
+        "numero motif statut dateTransport heureRDV typeTransport adresseDestination recurrence",
+      )
       .sort({ dateTransport: -1 })
       .limit(20);
 
@@ -138,17 +146,26 @@ exports.updatePatient = async (req, res) => {
 exports.getFullProfile = async (req, res) => {
   try {
     const Prescription = require("../models/Prescription");
-    const Facture      = require("../models/Facture");
+    const Facture = require("../models/Facture");
 
-    const patient = await Patient.findOne({ _id: req.params.id, deletedAt: null });
-    if (!patient) return res.status(404).json({ success: false, message: "Patient introuvable", code: "NOT_FOUND" });
+    // RGPD : antecedents/allergies sont select:false ; le full-profile en a
+    // besoin pour le dossier patient complet (filtrage final via privacySvc).
+    const patient = await Patient.findOne({ _id: req.params.id, deletedAt: null }).select(
+      "+antecedents +allergies",
+    );
+    if (!patient)
+      return res
+        .status(404)
+        .json({ success: false, message: "Patient introuvable", code: "NOT_FOUND" });
 
     gdprSvc.recordPatientAccess(patient._id, req.user, "full-profile").catch(() => {});
     audit.patientVu(patient, userCtx(req));
 
     const [transports, prescriptions, factures, consentData, auditSummary] = await Promise.all([
       Transport.find({ patientId: patient._id, deletedAt: null })
-        .select("numero motif statut dateTransport heureRDV typeTransport adresseDepart adresseDestination vehicule distanceKm createdAt")
+        .select(
+          "numero motif statut dateTransport heureRDV typeTransport adresseDepart adresseDestination vehicule distanceKm createdAt",
+        )
         .sort({ dateTransport: -1 })
         .limit(50),
       Prescription.find({ patientId: patient._id })
@@ -156,7 +173,9 @@ exports.getFullProfile = async (req, res) => {
         .sort({ dateEmission: -1 })
         .limit(50),
       Facture.find({ patientId: patient._id })
-        .select("numero montantTotal montantCPAM montantPatient statut dateEmission datePaiement createdAt")
+        .select(
+          "numero montantTotal montantCPAM montantPatient statut dateEmission datePaiement createdAt",
+        )
         .sort({ dateEmission: -1 })
         .limit(50),
       gdprSvc.getConsentHistory(patient._id),
@@ -183,13 +202,22 @@ exports.getFullProfile = async (req, res) => {
 exports.exportPatientData = async (req, res) => {
   try {
     if (!["admin", "superviseur"].includes(req.user?.role)) {
-      return res.status(403).json({ success: false, message: "Export réservé aux administrateurs et superviseurs", code: "FORBIDDEN" });
+      return res
+        .status(403)
+        .json({
+          success: false,
+          message: "Export réservé aux administrateurs et superviseurs",
+          code: "FORBIDDEN",
+        });
     }
 
     const payload = await gdprSvc.getPatientDataExport(req.params.id, req.user, req);
 
     res.setHeader("Content-Type", "application/json");
-    res.setHeader("Content-Disposition", `attachment; filename="patient-data-${req.params.id}-${Date.now()}.json"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="patient-data-${req.params.id}-${Date.now()}.json"`,
+    );
     res.json(payload);
   } catch (err) {
     _err(res, err, err.message === "Patient introuvable" ? 404 : 500);
@@ -201,9 +229,20 @@ exports.updateConsent = async (req, res) => {
   try {
     const { consentType, accepted, version, source } = req.body;
     if (!consentType || accepted === undefined) {
-      return res.status(400).json({ success: false, message: "consentType et accepted sont requis", code: "VALIDATION_ERROR" });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "consentType et accepted sont requis",
+          code: "VALIDATION_ERROR",
+        });
     }
-    const patient = await gdprSvc.recordPatientConsent(req.params.id, { consentType, accepted, version, source }, req.user, req);
+    const patient = await gdprSvc.recordPatientConsent(
+      req.params.id,
+      { consentType, accepted, version, source },
+      req.user,
+      req,
+    );
     res.json({ success: true, message: "Consentement enregistré", gdpr: patient.gdpr });
   } catch (err) {
     _err(res, err, err.message === "Patient introuvable" ? 404 : 500);
@@ -224,11 +263,21 @@ exports.getConsentHistory = async (req, res) => {
 exports.anonymizePatient = async (req, res) => {
   try {
     if (!["admin", "superviseur"].includes(req.user?.role)) {
-      return res.status(403).json({ success: false, message: "Anonymisation réservée aux administrateurs et superviseurs", code: "FORBIDDEN" });
+      return res
+        .status(403)
+        .json({
+          success: false,
+          message: "Anonymisation réservée aux administrateurs et superviseurs",
+          code: "FORBIDDEN",
+        });
     }
     const { reason } = req.body;
     await gdprSvc.anonymizePatient(req.params.id, req.user, reason, req);
-    res.json({ success: true, message: "Patient anonymisé avec succès. Les données de transport et de facturation ont été conservées pour raisons légales." });
+    res.json({
+      success: true,
+      message:
+        "Patient anonymisé avec succès. Les données de transport et de facturation ont été conservées pour raisons légales.",
+    });
   } catch (err) {
     _err(res, err, err.message.includes("introuvable") ? 404 : 400);
   }
@@ -259,7 +308,13 @@ exports.cancelDeletion = async (req, res) => {
 exports.getAuditSummary = async (req, res) => {
   try {
     if (!["admin", "superviseur"].includes(req.user?.role)) {
-      return res.status(403).json({ success: false, message: "Accès réservé aux administrateurs et superviseurs", code: "FORBIDDEN" });
+      return res
+        .status(403)
+        .json({
+          success: false,
+          message: "Accès réservé aux administrateurs et superviseurs",
+          code: "FORBIDDEN",
+        });
     }
     const summary = await gdprSvc.getPatientAuditSummary(req.params.id);
     res.json({ success: true, ...summary });

@@ -3,12 +3,13 @@
  * Transport sanitaire NON urgent
  */
 const mongoose = require("mongoose");
-const bcrypt   = require("bcryptjs");
+const bcrypt = require("bcryptjs");
+const { encrypt, decrypt } = require("../utils/encryption");
 
 const certificationSchema = new mongoose.Schema(
   {
-    nom:            { type: String },
-    dateObtention:  { type: Date },
+    nom: { type: String },
+    dateObtention: { type: Date },
     dateExpiration: { type: Date },
   },
   { _id: false },
@@ -17,11 +18,11 @@ const certificationSchema = new mongoose.Schema(
 const personnelSchema = new mongoose.Schema(
   {
     // ─── Identité ─────────────────────────────────────────────────────────────
-    nom:            { type: String, required: true, trim: true },
-    prenom:         { type: String, required: true, trim: true },
-    dateNaissance:  { type: Date },
-    adresse:        { type: String, default: "" },
-    photoUrl:       { type: String, default: "" },
+    nom: { type: String, required: true, trim: true },
+    prenom: { type: String, required: true, trim: true },
+    dateNaissance: { type: Date },
+    adresse: { type: String, default: "" },
+    photoUrl: { type: String, default: "" },
 
     // ─── Rôle professionnel ───────────────────────────────────────────────────
     role: {
@@ -36,9 +37,16 @@ const personnelSchema = new mongoose.Schema(
       enum: ["CDI", "CDD", "Intérim", "Stage", "Alternance", ""],
       default: "",
     },
-    dateEmbauche:  { type: Date },
-    salaireBrut:   { type: Number, default: 0, min: 0 },
-    salaireNet:    { type: Number, default: 0, min: 0 },
+    dateEmbauche: { type: Date },
+    // RGPD — données financières sensibles. On garde le Number en clair pour
+    // préserver les agrégations Mongo natives ($sum dans le contrôleur compta)
+    // et on duplique en string chiffrée AES-256-GCM dans salaire*Enc (shadow
+    // storage). La canonicalisation vers le chiffré uniquement est tracée en
+    // dette dans docs/rgpd.md. Sync automatique via pre('save') plus bas.
+    salaireBrut: { type: Number, default: 0, min: 0 },
+    salaireNet: { type: Number, default: 0, min: 0 },
+    salaireBrutEnc: { type: String, default: "", select: false },
+    salaireNetEnc: { type: String, default: "", select: false },
 
     // ─── Statut opérationnel ──────────────────────────────────────────────────
     statut: {
@@ -72,11 +80,12 @@ const personnelSchema = new mongoose.Schema(
 
     // ─── Coordonnées ──────────────────────────────────────────────────────────
     telephone: { type: String, trim: true },
-    email:     { type: String, trim: true, lowercase: true },
+    email: { type: String, trim: true, lowercase: true },
 
     // ─── Permis de conduire ───────────────────────────────────────────────────
-    numeroPermis:    { type: String, default: "" },
-    permisExpiration:{ type: Date },
+    // RGPD — pièce d'identité professionnelle, chiffrée at-rest + select:false.
+    numeroPermis: { type: String, default: "", select: false },
+    permisExpiration: { type: Date },
 
     // ─── Certifications & formations ─────────────────────────────────────────
     certifications: { type: [certificationSchema], default: [] },
@@ -86,14 +95,14 @@ const personnelSchema = new mongoose.Schema(
     disponibilites: { type: mongoose.Schema.Types.Mixed, default: {} },
 
     // ─── Divers RH ────────────────────────────────────────────────────────────
-    notes:  { type: String, default: "" },
-    actif:  { type: Boolean, default: true },
+    notes: { type: String, default: "" },
+    actif: { type: Boolean, default: true },
 
     // ─── Authentification app chauffeur ───────────────────────────────────────
-    password:            { type: String, select: false },
+    password: { type: String, select: false },
     forcePasswordChange: { type: Boolean, default: true },
-    lastLogin:           { type: Date, default: null },
-    fcmToken:            { type: String, default: null },
+    lastLogin: { type: Date, default: null },
+    fcmToken: { type: String, default: null },
   },
   { timestamps: true },
 );
@@ -101,6 +110,29 @@ const personnelSchema = new mongoose.Schema(
 personnelSchema.index({ statut: 1, role: 1 });
 personnelSchema.index({ nom: 1, prenom: 1 });
 personnelSchema.index({ email: 1 }, { unique: true, sparse: true });
+
+// ── Chiffrement at-rest AES-256-GCM (RGPD) ──────────────────────────────────
+// numeroPermis : chiffré transparent.
+// salaire*Enc  : shadow chiffré, synchronisé depuis le Number en clair (qui
+// reste pour les agrégations natives Mongo cf. comptabiliteController).
+personnelSchema.pre("save", function (next) {
+  if (this.isModified("numeroPermis") && this.numeroPermis) {
+    this.numeroPermis = encrypt(this.numeroPermis);
+  }
+  if (this.isModified("salaireBrut")) {
+    this.salaireBrutEnc = encrypt(String(this.salaireBrut || 0));
+  }
+  if (this.isModified("salaireNet")) {
+    this.salaireNetEnc = encrypt(String(this.salaireNet || 0));
+  }
+  next();
+});
+personnelSchema.post("init", function (doc) {
+  if (doc.numeroPermis) doc.numeroPermis = decrypt(doc.numeroPermis);
+  // salaireBrutEnc / salaireNetEnc : pas déchiffrés automatiquement (le
+  // Number en clair est la source canonique pour la lecture). Le déchiffrement
+  // explicite reste possible côté caller via require('../utils/encryption').
+});
 
 personnelSchema.methods.comparePassword = function (candidate) {
   return bcrypt.compare(candidate, this.password);
