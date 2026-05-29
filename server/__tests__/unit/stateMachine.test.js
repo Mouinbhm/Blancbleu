@@ -48,43 +48,43 @@ const makeTransport = (overrides = {}) => ({
 describe("peutTransitionner", () => {
   const casValides = [
     // Flux nominal
-    ["REQUESTED",              "CONFIRMED"],
-    ["REQUESTED",              "CANCELLED"],
-    ["CONFIRMED",              "SCHEDULED"],
-    ["CONFIRMED",              "RESCHEDULED"],
-    ["CONFIRMED",              "CANCELLED"],
-    ["SCHEDULED",              "ASSIGNED"],
-    ["SCHEDULED",              "RESCHEDULED"],
-    ["SCHEDULED",              "CANCELLED"],
-    ["ASSIGNED",               "DRIVER_ACCEPTED"],
-    ["ASSIGNED",               "DRIVER_REJECTED"],
-    ["ASSIGNED",               "EN_ROUTE_TO_PICKUP"],
-    ["ASSIGNED",               "CANCELLED"],
-    ["DRIVER_ACCEPTED",        "EN_ROUTE_TO_PICKUP"],
-    ["DRIVER_REJECTED",        "ASSIGNED"],
-    ["EN_ROUTE_TO_PICKUP",     "ARRIVED_AT_PICKUP"],
-    ["EN_ROUTE_TO_PICKUP",     "CANCELLED"],
-    ["ARRIVED_AT_PICKUP",      "PATIENT_ON_BOARD"],
-    ["ARRIVED_AT_PICKUP",      "NO_SHOW"],
-    ["PATIENT_ON_BOARD",       "ARRIVED_AT_DESTINATION"],
+    ["REQUESTED", "CONFIRMED"],
+    ["REQUESTED", "CANCELLED"],
+    ["CONFIRMED", "SCHEDULED"],
+    ["CONFIRMED", "RESCHEDULED"],
+    ["CONFIRMED", "CANCELLED"],
+    ["SCHEDULED", "ASSIGNED"],
+    ["SCHEDULED", "RESCHEDULED"],
+    ["SCHEDULED", "CANCELLED"],
+    ["ASSIGNED", "DRIVER_ACCEPTED"],
+    ["ASSIGNED", "DRIVER_REJECTED"],
+    ["ASSIGNED", "EN_ROUTE_TO_PICKUP"],
+    ["ASSIGNED", "CANCELLED"],
+    ["DRIVER_ACCEPTED", "EN_ROUTE_TO_PICKUP"],
+    ["DRIVER_REJECTED", "ASSIGNED"],
+    ["EN_ROUTE_TO_PICKUP", "ARRIVED_AT_PICKUP"],
+    ["EN_ROUTE_TO_PICKUP", "CANCELLED"],
+    ["ARRIVED_AT_PICKUP", "PATIENT_ON_BOARD"],
+    ["ARRIVED_AT_PICKUP", "NO_SHOW"],
+    ["PATIENT_ON_BOARD", "ARRIVED_AT_DESTINATION"],
     // Flux avec attente (dialyse, chimio…)
     ["ARRIVED_AT_DESTINATION", "WAITING_AT_DESTINATION"],
     ["WAITING_AT_DESTINATION", "RETURN_TO_BASE"],
     ["WAITING_AT_DESTINATION", "CANCELLED"],
     // Flux sans attente
     ["ARRIVED_AT_DESTINATION", "RETURN_TO_BASE"],
-    ["RETURN_TO_BASE",         "COMPLETED"],
-    ["RETURN_TO_BASE",         "CANCELLED"],
+    ["RETURN_TO_BASE", "COMPLETED"],
+    ["RETURN_TO_BASE", "CANCELLED"],
     // Flux legacy : ARRIVED_AT_DESTINATION → COMPLETED direct
     ["ARRIVED_AT_DESTINATION", "COMPLETED"],
     ["ARRIVED_AT_DESTINATION", "CANCELLED"],
     // Clôture financière v1.2 : COMPLETED → BILLING_PENDING → BILLED → PAID
-    ["COMPLETED",              "BILLING_PENDING"],
-    ["BILLING_PENDING",        "BILLED"],
-    ["BILLED",                 "PAID"],
+    ["COMPLETED", "BILLING_PENDING"],
+    ["BILLING_PENDING", "BILLED"],
+    ["BILLED", "PAID"],
     // Alternatifs
-    ["NO_SHOW",                "RESCHEDULED"],
-    ["RESCHEDULED",            "SCHEDULED"],
+    ["NO_SHOW", "RESCHEDULED"],
+    ["RESCHEDULED", "SCHEDULED"],
   ];
 
   test.each(casValides)("autorise %s → %s", (de, vers) => {
@@ -92,28 +92,28 @@ describe("peutTransitionner", () => {
   });
 
   const casInvalides = [
-    ["REQUESTED",              "ASSIGNED"],         // saute des étapes
-    ["REQUESTED",              "COMPLETED"],         // impossible directement
-    ["CONFIRMED",              "PATIENT_ON_BOARD"],  // saute des étapes
-    ["ARRIVED_AT_PICKUP",      "COMPLETED"],         // doit passer par PATIENT_ON_BOARD
-    ["CANCELLED",              "REQUESTED"],         // terminal
-    ["CANCELLED",              "CONFIRMED"],         // terminal
-    ["PATIENT_ON_BOARD",       "NO_SHOW"],           // no-show depuis ARRIVED_AT_PICKUP uniquement
-    ["WAITING_AT_DESTINATION", "COMPLETED"],         // doit passer par RETURN_TO_BASE
+    ["REQUESTED", "ASSIGNED"], // saute des étapes
+    ["REQUESTED", "COMPLETED"], // impossible directement
+    ["CONFIRMED", "PATIENT_ON_BOARD"], // saute des étapes
+    ["ARRIVED_AT_PICKUP", "COMPLETED"], // doit passer par PATIENT_ON_BOARD
+    ["CANCELLED", "REQUESTED"], // terminal
+    ["CANCELLED", "CONFIRMED"], // terminal
+    ["PATIENT_ON_BOARD", "NO_SHOW"], // no-show depuis ARRIVED_AT_PICKUP uniquement
+    ["WAITING_AT_DESTINATION", "COMPLETED"], // doit passer par RETURN_TO_BASE
     // Nouvelle règle v1.2 : COMPLETED → BILLED direct interdit
-    ["COMPLETED",              "BILLED"],            // doit passer par BILLING_PENDING
+    ["COMPLETED", "BILLED"], // doit passer par BILLING_PENDING
     // BILLED ne peut aller que vers PAID
-    ["BILLED",                 "COMPLETED"],         // BILLED n'est pas terminal mais ne recule pas
-    ["BILLED",                 "REQUESTED"],         // BILLED ne recule pas
-    ["BILLED",                 "BILLING_PENDING"],   // BILLED ne recule pas
+    ["BILLED", "COMPLETED"], // BILLED n'est pas terminal mais ne recule pas
+    ["BILLED", "REQUESTED"], // BILLED ne recule pas
+    ["BILLED", "BILLING_PENDING"], // BILLED ne recule pas
     // PAID est terminal
-    ["PAID",                   "REQUESTED"],
-    ["PAID",                   "BILLED"],
+    ["PAID", "REQUESTED"],
+    ["PAID", "BILLED"],
     // RESCHEDULED ne peut PAS aller vers CONFIRMED (doit repasser par SCHEDULED)
-    ["RESCHEDULED",            "CONFIRMED"],
+    ["RESCHEDULED", "CONFIRMED"],
     // Pas de retour depuis ARRIVED_AT_DESTINATION vers BILLED sans complétion
     ["ARRIVED_AT_DESTINATION", "BILLED"],
-    ["RETURN_TO_BASE",         "BILLED"],
+    ["RETURN_TO_BASE", "BILLED"],
   ];
 
   test.each(casInvalides)("refuse %s → %s", (de, vers) => {
@@ -133,30 +133,33 @@ describe("peutTransitionner", () => {
 // SUITE 2 — validerTransition (conditions métier)
 // ══════════════════════════════════════════════════════════════════════════════
 describe("validerTransition — conditions métier", () => {
-
   // REQUESTED → CONFIRMED
   test("REQUESTED→CONFIRMED : requiert dateTransport", () => {
     const t = makeTransport({ statut: "REQUESTED", dateTransport: null });
-    expect(TransportStateMachine.validerTransition(t, "CONFIRMED"))
-      .toContain("Date de transport manquante");
+    expect(TransportStateMachine.validerTransition(t, "CONFIRMED")).toContain(
+      "Date de transport manquante",
+    );
   });
 
   test("REQUESTED→CONFIRMED : requiert heureRDV", () => {
     const t = makeTransport({ statut: "REQUESTED", heureRDV: null });
-    expect(TransportStateMachine.validerTransition(t, "CONFIRMED"))
-      .toContain("Heure de RDV manquante");
+    expect(TransportStateMachine.validerTransition(t, "CONFIRMED")).toContain(
+      "Heure de RDV manquante",
+    );
   });
 
   test("REQUESTED→CONFIRMED : requiert adresseDepart.rue", () => {
     const t = makeTransport({ statut: "REQUESTED", adresseDepart: { rue: "" } });
-    expect(TransportStateMachine.validerTransition(t, "CONFIRMED"))
-      .toContain("Adresse de départ manquante");
+    expect(TransportStateMachine.validerTransition(t, "CONFIRMED")).toContain(
+      "Adresse de départ manquante",
+    );
   });
 
   test("REQUESTED→CONFIRMED : requiert adresseDestination.rue", () => {
     const t = makeTransport({ statut: "REQUESTED", adresseDestination: { rue: "" } });
-    expect(TransportStateMachine.validerTransition(t, "CONFIRMED"))
-      .toContain("Adresse de destination manquante");
+    expect(TransportStateMachine.validerTransition(t, "CONFIRMED")).toContain(
+      "Adresse de destination manquante",
+    );
   });
 
   test("REQUESTED→CONFIRMED : passe si tous les champs présents", () => {
@@ -166,32 +169,51 @@ describe("validerTransition — conditions métier", () => {
 
   // CONFIRMED → SCHEDULED (PMT)
   test("CONFIRMED→SCHEDULED : Dialyse sans PMT bloquée", () => {
-    const t = makeTransport({ statut: "CONFIRMED", motif: "Dialyse", prescription: { validee: false } });
-    expect(TransportStateMachine.validerTransition(t, "SCHEDULED").some((e) => e.includes("PMT")))
-      .toBe(true);
+    const t = makeTransport({
+      statut: "CONFIRMED",
+      motif: "Dialyse",
+      prescription: { validee: false },
+    });
+    expect(
+      TransportStateMachine.validerTransition(t, "SCHEDULED").some((e) => e.includes("PMT")),
+    ).toBe(true);
   });
 
   test("CONFIRMED→SCHEDULED : Chimiothérapie sans PMT bloquée", () => {
-    const t = makeTransport({ statut: "CONFIRMED", motif: "Chimiothérapie", prescription: { validee: false } });
-    expect(TransportStateMachine.validerTransition(t, "SCHEDULED").some((e) => e.includes("PMT")))
-      .toBe(true);
+    const t = makeTransport({
+      statut: "CONFIRMED",
+      motif: "Chimiothérapie",
+      prescription: { validee: false },
+    });
+    expect(
+      TransportStateMachine.validerTransition(t, "SCHEDULED").some((e) => e.includes("PMT")),
+    ).toBe(true);
   });
 
   test("CONFIRMED→SCHEDULED : Dialyse avec PMT validée passe", () => {
-    const t = makeTransport({ statut: "CONFIRMED", motif: "Dialyse", prescription: { validee: true } });
+    const t = makeTransport({
+      statut: "CONFIRMED",
+      motif: "Dialyse",
+      prescription: { validee: true },
+    });
     expect(TransportStateMachine.validerTransition(t, "SCHEDULED")).toHaveLength(0);
   });
 
   test("CONFIRMED→SCHEDULED : Consultation sans PMT passe", () => {
-    const t = makeTransport({ statut: "CONFIRMED", motif: "Consultation", prescription: { validee: false } });
+    const t = makeTransport({
+      statut: "CONFIRMED",
+      motif: "Consultation",
+      prescription: { validee: false },
+    });
     expect(TransportStateMachine.validerTransition(t, "SCHEDULED")).toHaveLength(0);
   });
 
   // SCHEDULED → ASSIGNED
   test("SCHEDULED→ASSIGNED : requiert véhicule", () => {
     const t = makeTransport({ statut: "SCHEDULED", vehicule: null });
-    expect(TransportStateMachine.validerTransition(t, "ASSIGNED"))
-      .toContain("Véhicule non assigné");
+    expect(TransportStateMachine.validerTransition(t, "ASSIGNED")).toContain(
+      "Véhicule non assigné",
+    );
   });
 
   test("SCHEDULED→ASSIGNED : chauffeur optionnel (validé par lifecycle)", () => {
@@ -211,12 +233,16 @@ describe("validerTransition — conditions métier", () => {
   // ARRIVED_AT_DESTINATION → COMPLETED
   test("ARRIVED_AT_DESTINATION→COMPLETED : requiert heureArriveeDestination", () => {
     const t = makeTransport({ statut: "ARRIVED_AT_DESTINATION", heureArriveeDestination: null });
-    expect(TransportStateMachine.validerTransition(t, "COMPLETED"))
-      .toContain("Heure d'arrivée à destination non renseignée");
+    expect(TransportStateMachine.validerTransition(t, "COMPLETED")).toContain(
+      "Heure d'arrivée à destination non renseignée",
+    );
   });
 
   test("ARRIVED_AT_DESTINATION→COMPLETED : passe avec heure renseignée", () => {
-    const t = makeTransport({ statut: "ARRIVED_AT_DESTINATION", heureArriveeDestination: new Date() });
+    const t = makeTransport({
+      statut: "ARRIVED_AT_DESTINATION",
+      heureArriveeDestination: new Date(),
+    });
     expect(TransportStateMachine.validerTransition(t, "COMPLETED")).toHaveLength(0);
   });
 
@@ -249,7 +275,10 @@ describe("validerTransition — conditions métier", () => {
 
   // Attente et retour base
   test("ARRIVED_AT_DESTINATION→WAITING_AT_DESTINATION : aucune condition requise", () => {
-    const t = makeTransport({ statut: "ARRIVED_AT_DESTINATION", heureArriveeDestination: new Date() });
+    const t = makeTransport({
+      statut: "ARRIVED_AT_DESTINATION",
+      heureArriveeDestination: new Date(),
+    });
     expect(TransportStateMachine.validerTransition(t, "WAITING_AT_DESTINATION")).toHaveLength(0);
   });
 
@@ -265,9 +294,10 @@ describe("validerTransition — conditions métier", () => {
 describe("effectuerTransition", () => {
   test("retourne update + entreeJournal pour REQUESTED→CONFIRMED", () => {
     const t = makeTransport({ statut: "REQUESTED" });
-    const { update, entreeJournal } = TransportStateMachine.effectuerTransition(
-      t, "CONFIRMED", { utilisateur: "dispatcher@blancbleu.fr" },
-    );
+    const { update, entreeJournal } = TransportStateMachine.effectuerTransition(t, "CONFIRMED", {
+      utilisateur: "dispatcher@blancbleu.fr",
+      role: "dispatcher",
+    });
     expect(update.statut).toBe("CONFIRMED");
     expect(update.heureConfirmation).toBeInstanceOf(Date);
     expect(entreeJournal.de).toBe("REQUESTED");
@@ -277,14 +307,16 @@ describe("effectuerTransition", () => {
 
   test("lance une erreur pour une transition non autorisée", () => {
     const t = makeTransport({ statut: "REQUESTED" });
-    expect(() => TransportStateMachine.effectuerTransition(t, "COMPLETED"))
-      .toThrow("Transition invalide");
+    expect(() =>
+      TransportStateMachine.effectuerTransition(t, "COMPLETED", { role: "admin" }),
+    ).toThrow("Transition invalide");
   });
 
   test("lance une erreur si conditions métier non remplies", () => {
     const t = makeTransport({ statut: "SCHEDULED", vehicule: null, chauffeur: null });
-    expect(() => TransportStateMachine.effectuerTransition(t, "ASSIGNED"))
-      .toThrow("Conditions non remplies");
+    expect(() =>
+      TransportStateMachine.effectuerTransition(t, "ASSIGNED", { role: "dispatcher" }),
+    ).toThrow("Conditions non remplies");
   });
 
   test("calcule dureeReelleMinutes à la complétion", () => {
@@ -293,43 +325,53 @@ describe("effectuerTransition", () => {
       heureEnRoute: new Date(Date.now() - 45 * 60 * 1000),
       heureArriveeDestination: new Date(),
     });
-    const { update } = TransportStateMachine.effectuerTransition(t, "COMPLETED");
+    const { update } = TransportStateMachine.effectuerTransition(t, "COMPLETED", {
+      role: "chauffeur",
+    });
     expect(update.dureeReelleMinutes).toBeGreaterThanOrEqual(44);
     expect(update.dureeReelleMinutes).toBeLessThanOrEqual(46);
   });
 
   test("ajoute raisonAnnulation lors d'une annulation", () => {
     const t = makeTransport({ statut: "CONFIRMED" });
-    const { update } = TransportStateMachine.effectuerTransition(
-      t, "CANCELLED", { raisonAnnulation: "Patient hospitalisé" },
-    );
+    const { update } = TransportStateMachine.effectuerTransition(t, "CANCELLED", {
+      raisonAnnulation: "Patient hospitalisé",
+      role: "admin",
+    });
     expect(update.raisonAnnulation).toBe("Patient hospitalisé");
   });
 
   test("utilise la raison par défaut si aucune raison fournie", () => {
     const t = makeTransport({ statut: "CONFIRMED" });
-    const { update } = TransportStateMachine.effectuerTransition(t, "CANCELLED");
+    const { update } = TransportStateMachine.effectuerTransition(t, "CANCELLED", { role: "admin" });
     expect(update.raisonAnnulation).toBe("Annulé par l'opérateur");
   });
 
   test("ajoute raisonNoShow lors d'un no-show", () => {
     const t = makeTransport({ statut: "ARRIVED_AT_PICKUP" });
-    const { update } = TransportStateMachine.effectuerTransition(
-      t, "NO_SHOW", { raisonNoShow: "Patient introuvable" },
-    );
+    const { update } = TransportStateMachine.effectuerTransition(t, "NO_SHOW", {
+      raisonNoShow: "Patient introuvable",
+      role: "chauffeur",
+    });
     expect(update.raisonNoShow).toBe("Patient introuvable");
   });
 
   test("utilise 'système' comme utilisateur par défaut", () => {
     const t = makeTransport({ statut: "REQUESTED" });
-    const { entreeJournal } = TransportStateMachine.effectuerTransition(t, "CONFIRMED");
+    // role obligatoire pour la RBAC ; on ne passe PAS `utilisateur` pour vérifier
+    // qu'il défaut bien à "système".
+    const { entreeJournal } = TransportStateMachine.effectuerTransition(t, "CONFIRMED", {
+      role: "admin",
+    });
     expect(entreeJournal.utilisateur).toBe("système");
   });
 
   test("l'entrée journal contient le timestamp", () => {
     const t = makeTransport({ statut: "REQUESTED" });
     const avant = new Date();
-    const { entreeJournal } = TransportStateMachine.effectuerTransition(t, "CONFIRMED");
+    const { entreeJournal } = TransportStateMachine.effectuerTransition(t, "CONFIRMED", {
+      role: "dispatcher",
+    });
     const apres = new Date();
     expect(entreeJournal.timestamp).toBeInstanceOf(Date);
     expect(entreeJournal.timestamp.getTime()).toBeGreaterThanOrEqual(avant.getTime());
@@ -342,40 +384,60 @@ describe("effectuerTransition", () => {
       vehicule: { _id: "v1" },
       chauffeur: { _id: "c1" },
     });
-    const { update } = TransportStateMachine.effectuerTransition(t, "EN_ROUTE_TO_PICKUP");
+    const { update } = TransportStateMachine.effectuerTransition(t, "EN_ROUTE_TO_PICKUP", {
+      role: "chauffeur",
+    });
     expect(update.heureEnRoute).toBeInstanceOf(Date);
   });
 
   test("WAITING_AT_DESTINATION : pose heureDebutAttente", () => {
-    const t = makeTransport({ statut: "ARRIVED_AT_DESTINATION", heureArriveeDestination: new Date() });
-    const { update } = TransportStateMachine.effectuerTransition(t, "WAITING_AT_DESTINATION");
+    const t = makeTransport({
+      statut: "ARRIVED_AT_DESTINATION",
+      heureArriveeDestination: new Date(),
+    });
+    const { update } = TransportStateMachine.effectuerTransition(t, "WAITING_AT_DESTINATION", {
+      role: "chauffeur",
+    });
     expect(update.heureDebutAttente).toBeInstanceOf(Date);
   });
 
   test("WAITING_AT_DESTINATION : stocke dureeAttenteMinutes depuis metadata", () => {
-    const t = makeTransport({ statut: "ARRIVED_AT_DESTINATION", heureArriveeDestination: new Date() });
-    const { update } = TransportStateMachine.effectuerTransition(
-      t, "WAITING_AT_DESTINATION", { dureeAttenteMinutes: 180 },
-    );
+    const t = makeTransport({
+      statut: "ARRIVED_AT_DESTINATION",
+      heureArriveeDestination: new Date(),
+    });
+    const { update } = TransportStateMachine.effectuerTransition(t, "WAITING_AT_DESTINATION", {
+      dureeAttenteMinutes: 180,
+      role: "chauffeur",
+    });
     expect(update.dureeAttenteMinutes).toBe(180);
   });
 
   test("WAITING_AT_DESTINATION sans durée : dureeAttenteMinutes absent de update", () => {
-    const t = makeTransport({ statut: "ARRIVED_AT_DESTINATION", heureArriveeDestination: new Date() });
-    const { update } = TransportStateMachine.effectuerTransition(t, "WAITING_AT_DESTINATION");
+    const t = makeTransport({
+      statut: "ARRIVED_AT_DESTINATION",
+      heureArriveeDestination: new Date(),
+    });
+    const { update } = TransportStateMachine.effectuerTransition(t, "WAITING_AT_DESTINATION", {
+      role: "chauffeur",
+    });
     expect(update.dureeAttenteMinutes).toBeUndefined();
   });
 
   test("RETURN_TO_BASE : pose heureDepartRetour", () => {
     const t = makeTransport({ statut: "WAITING_AT_DESTINATION" });
-    const { update } = TransportStateMachine.effectuerTransition(t, "RETURN_TO_BASE");
+    const { update } = TransportStateMachine.effectuerTransition(t, "RETURN_TO_BASE", {
+      role: "chauffeur",
+    });
     expect(update.heureDepartRetour).toBeInstanceOf(Date);
   });
 
   // Clôture financière — v1.2 : doit passer par BILLING_PENDING
   test("BILLING_PENDING→BILLED : pose heureFacturation", () => {
     const t = makeTransport({ statut: "BILLING_PENDING" });
-    const { update } = TransportStateMachine.effectuerTransition(t, "BILLED");
+    const { update } = TransportStateMachine.effectuerTransition(t, "BILLED", {
+      role: "comptable",
+    });
     expect(update.heureFacturation).toBeInstanceOf(Date);
   });
 
@@ -383,22 +445,24 @@ describe("effectuerTransition", () => {
     const fakeId = "507f1f77bcf86cd799439099";
     const t = makeTransport({ statut: "BILLING_PENDING", facture: null });
     t._factureIdTemp = fakeId;
-    const { update } = TransportStateMachine.effectuerTransition(
-      t, "BILLED", { factureId: fakeId },
-    );
+    const { update } = TransportStateMachine.effectuerTransition(t, "BILLED", {
+      factureId: fakeId,
+      role: "admin",
+    });
     expect(update.facture).toBe(fakeId);
   });
 
   test("BILLED→PAID : pose heurePaiement", () => {
     const t = makeTransport({ statut: "BILLED" });
-    const { update } = TransportStateMachine.effectuerTransition(t, "PAID");
+    const { update } = TransportStateMachine.effectuerTransition(t, "PAID", { role: "comptable" });
     expect(update.heurePaiement).toBeInstanceOf(Date);
   });
 
   test("COMPLETED→BILLED direct lance une erreur (transition invalide)", () => {
     const t = makeTransport({ statut: "COMPLETED" });
-    expect(() => TransportStateMachine.effectuerTransition(t, "BILLED"))
-      .toThrow("Transition invalide");
+    expect(() => TransportStateMachine.effectuerTransition(t, "BILLED", { role: "admin" })).toThrow(
+      "Transition invalide",
+    );
   });
 });
 
@@ -474,11 +538,21 @@ describe("progression", () => {
 
   test("la progression est strictement croissante le long du flux nominal complet", () => {
     const ordre = [
-      "REQUESTED", "CONFIRMED", "SCHEDULED", "ASSIGNED",
-      "DRIVER_ACCEPTED", "EN_ROUTE_TO_PICKUP", "ARRIVED_AT_PICKUP",
-      "PATIENT_ON_BOARD", "ARRIVED_AT_DESTINATION",
-      "WAITING_AT_DESTINATION", "RETURN_TO_BASE",
-      "COMPLETED", "BILLING_PENDING", "BILLED", "PAID",
+      "REQUESTED",
+      "CONFIRMED",
+      "SCHEDULED",
+      "ASSIGNED",
+      "DRIVER_ACCEPTED",
+      "EN_ROUTE_TO_PICKUP",
+      "ARRIVED_AT_PICKUP",
+      "PATIENT_ON_BOARD",
+      "ARRIVED_AT_DESTINATION",
+      "WAITING_AT_DESTINATION",
+      "RETURN_TO_BASE",
+      "COMPLETED",
+      "BILLING_PENDING",
+      "BILLED",
+      "PAID",
     ];
     const progressions = ordre.map((s) => TransportStateMachine.progression(s));
     for (let i = 1; i < progressions.length; i++) {
@@ -498,7 +572,9 @@ describe("transitionsPossibles", () => {
   });
 
   test("ARRIVED_AT_PICKUP peut aller vers PATIENT_ON_BOARD et NO_SHOW", () => {
-    const statuts = TransportStateMachine.transitionsPossibles("ARRIVED_AT_PICKUP").map((t) => t.statut);
+    const statuts = TransportStateMachine.transitionsPossibles("ARRIVED_AT_PICKUP").map(
+      (t) => t.statut,
+    );
     expect(statuts).toContain("PATIENT_ON_BOARD");
     expect(statuts).toContain("NO_SHOW");
   });
@@ -546,28 +622,30 @@ describe("transitionsPossibles", () => {
 //         BILLED peut encore évoluer vers PAID.
 // ══════════════════════════════════════════════════════════════════════════════
 describe("estTerminal", () => {
-  test.each(["PAID", "CANCELLED", "NO_SHOW", "FAILED"])(
-    "%s est un état terminal",
-    (statut) => {
-      expect(TransportStateMachine.estTerminal(statut)).toBe(true);
-    },
-  );
+  test.each(["PAID", "CANCELLED", "NO_SHOW", "FAILED"])("%s est un état terminal", (statut) => {
+    expect(TransportStateMachine.estTerminal(statut)).toBe(true);
+  });
 
   test.each([
-    "REQUESTED", "CONFIRMED", "SCHEDULED", "ASSIGNED",
-    "DRIVER_ACCEPTED", "DRIVER_REJECTED",
-    "EN_ROUTE_TO_PICKUP", "ARRIVED_AT_PICKUP", "PATIENT_ON_BOARD",
-    "ARRIVED_AT_DESTINATION", "WAITING_AT_DESTINATION", "RETURN_TO_BASE",
-    "COMPLETED",        // peut encore évoluer vers BILLING_PENDING
-    "BILLING_PENDING",  // peut encore évoluer vers BILLED
-    "BILLED",           // peut encore évoluer vers PAID
+    "REQUESTED",
+    "CONFIRMED",
+    "SCHEDULED",
+    "ASSIGNED",
+    "DRIVER_ACCEPTED",
+    "DRIVER_REJECTED",
+    "EN_ROUTE_TO_PICKUP",
+    "ARRIVED_AT_PICKUP",
+    "PATIENT_ON_BOARD",
+    "ARRIVED_AT_DESTINATION",
+    "WAITING_AT_DESTINATION",
+    "RETURN_TO_BASE",
+    "COMPLETED", // peut encore évoluer vers BILLING_PENDING
+    "BILLING_PENDING", // peut encore évoluer vers BILLED
+    "BILLED", // peut encore évoluer vers PAID
     "RESCHEDULED",
-  ])(
-    "%s n'est pas un état terminal",
-    (statut) => {
-      expect(TransportStateMachine.estTerminal(statut)).toBe(false);
-    },
-  );
+  ])("%s n'est pas un état terminal", (statut) => {
+    expect(TransportStateMachine.estTerminal(statut)).toBe(false);
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -590,13 +668,23 @@ describe("LABELS et STATUTS", () => {
 
   test("TRANSITIONS couvre tous les statuts non terminaux", () => {
     const nonTerminaux = [
-      "REQUESTED", "CONFIRMED", "SCHEDULED", "ASSIGNED",
-      "DRIVER_ACCEPTED", "DRIVER_REJECTED",
-      "EN_ROUTE_TO_PICKUP", "ARRIVED_AT_PICKUP",
-      "PATIENT_ON_BOARD", "ARRIVED_AT_DESTINATION",
-      "WAITING_AT_DESTINATION", "RETURN_TO_BASE",
-      "COMPLETED", "BILLING_PENDING", "BILLED", // non terminaux → peuvent évoluer
-      "NO_SHOW", "RESCHEDULED",
+      "REQUESTED",
+      "CONFIRMED",
+      "SCHEDULED",
+      "ASSIGNED",
+      "DRIVER_ACCEPTED",
+      "DRIVER_REJECTED",
+      "EN_ROUTE_TO_PICKUP",
+      "ARRIVED_AT_PICKUP",
+      "PATIENT_ON_BOARD",
+      "ARRIVED_AT_DESTINATION",
+      "WAITING_AT_DESTINATION",
+      "RETURN_TO_BASE",
+      "COMPLETED",
+      "BILLING_PENDING",
+      "BILLED", // non terminaux → peuvent évoluer
+      "NO_SHOW",
+      "RESCHEDULED",
     ];
     nonTerminaux.forEach((statut) => {
       expect(TRANSITIONS[statut]).toBeDefined();
@@ -604,9 +692,9 @@ describe("LABELS et STATUTS", () => {
   });
 
   test("les états terminaux ont une liste de transitions vide", () => {
-    expect(TRANSITIONS.PAID).toEqual([]);       // terminal du flux financier
-    expect(TRANSITIONS.CANCELLED).toEqual([]);  // terminal administratif
-    expect(TRANSITIONS.FAILED).toEqual([]);     // terminal échec
+    expect(TRANSITIONS.PAID).toEqual([]); // terminal du flux financier
+    expect(TRANSITIONS.CANCELLED).toEqual([]); // terminal administratif
+    expect(TRANSITIONS.FAILED).toEqual([]); // terminal échec
   });
 
   test("BILLED n'est pas terminal et peut transitionner vers PAID", () => {

@@ -35,4 +35,19 @@ class ConflictError extends AppError {
   }
 }
 
-module.exports = { AppError, ConflictError };
+/**
+ * Action interdite par le contrôle d'accès — 403. Typiquement levé quand un
+ * utilisateur authentifié essaie d'exécuter une action non autorisée pour
+ * son rôle (ex: chauffeur qui tente d'annuler un transport, comptable qui
+ * tente de marquer EN_ROUTE).
+ *
+ * Distinguer de 401 (non authentifié) — ici l'auth est OK, c'est l'autorisation
+ * métier qui refuse.
+ */
+class ForbiddenError extends AppError {
+  constructor(message = "Action non autorisée pour ce rôle") {
+    super(message, 403);
+  }
+}
+
+module.exports = { AppError, ConflictError, ForbiddenError };
