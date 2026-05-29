@@ -261,8 +261,11 @@ Tenir un registre interne des violations (même celles non notifiables).
 
 ## 11. AIPD (analyse d'impact)
 
-Le traitement de données de santé à grande échelle est soumis à une AIPD obligatoire (art. 35).
-À réaliser et tenir à jour. Template CNIL : <https://www.cnil.fr/fr/RGPD-analyse-impact-protection-des-donnees-aipd>.
+Le traitement de données de santé à grande échelle est soumis à une AIPD
+obligatoire (art. 35). Version interne v1.0 disponible dans
+**[dpia.md](dpia.md)** — à valider par le DPO désigné avant production.
+Template CNIL de référence :
+<https://www.cnil.fr/fr/RGPD-analyse-impact-protection-des-donnees-aipd>.
 
 ---
 
@@ -271,7 +274,85 @@ Le traitement de données de santé à grande échelle est soumis à une AIPD ob
 Le registre doit lister chaque finalité de traitement, base légale, catégories de personnes,
 de données, destinataires, durées de conservation, mesures de sécurité.
 
-Template à maintenir : tableur ou outil dédié (Pridatect, OneTrust, Dastra…).
+→ Version synthétique tenue dans [registre-traitements.md](registre-traitements.md)
+(7 fiches de traitement). À migrer vers un outil dédié (Pridatect, OneTrust,
+Dastra…) après désignation du DPO.
+
+---
+
+## 13. Positionnement HDS (Hébergeur de Données de Santé)
+
+### 13.1 Cadre réglementaire
+
+L'hébergement de données de santé à caractère personnel est soumis à la
+**procédure d'agrément HDS** (arrêté du 4 janvier 2006 modifié par l'arrêté
+du 11 juin 2018, repris à l'art. L1111-8 du Code de la santé publique).
+L'hébergeur — comme le sous-traitant — doit être certifié HDS pour les
+**6 activités** définies par le référentiel (mise à disposition
+d'infrastructure, hébergement physique, infrastructure virtuelle, plateforme
+logicielle, infogérance, sauvegarde externalisée).
+
+### 13.2 Statut actuel
+
+**POC non hébergé en HDS.** La version actuelle de la plateforme est un
+projet de fin d'études : les déploiements de démonstration utilisent du
+self-hosted Docker ou un cluster MongoDB Atlas non-HDS. **Aucune donnée
+de santé réelle n'est traitée dans cet environnement.**
+
+Tant que ce statut ne change pas, **toute mise en production avec des
+patients réels est interdite par le présent document.**
+
+### 13.3 Bascule HDS — pré-requis pour passage en production
+
+L'hébergement doit basculer chez un **Hébergeur de Données de Santé (HDS)
+agréé** avant ouverture du service à des patients réels. Candidats sérieux
+(liste non exhaustive, à consolider avec un DPO et un cabinet conseil) :
+
+| Hébergeur                    | Couverture HDS                      | Région                       | Estimation coût/mois\*         |
+| ---------------------------- | ----------------------------------- | ---------------------------- | ------------------------------ |
+| **OVH Healthcare**           | 6/6 activités                       | France (Roubaix, Strasbourg) | 500 – 1 500 €                  |
+| **Scaleway HDS**             | 5/6 (pas d'infogérance applicative) | France (Paris, Amsterdam)    | 600 – 1 800 €                  |
+| **Outscale 3DS (Dassault)**  | 6/6                                 | France                       | 800 – 2 000 €                  |
+| **AWS Paris / Azure France** | 6/6 (via offre HDS dédiée)          | France                       | 1 000 – 2 500 € selon services |
+| **Claranet**                 | 6/6 (infogérance)                   | France                       | sur devis                      |
+
+\* _Estimations purement indicatives, à valider par RFQ. Dépend de la
+volumétrie, du SLA, des options sauvegarde et de l'infogérance applicative._
+
+### 13.4 Roadmap HDS
+
+1. **Audit interne** des dépendances : MongoDB / Redis / Nginx / Sentry —
+   compatibilité offres HDS et coût de migration.
+2. **Pré-sélection** de 2 hébergeurs HDS sur RFQ comparative
+   (technique + commercial + SLA).
+3. **Validation DPO** désigné : conformité du candidat retenu avec
+   l'AIPD (cf. [dpia.md](dpia.md) §F).
+4. **Contrat HDS** signé : convention HDS spécifique + DPA RGPD + plan
+   d'assurance qualité + plan de réversibilité.
+5. **Plan de migration** : phase pilote avec données factices, puis
+   migration des données du POC (mongodump chiffré + restore sur l'infra
+   HDS + tests d'intégrité).
+6. **Audit de conformité** post-migration par un cabinet tiers
+   (recommandé) avant ouverture aux patients réels.
+7. **Documentation finale** : avenant à ce document, mise à jour de
+   l'AIPD, communication mentions légales.
+
+### 13.5 Sous-traitants tiers et HDS
+
+Les sous-traitants qui **traitent** des données de santé doivent eux aussi
+être encadrés :
+
+- **Stripe** : ne reçoit jamais de donnée santé (seulement identité +
+  montant + email). Pas d'exigence HDS sur Stripe.
+- **Firebase FCM** : payload notif scrubé de toute donnée santé
+  (cf. mobile-security.md §4). Pas d'exigence HDS.
+- **Sentry** : logs scrubés. Pas d'exigence HDS.
+- **OSRM / BAN** : adresses sans patientId. Pas d'exigence HDS.
+- **SMTP transactionnel** : contenu emails sans donnée santé détaillée.
+  Pas d'exigence HDS mais préférer un fournisseur EU.
+
+→ **Seul l'hébergeur de la base MongoDB et des backups est soumis à
+l'agrément HDS.** Cette contrainte simplifie la migration.
 
 ---
 
