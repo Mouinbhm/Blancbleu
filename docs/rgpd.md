@@ -90,6 +90,66 @@ Mise en œuvre : à automatiser via un job worker `gdprPurge` (à implémenter).
   personne réelle disparaît.
 - **Email du droit à l'effacement** : envoyer à `dpo@blancbleu.fr` _(à configurer)_.
 
+### Procédure d'anonymisation administrative (Art. 17 droit à l'oubli)
+
+**Endpoint** : `POST /api/gdpr/patients/:id/anonymize` — accès `admin` ou
+`dpo` (autorisation via `authorize("admin", "dpo")` dans la route).
+
+**Body requis** :
+
+```json
+{ "confirmReason": "Demande RGPD écrite du patient datée du 2026-05-29" }
+```
+
+`confirmReason` est obligatoire, minimum 10 caractères — sert de double
+confirmation contre les anonymisations accidentelles. La raison est tracée
+dans `Patient.gdpr.anonymizationReason` ET dans `AuditLog`.
+
+**Rate limit** : 3 anonymisations max / heure par utilisateur (en CI/test :
+désactivé).
+
+**Pré-conditions** :
+
+- Le patient ne doit pas être déjà anonymisé (→ 409 `ALREADY_ANONYMIZED`).
+- Aucun transport actif ne doit lui être lié — statut hors de la whitelist
+  terminale `[COMPLETED, BILLED, PAID, CANCELLED]` (→ 409 `ACTIVE_TRANSPORTS`
+  avec la liste des transports bloquants). Un transport `SCHEDULED`,
+  `ASSIGNED`, `EN_ROUTE_TO_PICKUP`, etc. doit d'abord être terminé ou annulé.
+
+**Effets (irréversibles)** :
+
+| Cible                           | Champ                                                                       | Valeur après anonymisation        |
+| ------------------------------- | --------------------------------------------------------------------------- | --------------------------------- |
+| `Patient`                       | `nom`, `prenom`                                                             | `"[ANONYMISÉ]"`                   |
+|                                 | `email`                                                                     | `"anon-{userId}@anonymise.local"` |
+|                                 | `telephone`                                                                 | `"0000000000"`                    |
+|                                 | `dateNaissance`                                                             | `null`                            |
+|                                 | `numeroSecu`, `numeroSecuHash`                                              | `""` / `null`                     |
+|                                 | `adresse`, `contactUrgence`                                                 | objets vidés                      |
+|                                 | `antecedents`, `allergies`, `notes`, `preferences`, `mutuelle`              | `""`                              |
+|                                 | `actif`                                                                     | `false`                           |
+|                                 | `gdpr.anonymized` + `anonymizedAt` + `anonymizedBy` + `anonymizationReason` | renseignés                        |
+| `Transport.patient` (sub-doc)   | `nom`, `prenom`, `telephone`                                                | sentinels (cf. ci-dessus)         |
+|                                 | `antecedents`, `allergies`, `notes`                                         | `""`                              |
+|                                 | `dateNaissance`                                                             | `$unset`                          |
+| `Facture` (champs dénormalisés) | `patientNom`, `patientPrenom`                                               | `"[ANONYMISÉ]"`                   |
+|                                 | `patientNumeroSecu`                                                         | `""`                              |
+| `AuditLog`                      | nouvelle entrée `PATIENT_ANONYMIZED`                                        | + acteur + raison + ressource     |
+
+**Ce qui est CONSERVÉ** (obligations légales) : numéro de patient
+(`numeroPatient`, clé de jointure), numéros et montants des factures, IDs
+de transports, journal et statusLog. Le **lien avec une personne identifiée
+n'existe plus** — seules les agrégations comptables et statistiques restent
+exploitables.
+
+**Audit + observabilité** : chaque anonymisation génère une ligne
+`AuditLog` indexée par `action: "PATIENT_ANONYMIZED"`, exploitable pour
+les rapports DPO trimestriels (cf. `GET /api/audit?action=PATIENT_ANONYMIZED`).
+
+**Tests de non-régression** : 7 cas couverts dans
+[`server/__tests__/integration/gdpr-anonymize.test.js`](../server/__tests__/integration/gdpr-anonymize.test.js)
+(401/403/400/409 × 2/200 + idempotence stricte).
+
 ---
 
 ## 6. Sécurité des données (art. 32 RGPD)

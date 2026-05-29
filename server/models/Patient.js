@@ -103,6 +103,9 @@ const patientSchema = new mongoose.Schema(
       anonymized: { type: Boolean, default: false },
       anonymizedAt: { type: Date, default: null },
       anonymizedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      // Raison textuelle de l'anonymisation (RGPD Art. 17 — droit à l'oubli).
+      // Stockée pour audit interne ET pour la réponse au sujet de données.
+      anonymizationReason: { type: String, default: "" },
       deletionRequested: { type: Boolean, default: false },
       deletionRequestedAt: { type: Date, default: null },
       deletionRequestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
