@@ -13,7 +13,10 @@ jobs:
   lint:
     name: Lint (server + client + python)
     runs-on: ubuntu-latest
-    continue-on-error: true   # 13 errors server + 14 client hérités — TODO sprint cleanup
+    # Plus de continue-on-error : ESLint server + client = 0 erreur depuis
+    # le commit "fix(lint): resolve 13 inherited lint errors and enforce
+    # lint in CI". Le job devient bloquant. Le step prettier --check garde
+    # son propre continue-on-error tant que le format global n'est pas appliqué.
 
     steps:
       - uses: actions/checkout@v4

@@ -41,14 +41,10 @@ async function createFactureFromMission(missionId) {
   try {
     // Si on dispose de la distance réelle mesurée pendant la mission, on l'utilise
     if (mission.distanceReelleKm && transport.typeTransport) {
-      tarif = tarifService.calculerTarifSync(
-        transport.typeTransport,
-        mission.distanceReelleKm,
-        {
-          allerRetour: transport.allerRetour || false,
-          tauxPriseEnCharge: transport.tauxPriseEnCharge || 65,
-        },
-      );
+      tarif = tarifService.calculerTarifSync(transport.typeTransport, mission.distanceReelleKm, {
+        allerRetour: transport.allerRetour || false,
+        tauxPriseEnCharge: transport.tauxPriseEnCharge || 65,
+      });
     } else {
       tarif = await tarifService.calculerTarif(transport);
     }
@@ -64,7 +60,7 @@ async function createFactureFromMission(missionId) {
   }
 
   // Résoudre le patientId : depuis transport.patientId ou Patient par numéro sécu / nom
-  let patientId = transport.patientId || null;
+  const patientId = transport.patientId || null;
 
   const facture = await Facture.create({
     transportId: transport._id,

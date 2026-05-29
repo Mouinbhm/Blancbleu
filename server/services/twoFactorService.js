@@ -13,19 +13,19 @@
  * (mode développement) — un avertissement est émis au démarrage.
  */
 
-const crypto   = require("crypto");
-const bcrypt   = require("bcryptjs");
+const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
 const speakeasy = require("speakeasy");
-const logger   = require("../utils/logger");
+const logger = require("../utils/logger");
 
 // ── Constantes ────────────────────────────────────────────────────────────────
-const ALGORITHM        = "aes-256-gcm";
-const IV_LENGTH        = 12;   // 96 bits — recommandé pour GCM
-const AUTH_TAG_LENGTH  = 16;   // 128 bits
+const ALGORITHM = "aes-256-gcm";
+const IV_LENGTH = 12; // 96 bits — recommandé pour GCM
+const AUTH_TAG_LENGTH = 16; // 128 bits
 const BACKUP_CODE_COUNT = 10;
-const BACKUP_CODE_LEN   = 10;  // 5+5 chars → "ABCDE-12345"
+const BACKUP_CODE_LEN = 10; // 5+5 chars → "ABCDE-12345"
 const BACKUP_BCRYPT_ROUNDS = 10;
-const TOTP_WINDOW       = 1;   // ±1 période (±30 s) — tolère le décalage horaire
+const TOTP_WINDOW = 1; // ±1 période (±30 s) — tolère le décalage horaire
 
 // ── Clé de chiffrement ────────────────────────────────────────────────────────
 let _encryptionKey = null;
@@ -37,14 +37,14 @@ function _getKey() {
   if (!raw || raw.length !== 64) {
     if (process.env.NODE_ENV === "production") {
       throw new Error(
-        "[2FA] TOTP_ENCRYPTION_KEY manquante ou invalide — doit être une chaîne hex de 64 chars (256 bits)"
+        "[2FA] TOTP_ENCRYPTION_KEY manquante ou invalide — doit être une chaîne hex de 64 chars (256 bits)",
       );
     }
     // Mode dev : avertissement + clé fictive
     if (!raw) {
       logger.warn(
         "[2FA] TOTP_ENCRYPTION_KEY non définie — les secrets TOTP sont stockés NON CHIFFRÉS. " +
-        "Définissez TOTP_ENCRYPTION_KEY en production."
+          "Définissez TOTP_ENCRYPTION_KEY en production.",
       );
     }
     return null; // signale l'absence de clé
@@ -65,10 +65,10 @@ function encryptSecret(plaintext) {
   const key = _getKey();
   if (!key) return `raw:${plaintext}`;
 
-  const iv         = crypto.randomBytes(IV_LENGTH);
-  const cipher     = crypto.createCipheriv(ALGORITHM, key, iv);
-  const encrypted  = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  const authTag    = cipher.getAuthTag();
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const authTag = cipher.getAuthTag();
 
   return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted.toString("hex")}`;
 }
@@ -97,8 +97,8 @@ function decryptSecret(stored) {
   }
 
   const [ivHex, authTagHex, ciphertextHex] = parts;
-  const iv         = Buffer.from(ivHex, "hex");
-  const authTag    = Buffer.from(authTagHex, "hex");
+  const iv = Buffer.from(ivHex, "hex");
+  const authTag = Buffer.from(authTagHex, "hex");
   const ciphertext = Buffer.from(ciphertextHex, "hex");
 
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
@@ -116,13 +116,13 @@ function decryptSecret(stored) {
  */
 function generateTotpSecret(email) {
   const secret = speakeasy.generateSecret({
-    name:   `BlancBleu (${email})`,
+    name: `BlancBleu (${email})`,
     issuer: "Ambulances Blanc Bleu",
     length: 32,
   });
   return {
-    base32:      secret.base32,
-    otpauthUrl:  secret.otpauth_url,
+    base32: secret.base32,
+    otpauthUrl: secret.otpauth_url,
   };
 }
 
@@ -134,10 +134,10 @@ function verifyTotp(encryptedSecret, token) {
   const plain = decryptSecret(encryptedSecret);
   if (!plain) return false;
   return speakeasy.totp.verify({
-    secret:   plain,
+    secret: plain,
     encoding: "base32",
-    token:    String(token).replace(/\s/g, ""),
-    window:   TOTP_WINDOW,
+    token: String(token).replace(/\s/g, ""),
+    window: TOTP_WINDOW,
   });
 }
 
@@ -152,12 +152,16 @@ function verifyTotp(encryptedSecret, token) {
 async function generateBackupCodes() {
   const plain = [];
   for (let i = 0; i < BACKUP_CODE_COUNT; i++) {
-    const raw = crypto.randomBytes(BACKUP_CODE_LEN).toString("base64url").slice(0, 10).toUpperCase();
+    const raw = crypto
+      .randomBytes(BACKUP_CODE_LEN)
+      .toString("base64url")
+      .slice(0, 10)
+      .toUpperCase();
     plain.push(`${raw.slice(0, 5)}-${raw.slice(5)}`);
   }
 
   const hashed = await Promise.all(
-    plain.map((code) => bcrypt.hash(code.replace("-", ""), BACKUP_BCRYPT_ROUNDS))
+    plain.map((code) => bcrypt.hash(code.replace("-", ""), BACKUP_BCRYPT_ROUNDS)),
   );
 
   return { plain, hashed };
@@ -169,7 +173,7 @@ async function generateBackupCodes() {
  * Le code fourni est normalisé (majuscules, tiret retiré).
  */
 async function verifyAndConsumeBackupCode(inputCode, hashedCodes) {
-  const normalized = String(inputCode).replace(/[\s\-]/g, "").toUpperCase();
+  const normalized = String(inputCode).replace(/[\s-]/g, "").toUpperCase();
   if (!normalized || !hashedCodes?.length) return -1;
 
   for (let i = 0; i < hashedCodes.length; i++) {

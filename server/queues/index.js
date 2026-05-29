@@ -13,17 +13,19 @@ const Redis = require("ioredis");
 const logger = require("../utils/logger");
 
 const QUEUES = {
-  EMAIL:        "email",
-  OCR:          "ocr",
-  PDF:          "pdf",
-  CLEANUP:      "cleanup",
-  AI:           "ai",
+  EMAIL: "email",
+  OCR: "ocr",
+  PDF: "pdf",
+  CLEANUP: "cleanup",
+  AI: "ai",
   AUTODISPATCH: "autodispatch",
-  PUSH:         "push", // Sprint M4 — push FCM async (driver + patient)
+  PUSH: "push", // Sprint M4 — push FCM async (driver + patient)
 };
 
 let connection;
-let queues = {};
+// Réassigné dans toutes les branches (stubQueues OU Object.fromEntries plus bas)
+// donc on n'initialise pas — eslint no-useless-assignment.
+let queues;
 
 const stubQueues = () =>
   Object.fromEntries(
@@ -48,9 +50,9 @@ if (redisDisabled) {
     const { Queue } = require("bullmq");
 
     connection = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
-      maxRetriesPerRequest: null,        // requis par BullMQ v5+
+      maxRetriesPerRequest: null, // requis par BullMQ v5+
       enableReadyCheck: true,
-      enableOfflineQueue: false,          // fail fast quand Redis est down
+      enableOfflineQueue: false, // fail fast quand Redis est down
       retryStrategy: (times) => Math.min(times * 200, 30_000),
       reconnectOnError: () => true,
     });
@@ -74,7 +76,7 @@ if (redisDisabled) {
             attempts: 3,
             backoff: { type: "exponential", delay: 5000 },
             removeOnComplete: { age: 24 * 3600, count: 1000 },
-            removeOnFail:     { age: 7 * 24 * 3600 },
+            removeOnFail: { age: 7 * 24 * 3600 },
           },
         }),
       ]),
