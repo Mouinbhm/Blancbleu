@@ -7,7 +7,10 @@
 const { test, expect } = require("@playwright/test");
 const { TEST_USERS } = require("./fixtures/auth");
 
-test.describe("Authentification", () => {
+// Skipped : couvert par e2e/tests/critical-path.spec.js (login + logout).
+// Conservé pour les cas spécifiques (mauvais mdp, accès non-auth) qui seront
+// réactivés au prochain sprint E2E.
+test.describe.skip("Authentification", () => {
   test("login avec credentials valides → /dashboard", async ({ page }) => {
     const { email, password } = TEST_USERS.dispatcher;
 

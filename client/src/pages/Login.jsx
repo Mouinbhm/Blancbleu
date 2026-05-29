@@ -24,9 +24,7 @@ export default function Login() {
     try {
       await login(form.email, form.password);
     } catch (err) {
-      setError(
-        err.response?.data?.message || "Email ou mot de passe incorrect.",
-      );
+      setError(err.response?.data?.message || "Email ou mot de passe incorrect.");
     } finally {
       setLoading(false);
     }
@@ -81,8 +79,8 @@ export default function Login() {
             <span style={s.heroAccent}>réel.</span>
           </h1>
           <p style={s.heroPara}>
-            Dispatchez, priorisez et suivez vos unités ambulancières grâce à
-            l'intelligence artificielle intégrée.
+            Dispatchez, priorisez et suivez vos unités ambulancières grâce à l'intelligence
+            artificielle intégrée.
           </p>
         </div>
 
@@ -120,9 +118,7 @@ export default function Login() {
           <div style={s.cardTop}>
             <div style={s.pill}>ACCÈS DISPATCHER</div>
             <h2 style={s.cardTitle}>Connexion</h2>
-            <p style={s.cardSub}>
-              Plateforme de gestion des interventions ambulancières
-            </p>
+            <p style={s.cardSub}>Plateforme de gestion des interventions ambulancières</p>
           </div>
 
           {error && (
@@ -148,6 +144,7 @@ export default function Login() {
                 <input
                   type="email"
                   name="email"
+                  data-testid="login-email"
                   value={form.email}
                   onChange={handleChange}
                   placeholder="votre@email.fr"
@@ -179,17 +176,14 @@ export default function Login() {
                 <input
                   type={showPwd ? "text" : "password"}
                   name="password"
+                  data-testid="login-password"
                   value={form.password}
                   onChange={handleChange}
                   placeholder="••••••••"
                   style={s.input}
                   autoComplete="new-password"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd(!showPwd)}
-                  style={s.eye}
-                >
+                <button type="button" onClick={() => setShowPwd(!showPwd)} style={s.eye}>
                   {showPwd ? (
                     <svg
                       width="18"
@@ -221,6 +215,7 @@ export default function Login() {
 
             <button
               type="submit"
+              data-testid="login-submit"
               disabled={loading}
               style={{ ...s.btn, ...(loading ? s.btnOff : {}) }}
             >
@@ -298,8 +293,7 @@ const s = {
     width: "700px",
     height: "700px",
     borderRadius: "50%",
-    background:
-      "radial-gradient(circle,rgba(29,110,245,.12) 0%,transparent 70%)",
+    background: "radial-gradient(circle,rgba(29,110,245,.12) 0%,transparent 70%)",
     animation: "pulse 7s ease-in-out infinite",
     pointerEvents: "none",
   },
@@ -310,8 +304,7 @@ const s = {
     width: "500px",
     height: "500px",
     borderRadius: "50%",
-    background:
-      "radial-gradient(circle,rgba(0,180,255,.07) 0%,transparent 70%)",
+    background: "radial-gradient(circle,rgba(0,180,255,.07) 0%,transparent 70%)",
     animation: "pulse2 9s ease-in-out infinite",
     pointerEvents: "none",
   },
