@@ -103,25 +103,40 @@
 
 ## Architecture
 
-```
-┌──────────────────────────┐     ┌──────────────────────────────┐
-│     WEB CLIENT (React)   │     │  MOBILE CLIENT (Flutter)     │
-│  Port 3000               │     │  Android & iOS               │
-│  Tailwind · Leaflet ·    │     │  flutter_map · Stripe ·      │
-│  Chart.js · Socket.io    │     │  shared_preferences          │
-└────────────┬─────────────┘     └──────────────┬───────────────┘
-             │ HTTP / WebSocket                  │ HTTP REST
-             └──────────────────┬───────────────┘
-                                │
-┌───────────────────────────────▼─────────────────────────────┐
-│                   SERVER (Express / Node.js)                  │
-│   Port 5000 — REST API · Socket.IO · JWT · Mongoose          │
-└──────────┬────────────────────────────────┬─────────────────┘
-           │                                │
-┌──────────▼──────────┐        ┌────────────▼────────────────┐
-│  MongoDB (Atlas /   │        │  Microservice IA (FastAPI)   │
-│  Docker) Port 27017 │        │  Port 5002 — OCR · Dispatch  │
-└─────────────────────┘        └─────────────────────────────┘
+Documentation complète (3 diagrammes Mermaid — contexte, conteneurs, séquence) :
+**[docs/architecture.md](docs/architecture.md)**.
+
+### Vue conteneurs (C4 niveau 2)
+
+```mermaid
+graph TB
+    subgraph Clients
+        Web["🌐 Web React<br/>Port 3000"]
+        Patient["📱 App Patient Flutter"]
+        Driver["🚑 App Chauffeur Flutter"]
+    end
+
+    subgraph Backend["Backend Node 20 / Express"]
+        API["⚙️ API REST + Socket.IO<br/>Port 5000"]
+        Workers["⏱️ Workers BullMQ"]
+    end
+
+    IA["🤖 Microservice IA FastAPI<br/>Port 5002"]
+
+    Mongo[("🗄️ MongoDB 7")]
+    Redis[("📮 Redis 7")]
+
+    Web -->|"REST + WebSocket"| API
+    Patient -->|"REST + WebSocket"| API
+    Driver -->|"REST + WebSocket (GPS)"| API
+
+    API -->|"Mongoose"| Mongo
+    API -->|"Enqueue jobs + pub/sub"| Redis
+    Workers -->|"Consume queues"| Redis
+    Workers -->|"Mongoose"| Mongo
+
+    API -->|"POST /pmt /dispatch /optimizer"| IA
+    Workers -.->|"Scoring auto-dispatch"| IA
 ```
 
 ---
