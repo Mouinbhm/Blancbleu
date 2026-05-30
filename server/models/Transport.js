@@ -319,6 +319,15 @@ const transportSchema = new mongoose.Schema(
       ref: "Facture",
       default: null,
     },
+    // ── Lock de génération de facture (idempotence + anti race condition) ───
+    // Posé atomiquement par invoiceService.createInvoiceFromTransport via
+    // findOneAndUpdate avant le calcul tarifaire. Si la création échoue,
+    // factureGenerationError est renseigné et factureGenerated/LockedAt
+    // sont retirés ($unset) pour permettre un retry admin via
+    // POST /api/admin/factures/retry/:transportId. Cf. docs/security.md.
+    factureGenerated: { type: Boolean, default: false },
+    factureLockedAt: { type: Date, default: null },
+    factureGenerationError: { type: String, default: null },
     // Référence texte CPAM (ex : "PMT-20260424-0002", "FAC-2026-0087")
     // Distincte du champ facture (ObjectId) — jamais casté en ObjectId
     referenceFactureCPAM: {
