@@ -232,6 +232,33 @@ class ApiClient {
     await _dio.post('/tracking/batch', data: {'points': points});
   }
 
+  /// Sprint M6 — Push d'un point GPS unique, utilisé par l'ActionQueue offline
+  /// quand chaque point est rejoué individuellement après reconnexion.
+  /// Le serveur tolère un batch d'un seul point.
+  Future<void> pushTrackingPoint({
+    required String shiftId,
+    required double lat,
+    required double lng,
+    double? speed,
+    double? heading,
+    double? accuracy,
+    String? timestamp,
+  }) async {
+    await _dio.post('/tracking/batch', data: {
+      'shiftId': shiftId,
+      'points': [
+        {
+          'lat': lat,
+          'lng': lng,
+          if (speed != null) 'speed': speed,
+          if (heading != null) 'heading': heading,
+          if (accuracy != null) 'accuracy': accuracy,
+          'timestamp': timestamp ?? DateTime.now().toIso8601String(),
+        },
+      ],
+    });
+  }
+
   // ── Change password ───────────────────────────────────────────────────────
   Future<String?> changePassword(String currentPassword, String newPassword) async {
     final res = await _dio.post(

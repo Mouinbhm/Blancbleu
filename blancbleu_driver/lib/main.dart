@@ -20,6 +20,7 @@ import 'core/network/api_client.dart';
 import 'core/network/socket_manager.dart';
 import 'core/network/sync_service.dart';
 import 'core/notifications/notification_service.dart';
+import 'core/offline/action_queue.dart';
 import 'core/theme/theme_notifier.dart';
 import 'features/auth/cubit/auth_cubit.dart';
 import 'features/tournee/cubit/tournee_cubit.dart';
@@ -49,6 +50,10 @@ void main() async {
   try { await GpsService.init(); } catch (e) { debugPrint('[main] GpsService.init error: $e'); }
   try { await ThemeNotifier.instance.init(); } catch (e) { debugPrint('[main] ThemeNotifier.init error: $e'); }
   try { await NotificationService.init(); } catch (e) { debugPrint('[main] NotificationService.init error: $e'); }
+  // Sprint M6 — file d'actions offline (zones blanches). init() ouvre la box
+  // Hive + abonne le Connectivity listener. Reste no-op tant qu'aucune action
+  // n'est enqueue.
+  try { await ActionQueue.instance.init(); } catch (e) { debugPrint('[main] ActionQueue.init error: $e'); }
 
   // Sprint M4 — Firebase Cloud Messaging (degradation gracieuse).
   // PushService.init() catch en interne — si la config Firebase est absente
