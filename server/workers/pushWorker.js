@@ -26,8 +26,12 @@ async function processPushJob(job) {
     return { skipped: "push_disabled" };
   }
 
-  let token = null;
-  let cleanupHook = null;
+  // Réassignés dans chaque branche du if/else qui suit — l'init à null est
+  // dead (eslint no-useless-assignment). Si le if/else ajoutait un cas qui
+  // ne réassigne pas, ces variables seraient `undefined`, ce qui est OK et
+  // testé par les checks `if (!token)` plus bas.
+  let token;
+  let cleanupHook;
 
   try {
     if (targetType === "personnel") {
@@ -47,7 +51,8 @@ async function processPushJob(job) {
     } else if (targetType === "user_email") {
       const User = require("../models/User");
       const doc = await User.findOne({ email: targetId, role: "patient" })
-        .select("fcmToken _id").lean();
+        .select("fcmToken _id")
+        .lean();
       token = doc?.fcmToken || null;
       const uid = doc?._id;
       cleanupHook = async () => {
@@ -62,12 +67,12 @@ async function processPushJob(job) {
     const res = await pushNotification.sendToToken(
       token,
       {
-        title:     payload.title,
-        body:      payload.body,
-        data:      { type: payload.type, ...(payload.data || {}) },
+        title: payload.title,
+        body: payload.body,
+        data: { type: payload.type, ...(payload.data || {}) },
         channelId: payload.channelId,
-        sound:     payload.sound,
-        priority:  payload.priority,
+        sound: payload.sound,
+        priority: payload.priority,
       },
       { onInvalidToken: cleanupHook },
     );
@@ -81,11 +86,7 @@ async function processPushJob(job) {
 let pushWorker = null;
 
 if (connection) {
-  pushWorker = new Worker(
-    QUEUES.PUSH,
-    processPushJob,
-    { connection, concurrency: 5 },
-  );
+  pushWorker = new Worker(QUEUES.PUSH, processPushJob, { connection, concurrency: 5 });
 
   pushWorker.on("completed", (job, res) =>
     logger.info(`[worker:push] job ${job.id} (${job.name}) OK`, {
@@ -94,7 +95,8 @@ if (connection) {
   );
   pushWorker.on("failed", (job, err) =>
     logger.warn(`[worker:push] job ${job?.id} KO`, {
-      err: err.message, attempts: job?.attemptsMade,
+      err: err.message,
+      attempts: job?.attemptsMade,
     }),
   );
   pushWorker.on("error", (err) =>

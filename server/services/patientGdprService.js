@@ -21,6 +21,41 @@ function anonEmail(patientId) {
   return `anonymized_${patientId}@deleted.local`;
 }
 
+// ── Sentinel values pour l'anonymisation RGPD effective (Art. 17) ─────────────
+// Format aligné sur docs/rgpd.md §6.2. La valeur `[ANONYMISÉ]` est lisible
+// dans les UI sans casser les composants qui supposent une string non-vide.
+const ANON_NAME = "[ANONYMISÉ]";
+const ANON_PHONE = "0000000000";
+const anonEmailV2 = (userId) => `anon-${userId}@anonymise.local`;
+
+// Statuts depuis lesquels un transport est considéré comme terminé (donc
+// anonymisable). Anonymiser un transport en cours casserait le suivi métier
+// (chauffeur en route, facturation en attente, etc.) — refus explicite.
+const TERMINAL_TRANSPORT_STATES = new Set(["COMPLETED", "BILLED", "PAID", "CANCELLED"]);
+
+/**
+ * Vérifie qu'aucun transport actif (= hors TERMINAL_TRANSPORT_STATES) n'est
+ * encore lié au patient. Lance une erreur 409 si bloqué.
+ */
+async function _assertNoActiveTransports(patientId) {
+  const blocking = await Transport.find({
+    patientId,
+    statut: { $nin: Array.from(TERMINAL_TRANSPORT_STATES) },
+    deletedAt: null,
+  })
+    .select("numero statut")
+    .lean();
+  if (blocking.length > 0) {
+    const err = new Error(
+      `Anonymisation impossible — ${blocking.length} transport(s) actif(s) : ` +
+        blocking.map((t) => `${t.numero} (${t.statut})`).join(", "),
+    );
+    err.statusCode = 409;
+    err.code = "ACTIVE_TRANSPORTS";
+    throw err;
+  }
+}
+
 function userCtx(user, req) {
   return {
     id: user?._id || user?.id,
@@ -206,55 +241,94 @@ async function getPatientDataExport(patientId, user, req) {
 // 6. Anonymiser un patient (RGPD Art. 17)
 // ─────────────────────────────────────────────────────────────────────────────
 async function anonymizePatient(patientId, user, reason, req) {
-  const patient = await Patient.findById(patientId);
-  if (!patient) throw new Error("Patient introuvable");
-  if (patient.gdpr?.anonymized) throw new Error("Ce patient est déjà anonymisé");
+  // RGPD Art. 17 — droit à l'oubli. IRRÉVERSIBLE : les valeurs PII sont
+  // écrasées en base, pas archivées. Le caller doit déjà avoir confirmé
+  // l'intention (cf. confirmReason obligatoire côté API).
+
+  const patient = await Patient.findById(patientId).select(
+    "+antecedents +allergies +numeroSecuHash",
+  );
+  if (!patient) {
+    const e = new Error("Patient introuvable");
+    e.statusCode = 404;
+    throw e;
+  }
+  if (patient.gdpr?.anonymized) {
+    const e = new Error("Ce patient est déjà anonymisé");
+    e.statusCode = 409;
+    e.code = "ALREADY_ANONYMIZED";
+    throw e;
+  }
+
+  // Blocage tant qu'il reste des transports non-terminés : éviter d'anonymiser
+  // un patient pendant qu'une mission est en cours ou en facturation.
+  await _assertNoActiveTransports(patient._id);
 
   const userId = user?._id || user?.id;
   const now = new Date();
 
-  // Anonymiser les champs identifiants dans les transports
+  // ── 1. Sub-docs Transport.patient (denormalisé, survit même après anon Patient)
+  // On purge AUSSI antecedents/allergies sur le subdoc — c'est la donnée
+  // médicale embarquée qui pose le risque RGPD le plus direct.
   await Transport.updateMany(
     { patientId: patient._id },
     {
       $set: {
-        "patient.nom": "[ANONYMISÉ]",
-        "patient.prenom": "[ANONYMISÉ]",
-        "patient.telephone": "",
+        "patient.nom": ANON_NAME,
+        "patient.prenom": ANON_NAME,
+        "patient.telephone": ANON_PHONE,
         "patient.email": "",
+        "patient.numeroSecu": "",
+        "patient.antecedents": "",
+        "patient.allergies": "",
+        "patient.notes": "",
+      },
+      $unset: { "patient.dateNaissance": "" },
+    },
+  );
+
+  // ── 2. Factures (champs dénormalisés du patient). On conserve le numéro,
+  // les montants et les liens — obligations légales 10 ans (Art. L123-22).
+  const Facture = require("../models/Facture");
+  await Facture.updateMany(
+    { patientId: patient._id },
+    {
+      $set: {
+        patientNom: ANON_NAME,
+        patientPrenom: ANON_NAME,
+        patientNumeroSecu: "",
       },
     },
   );
 
-  // Anonymiser les champs dénormalisés dans les factures
-  const Facture = require("../models/Facture");
-  await Facture.updateMany(
-    { patientId: patient._id },
-    { $set: { patientNom: "[ANONYMISÉ]", patientPrenom: "[ANONYMISÉ]", patientNumeroSecu: "" } },
-  );
+  // ── 3. Patient lui-même. Mongoose attendu : assignation directe par
+  // path (PAS Object.assign avec clés "gdpr.foo" qui crée des top-level
+  // bizarres). On utilise patient.set() pour les paths imbriqués.
+  patient.nom = ANON_NAME;
+  patient.prenom = ANON_NAME;
+  patient.email = anonEmailV2(patient._id);
+  patient.telephone = ANON_PHONE;
+  patient.dateNaissance = null;
+  patient.adresse = { rue: "", ville: "", codePostal: "" };
+  patient.numeroSecu = "";
+  patient.numeroSecuHash = null;
+  patient.contactUrgence = { nom: "", telephone: "", lien: "" };
+  patient.actif = false;
+  patient.antecedents = "";
+  patient.allergies = "";
+  patient.notes = "";
+  patient.preferences = "";
+  patient.mutuelle = "";
 
-  // Anonymiser le dossier patient — conserver l'ID, les données de santé anonymisées
-  Object.assign(patient, {
-    nom: "ANONYMIZED",
-    prenom: "PATIENT",
-    email: anonEmail(patient._id),
-    telephone: null,
-    adresse: { rue: "", ville: "", codePostal: "" },
-    numeroSecu: "",
-    contactUrgence: { nom: "", telephone: "", lien: "" },
-    actif: false,
-    antecedents: "",
-    allergies: "",
-    notes: "",
-    preferences: "",
-    "gdpr.anonymized": true,
-    "gdpr.anonymizedAt": now,
-    "gdpr.anonymizedBy": userId,
-    "gdpr.deletionRequested": false,
-  });
+  patient.set("gdpr.anonymized", true);
+  patient.set("gdpr.anonymizedAt", now);
+  patient.set("gdpr.anonymizedBy", userId);
+  patient.set("gdpr.anonymizationReason", reason || "");
+  patient.set("gdpr.deletionRequested", false);
 
   await patient.save({ validateBeforeSave: false });
 
+  // ── 4. Audit log. Action déjà dans l'enum (cf. models/AuditLog.js).
   await auditService.log({
     action: "PATIENT_ANONYMIZED",
     utilisateur: userCtx(user, req),

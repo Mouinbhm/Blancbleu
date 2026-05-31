@@ -6,10 +6,10 @@
  * Le statut "payé" est TOUJOURS confirmé par le webhook Stripe.
  */
 
-const stripe  = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const Facture = require("../models/Facture");
 const invoiceService = require("./invoiceService");
-const logger  = require("../utils/logger");
+const logger = require("../utils/logger");
 
 const CURRENCY = (process.env.STRIPE_CURRENCY || "eur").toLowerCase();
 
@@ -20,16 +20,14 @@ const CURRENCY = (process.env.STRIPE_CURRENCY || "eur").toLowerCase();
  * Retourne { clientSecret, paymentIntentId, amount, currency }
  */
 async function createPaymentIntent(invoiceId, patientInfo = {}) {
-  const facture = await Facture.findById(invoiceId)
-    .populate("transportId", "numero");
+  const facture = await Facture.findById(invoiceId).populate("transportId", "numero");
 
   if (!facture) throw new Error("Facture introuvable");
 
   if (["payee", "remboursee"].includes(facture.statut))
     throw new Error("Cette facture est déjà payée");
 
-  if (facture.statut === "annulee")
-    throw new Error("Cette facture est annulée");
+  if (facture.statut === "annulee") throw new Error("Cette facture est annulée");
 
   // Montant patient (ticket modérateur), minimum 50 centimes pour Stripe
   const montant = facture.montantPatient > 0 ? facture.montantPatient : facture.montantTotal;
@@ -38,15 +36,15 @@ async function createPaymentIntent(invoiceId, patientInfo = {}) {
   const amountCents = Math.round(montant * 100);
 
   const metadata = {
-    factureId:     facture._id.toString(),
+    factureId: facture._id.toString(),
     factureNumero: facture.numero,
-    transportId:   (facture.transportId?._id || facture.transportId || "").toString(),
-    patientEmail:  patientInfo.email  || "",
-    patientNom:    patientInfo.nom    || facture.patientNom || "",
+    transportId: (facture.transportId?._id || facture.transportId || "").toString(),
+    patientEmail: patientInfo.email || "",
+    patientNom: patientInfo.nom || facture.patientNom || "",
   };
 
   const pi = await stripe.paymentIntents.create({
-    amount:   amountCents,
+    amount: amountCents,
     currency: CURRENCY,
     automatic_payment_methods: { enabled: true },
     metadata,
@@ -59,17 +57,27 @@ async function createPaymentIntent(invoiceId, patientInfo = {}) {
   if (facture.statut === "emise" || facture.statut === "brouillon") {
     facture.statut = "en_attente";
   }
-  invoiceService.addInvoiceHistory(facture, "PAYMENT_INTENT_CREATED",
-    facture.statut, "en_attente", null, `PaymentIntent créé — ${pi.id}`);
+  invoiceService.addInvoiceHistory(
+    facture,
+    "PAYMENT_INTENT_CREATED",
+    facture.statut,
+    "en_attente",
+    null,
+    `PaymentIntent créé — ${pi.id}`,
+  );
   await facture.save();
 
-  logger.info("[stripe] PaymentIntent créé", { factureId: invoiceId, piId: pi.id, amount: montant });
+  logger.info("[stripe] PaymentIntent créé", {
+    factureId: invoiceId,
+    piId: pi.id,
+    amount: montant,
+  });
 
   return {
-    clientSecret:    pi.client_secret,
+    clientSecret: pi.client_secret,
     paymentIntentId: pi.id,
-    amount:          montant,
-    currency:        CURRENCY.toUpperCase(),
+    amount: montant,
+    currency: CURRENCY.toUpperCase(),
   };
 }
 
@@ -119,23 +127,25 @@ async function createRefund(invoiceId, amount, reason, user) {
     amount: amountCents,
     reason: "requested_by_customer",
     metadata: {
-      factureId:     facture._id.toString(),
+      factureId: facture._id.toString(),
       factureNumero: facture.numero,
-      adminEmail:    user?.email || "",
-      raisonMetier:  reason,
+      adminEmail: user?.email || "",
+      raisonMetier: reason,
     },
   });
 
   // Mise à jour de la facture
   await invoiceService.markInvoiceRefunded(invoiceId, {
-    amount:        montantDemande,
+    amount: montantDemande,
     reason,
     stripeRefundId: refund.id,
     user,
   });
 
   logger.info("[stripe] Remboursement créé", {
-    factureId: invoiceId, refundId: refund.id, amount: montantDemande,
+    factureId: invoiceId,
+    refundId: refund.id,
+    amount: montantDemande,
   });
 
   return refund;
@@ -200,12 +210,12 @@ async function handlePaymentSucceeded(paymentIntent) {
   }
 
   // Récupérer les infos du charge
-  let chargeId       = null;
+  let chargeId = null;
   let stripeReceiptUrl = null;
   if (paymentIntent.latest_charge) {
     try {
-      const charge     = await stripe.charges.retrieve(paymentIntent.latest_charge);
-      chargeId         = charge.id;
+      const charge = await stripe.charges.retrieve(paymentIntent.latest_charge);
+      chargeId = charge.id;
       stripeReceiptUrl = charge.receipt_url;
     } catch (err) {
       logger.warn("[stripe/webhook] Impossible de récupérer le charge", { err: err.message });
@@ -214,17 +224,21 @@ async function handlePaymentSucceeded(paymentIntent) {
 
   await invoiceService.markInvoicePaid(factureId, {
     stripePaymentIntentId: paymentIntent.id,
-    stripeChargeId:        chargeId,
+    stripeChargeId: chargeId,
     stripeReceiptUrl,
-    paidAt:                new Date(paymentIntent.created * 1000),
+    paidAt: new Date(paymentIntent.created * 1000),
   });
 
-  // Notification Socket.IO si disponible
+  // Notification Socket.IO si disponible — best-effort, ne doit pas bloquer
+  // le marquage de la facture comme payée (le webhook Stripe doit répondre
+  // 200 même si on n'arrive pas à notifier les clients socket).
   try {
     const { emitFactureUpdated } = require("./socketService");
     const facture = await Facture.findById(factureId);
     if (facture) emitFactureUpdated(facture);
-  } catch (_) {}
+  } catch (e) {
+    logger.warn("[stripe/webhook] emit facture payée échoué", { factureId, err: e.message });
+  }
 
   logger.info("[stripe/webhook] Facture marquée payée", { factureId, piId: paymentIntent.id });
 }
@@ -237,20 +251,22 @@ async function handlePaymentFailed(paymentIntent) {
   if (!factureId) return;
 
   const lastError = paymentIntent.last_payment_error;
-  const reason    = lastError?.message || lastError?.code || "Paiement refusé";
+  const reason = lastError?.message || lastError?.code || "Paiement refusé";
 
   await invoiceService.markInvoiceFailed(factureId, {
     stripePaymentIntentId: paymentIntent.id,
     failureReason: reason,
-    failedAt:      new Date(),
+    failedAt: new Date(),
   });
 
-  // Notification
+  // Notification — best-effort (cf. handlePaymentSucceeded).
   try {
     const { emitFactureUpdated } = require("./socketService");
     const facture = await Facture.findById(factureId);
     if (facture) emitFactureUpdated(facture);
-  } catch (_) {}
+  } catch (e) {
+    logger.warn("[stripe/webhook] emit facture échouée échoué", { factureId, err: e.message });
+  }
 
   logger.warn("[stripe/webhook] Paiement échoué", { factureId, reason });
 }
@@ -269,9 +285,9 @@ async function handleChargeRefunded(charge) {
     return;
   }
 
-  const refundTotal  = charge.amount_refunded / 100;
-  const montantPaye  = facture.montantPatient || facture.montantTotal;
-  const isTotal      = Math.abs(refundTotal - montantPaye) < 0.01;
+  const refundTotal = charge.amount_refunded / 100;
+  const montantPaye = facture.montantPatient || facture.montantTotal;
+  const isTotal = Math.abs(refundTotal - montantPaye) < 0.01;
 
   if (facture.paymentStatus === "SUCCEEDED") {
     await invoiceService.markInvoiceRefunded(facture._id.toString(), {
@@ -281,7 +297,9 @@ async function handleChargeRefunded(charge) {
       user: null,
     });
     logger.info("[stripe/webhook] charge.refunded traité", {
-      factureId: facture._id, amount: refundTotal, total: isTotal,
+      factureId: facture._id,
+      amount: refundTotal,
+      total: isTotal,
     });
   }
 }

@@ -3,39 +3,41 @@
  * Toutes les transitions d'état passent par transportLifecycle pour garantir
  * la cohérence : audit log, libération véhicule, Socket.IO, notifications.
  */
-const Transport   = require("../models/Transport");
+const Transport = require("../models/Transport");
 const DriverShift = require("../models/DriverShift");
-const Vehicle     = require("../models/Vehicle");
-const User        = require("../models/User");
-const multer      = require("multer");
-const path        = require("path");
-const fs          = require("fs");
+const Vehicle = require("../models/Vehicle");
+const User = require("../models/User");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 
-const lifecycle   = require("../services/transportLifecycle");
+const lifecycle = require("../services/transportLifecycle");
 const { notifyPatientByEmail } = require("../services/pushNotification");
 const EVENTS = require("../sockets/events");
 
 // ── Helper : vérifier que le transport appartient bien au chauffeur ───────────
 async function _myTransport(transportId, personnelId) {
   const t = await Transport.findOne({ _id: transportId, chauffeur: personnelId });
-  if (!t) throw Object.assign(new Error("Transport introuvable ou non assigné à ce chauffeur"), { status: 404 });
+  if (!t)
+    throw Object.assign(new Error("Transport introuvable ou non assigné à ce chauffeur"), {
+      status: 404,
+    });
   return t;
 }
 
 // ── Helper : construire un pseudo-utilisateur depuis req.personnel ────────────
 function _asUser(personnel) {
   return {
-    _id:   personnel._id,
+    _id: personnel._id,
     email: personnel.email || `${personnel.prenom}.${personnel.nom}@driver`,
-    role:  personnel.role  || "Chauffeur",
+    role: personnel.role || "Chauffeur",
   };
 }
 
 // ── Helper : émettre une notification patient via Socket.IO ───────────────────
 async function _notifyPatient(io, transport, payload) {
   if (!io || !transport.patient?.email) return;
-  const patientUser = await User
-    .findOne({ email: transport.patient.email, role: "patient" })
+  const patientUser = await User.findOne({ email: transport.patient.email, role: "patient" })
     .select("_id")
     .lean();
   if (patientUser) {
@@ -55,14 +57,16 @@ async function _handleTransition(req, res, lifeCycleFn, extraArgs = []) {
     if (io) {
       const payload = {
         transportId: transport._id,
-        numero:      transport.numero,
-        newStatus:   transport.statut,
-        status:      transport.statut, // alias rétrocompat
-        driverId:    req.personnel._id,
-        driverNom:   `${req.personnel.prenom} ${req.personnel.nom}`,
-        timestamp:   new Date(),
+        numero: transport.numero,
+        newStatus: transport.statut,
+        status: transport.statut, // alias rétrocompat
+        driverId: req.personnel._id,
+        driverNom: `${req.personnel.prenom} ${req.personnel.nom}`,
+        timestamp: new Date(),
       };
-      io.to("role:dispatcher").to("role:admin").to("role:superviseur")
+      io.to("role:dispatcher")
+        .to("role:admin")
+        .to("role:superviseur")
         .to(`transport:${transport._id}`)
         .emit(EVENTS.TRANSPORT_STATUS, payload);
       await _notifyPatient(io, transport, payload);
@@ -70,7 +74,11 @@ async function _handleTransition(req, res, lifeCycleFn, extraArgs = []) {
 
     return res.json({ message: "Statut mis à jour", statut: transport.statut, transport });
   } catch (err) {
-    const status = err.status || (err.message.includes("introuvable") ? 404 : 422);
+    // Erreurs typées (AppError + sous-classes — ForbiddenError, ConflictError)
+    // portent leur propre statusCode. Sinon : 404 si message "introuvable",
+    // 422 par défaut (conditions métier non remplies, transition invalide).
+    const status =
+      err.statusCode || err.status || (err.message?.includes("introuvable") ? 404 : 422);
     return res.status(status).json({ message: err.message });
   }
 }
@@ -81,7 +89,7 @@ async function _handleTransition(req, res, lifeCycleFn, extraArgs = []) {
 const getTournee = async (req, res) => {
   try {
     const personnel = req.personnel;
-    const dateStr   = req.query.date || new Date().toISOString().split("T")[0];
+    const dateStr = req.query.date || new Date().toISOString().split("T")[0];
 
     const today = new Date(dateStr);
     today.setHours(0, 0, 0, 0);
@@ -96,12 +104,24 @@ const getTournee = async (req, res) => {
     if (!shift) return res.json({ date: dateStr, transports: [], shift: null });
 
     const SELECT_FIELDS = [
-      "numero", "statut", "typeTransport", "motif",
-      "dateTransport", "heureRDV", "heureDepart",
-      "patient", "adresseDepart", "adresseDestination",
-      "notes", "statusLog",
-      "driverSignedAt", "pmtPhotoUrl", "proofOfCare",
-      "actualPickupTime", "actualDropoffTime", "estimatedArrival",
+      "numero",
+      "statut",
+      "typeTransport",
+      "motif",
+      "dateTransport",
+      "heureRDV",
+      "heureDepart",
+      "patient",
+      "adresseDepart",
+      "adresseDestination",
+      "notes",
+      "statusLog",
+      "driverSignedAt",
+      "pmtPhotoUrl",
+      "proofOfCare",
+      "actualPickupTime",
+      "actualDropoffTime",
+      "estimatedArrival",
       "prescription",
     ].join(" ");
 
@@ -113,10 +133,10 @@ const getTournee = async (req, res) => {
     // Fallback : si aucun transport lié au shift, chercher par véhicule
     if (transports.length === 0 && shift.vehicleId) {
       const legacy = await Transport.find({
-        vehicule:  shift.vehicleId,
-        shiftId:   null,
+        vehicule: shift.vehicleId,
+        shiftId: null,
         deletedAt: null,
-        statut:    { $nin: ["CANCELLED", "COMPLETED", "BILLED", "PAID", "NO_SHOW", "FAILED"] },
+        statut: { $nin: ["CANCELLED", "COMPLETED", "BILLED", "PAID", "NO_SHOW", "FAILED"] },
       })
         .select(SELECT_FIELDS)
         .populate("vehicule", "immatriculation type")
@@ -142,8 +162,7 @@ const getTournee = async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 // PATCH /api/v1/driver/transports/:id/accept — ASSIGNED → DRIVER_ACCEPTED
 // ════════════════════════════════════════════════════════════════════════════
-const acceptMission = (req, res) =>
-  _handleTransition(req, res, lifecycle.accepterDriver);
+const acceptMission = (req, res) => _handleTransition(req, res, lifecycle.accepterDriver);
 
 // ════════════════════════════════════════════════════════════════════════════
 // PATCH /api/v1/driver/transports/:id/reject — ASSIGNED → DRIVER_REJECTED
@@ -156,8 +175,7 @@ const rejectMission = async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 // PATCH /api/v1/driver/transports/:id/start — DRIVER_ACCEPTED → EN_ROUTE_TO_PICKUP
 // ════════════════════════════════════════════════════════════════════════════
-const startRoute = (req, res) =>
-  _handleTransition(req, res, lifecycle.marquerEnRoute);
+const startRoute = (req, res) => _handleTransition(req, res, lifecycle.marquerEnRoute);
 
 // ════════════════════════════════════════════════════════════════════════════
 // PATCH /api/v1/driver/transports/:id/arrived-pickup — EN_ROUTE_TO_PICKUP → ARRIVED_AT_PICKUP
@@ -170,8 +188,7 @@ const arrivedPickup = async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 // PATCH /api/v1/driver/transports/:id/patient-on-board — ARRIVED_AT_PICKUP → PATIENT_ON_BOARD
 // ════════════════════════════════════════════════════════════════════════════
-const patientOnBoard = (req, res) =>
-  _handleTransition(req, res, lifecycle.marquerPatientABord);
+const patientOnBoard = (req, res) => _handleTransition(req, res, lifecycle.marquerPatientABord);
 
 // ════════════════════════════════════════════════════════════════════════════
 // PATCH /api/v1/driver/transports/:id/arrived-destination — PATIENT_ON_BOARD → ARRIVED_AT_DESTINATION
@@ -200,8 +217,7 @@ const returnToBase = async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 // PATCH /api/v1/driver/transports/:id/complete — → COMPLETED
 // ════════════════════════════════════════════════════════════════════════════
-const completeMission = (req, res) =>
-  _handleTransition(req, res, lifecycle.completerTransport);
+const completeMission = (req, res) => _handleTransition(req, res, lifecycle.completerTransport);
 
 // ════════════════════════════════════════════════════════════════════════════
 // PATCH /api/v1/driver/transports/:id/no-show — ARRIVED_AT_PICKUP → NO_SHOW
@@ -224,17 +240,27 @@ const failMission = async (req, res) => {
 // Accepte { status, note, timestamp } et route vers le bon handler lifecycle
 // ════════════════════════════════════════════════════════════════════════════
 const STATUS_TO_LIFECYCLE = {
-  DRIVER_ACCEPTED:        (id, _body, user) => lifecycle.accepterDriver(id, user),
-  DRIVER_REJECTED:        (id, body, user)  => lifecycle.refuserDriver(id, body.note || body.raison || "", user),
-  EN_ROUTE_TO_PICKUP:     (id, _body, user) => lifecycle.marquerEnRoute(id, user),
-  ARRIVED_AT_PICKUP:      (id, body, user)  => lifecycle.marquerArriveePatient(id, body.position || null, user),
-  PATIENT_ON_BOARD:       (id, _body, user) => lifecycle.marquerPatientABord(id, user),
-  ARRIVED_AT_DESTINATION: (id, body, user)  => lifecycle.marquerArriveeDestination(id, body.position || null, user),
-  WAITING_AT_DESTINATION: (id, body, user)  => lifecycle.demarrerAttenteDestination(id, body.dureeAttenteMinutes ? parseInt(body.dureeAttenteMinutes) : null, user),
-  RETURN_TO_BASE:         (id, body, user)  => lifecycle.demarrerRetourBase(id, body.position || null, user),
-  COMPLETED:              (id, _body, user) => lifecycle.completerTransport(id, user),
-  NO_SHOW:                (id, body, user)  => lifecycle.marquerNoShow(id, body.note || body.raison || "Patient absent", user),
-  FAILED:                 (id, body, user)  => lifecycle.marquerFailed(id, body.note || body.raison || "Échec", user),
+  DRIVER_ACCEPTED: (id, _body, user) => lifecycle.accepterDriver(id, user),
+  DRIVER_REJECTED: (id, body, user) =>
+    lifecycle.refuserDriver(id, body.note || body.raison || "", user),
+  EN_ROUTE_TO_PICKUP: (id, _body, user) => lifecycle.marquerEnRoute(id, user),
+  ARRIVED_AT_PICKUP: (id, body, user) =>
+    lifecycle.marquerArriveePatient(id, body.position || null, user),
+  PATIENT_ON_BOARD: (id, _body, user) => lifecycle.marquerPatientABord(id, user),
+  ARRIVED_AT_DESTINATION: (id, body, user) =>
+    lifecycle.marquerArriveeDestination(id, body.position || null, user),
+  WAITING_AT_DESTINATION: (id, body, user) =>
+    lifecycle.demarrerAttenteDestination(
+      id,
+      body.dureeAttenteMinutes ? parseInt(body.dureeAttenteMinutes) : null,
+      user,
+    ),
+  RETURN_TO_BASE: (id, body, user) => lifecycle.demarrerRetourBase(id, body.position || null, user),
+  COMPLETED: (id, _body, user) => lifecycle.completerTransport(id, user),
+  NO_SHOW: (id, body, user) =>
+    lifecycle.marquerNoShow(id, body.note || body.raison || "Patient absent", user),
+  FAILED: (id, body, user) =>
+    lifecycle.marquerFailed(id, body.note || body.raison || "Échec", user),
 };
 
 const updateStatus = async (req, res) => {
@@ -261,13 +287,15 @@ const updateStatus = async (req, res) => {
     if (io) {
       const payload = {
         transportId: transport._id,
-        numero:      transport.numero,
-        status:      transport.statut,
-        driverId:    req.personnel._id,
-        driverNom:   `${req.personnel.prenom} ${req.personnel.nom}`,
-        timestamp:   timestamp ? new Date(timestamp) : new Date(),
+        numero: transport.numero,
+        status: transport.statut,
+        driverId: req.personnel._id,
+        driverNom: `${req.personnel.prenom} ${req.personnel.nom}`,
+        timestamp: timestamp ? new Date(timestamp) : new Date(),
       };
-      io.to("role:dispatcher").to("role:admin").to("role:superviseur")
+      io.to("role:dispatcher")
+        .to("role:admin")
+        .to("role:superviseur")
         .to(`transport:${transport._id}`)
         .emit(EVENTS.TRANSPORT_STATUS, payload);
       await _notifyPatient(io, transport, payload);
@@ -275,7 +303,8 @@ const updateStatus = async (req, res) => {
 
     return res.json({ message: "Statut mis à jour", statut: transport.statut });
   } catch (err) {
-    const status = err.status || (err.message.includes("introuvable") ? 404 : 422);
+    const status =
+      err.statusCode || err.status || (err.message?.includes("introuvable") ? 404 : 422);
     return res.status(status).json({ message: err.message });
   }
 };
@@ -295,8 +324,8 @@ const saveSignature = async (req, res) => {
     const { transport } = await lifecycle.addSignature(
       req.params.id,
       {
-        signedByName:      signedByName || `${req.personnel.prenom} ${req.personnel.nom}`,
-        signatureBase64:   patientSignatureBase64 || driverSignatureBase64,
+        signedByName: signedByName || `${req.personnel.prenom} ${req.personnel.nom}`,
+        signatureBase64: patientSignatureBase64 || driverSignatureBase64,
         driverSignatureBase64,
       },
       utilisateur,
@@ -317,8 +346,11 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename:    (_req, file, cb) =>
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${path.extname(file.originalname)}`),
+  filename: (_req, file, cb) =>
+    cb(
+      null,
+      `${Date.now()}-${Math.random().toString(36).slice(2)}${path.extname(file.originalname)}`,
+    ),
 });
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -326,7 +358,8 @@ const uploadPmtPhoto = [
   upload.single("photo"),
   async (req, res) => {
     try {
-      if (!req.file) return res.status(400).json({ message: "Fichier photo requis (champ 'photo')" });
+      if (!req.file)
+        return res.status(400).json({ message: "Fichier photo requis (champ 'photo')" });
 
       await _myTransport(req.params.id, req.personnel._id);
 
@@ -335,8 +368,8 @@ const uploadPmtPhoto = [
       const { transport } = await lifecycle.uploadPmtDocument(
         req.params.id,
         {
-          fileUrl:    url,
-          fileName:   req.file.originalname,
+          fileUrl: url,
+          fileName: req.file.originalname,
           uploadedBy: req.personnel._id,
           triggerOcr: false,
         },
@@ -359,13 +392,13 @@ const sosSend = async (req, res) => {
 
     const alert = {
       personnelId: personnel._id,
-      prenom:      personnel.prenom,
-      nom:         personnel.nom,
-      shiftId:     shiftId || null,
+      prenom: personnel.prenom,
+      nom: personnel.nom,
+      shiftId: shiftId || null,
       transportId: transportId || null,
-      lat:         lat || null,
-      lng:         lng || null,
-      timestamp:   new Date(),
+      lat: lat || null,
+      lng: lng || null,
+      timestamp: new Date(),
     };
 
     const io = req.app.get("io");
@@ -385,9 +418,9 @@ const sosSend = async (req, res) => {
 const getAvailableVehicles = async (req, res) => {
   try {
     const vehicles = await Vehicle.find({
-      statut:    "Disponible",
+      statut: "Disponible",
       deletedAt: null,
-      actif:     { $ne: false },
+      actif: { $ne: false },
     }).select("nom immatriculation type marque modele carburant");
     return res.json({ vehicles });
   } catch (err) {

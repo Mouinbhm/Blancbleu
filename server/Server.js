@@ -223,6 +223,39 @@ if (process.env.NODE_ENV !== "production") {
   });
 }
 
+// ─── Admin retry facturation (toutes envs — utile en prod aussi) ─────────────
+// Reset le lock factureGenerated/factureLockedAt sur un transport puis relance
+// la création de facture. Utile après un échec de calcul tarifaire (le lock
+// reste posé via $unset, factureGenerationError est renseigné — admin diagnostic
+// puis retry via cet endpoint).
+{
+  const { protect, authorize } = require("./middleware/auth");
+  app.post(
+    "/api/admin/factures/retry/:transportId",
+    protect,
+    authorize("admin"),
+    async (req, res) => {
+      try {
+        const invoiceService = require("./services/invoiceService");
+        await invoiceService.resetInvoiceLock(req.params.transportId);
+        const result = await invoiceService.createInvoiceFromTransport(
+          req.params.transportId,
+          req.user,
+        );
+        res.json({
+          success: true,
+          created: result.created,
+          numero: result.facture.numero,
+          factureId: result.facture._id,
+        });
+      } catch (err) {
+        const status = err.statusCode || 500;
+        res.status(status).json({ message: err.message, code: err.code });
+      }
+    },
+  );
+}
+
 // ─── Health ────────────────────────────────────────────────────────────────────
 app.get("/api/health", healthHandler);
 

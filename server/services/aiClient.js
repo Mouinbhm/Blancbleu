@@ -40,7 +40,7 @@ client.interceptors.response.use(
     const msg = error.response?.data?.detail || error.message;
     logger.warn(`[AI Client] Erreur ${status || "réseau"} sur ${url} : ${msg}`);
     return Promise.reject(error);
-  }
+  },
 );
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -93,11 +93,12 @@ async function extrairePMT(fichier, mimeType = "application/pdf", nomFichier = "
     return data;
   } catch (err) {
     if (err.code === "ECONNREFUSED" || err.code === "ENOTFOUND") {
-      throw new Error("Service IA indisponible (PMT extraction)");
+      throw new Error("Service IA indisponible (PMT extraction)", { cause: err });
     }
     // Préserver err.response pour que aiController puisse propager le bon code HTTP
     const erreur = new Error(
-      err.response?.data?.detail || err.response?.data?.message || err.message
+      err.response?.data?.detail || err.response?.data?.message || err.message,
+      { cause: err },
     );
     erreur.response = err.response;
     throw erreur;
@@ -124,7 +125,10 @@ async function recommanderDispatch(transport, vehicules, chauffeurs, options = {
   try {
     const mobilite = transport.patient?.mobilite || transport.mobilite;
     const positionDepart = transport.adresseDepart?.coordonnees
-      ? { lat: transport.adresseDepart.coordonnees.lat, lng: transport.adresseDepart.coordonnees.lng }
+      ? {
+          lat: transport.adresseDepart.coordonnees.lat,
+          lng: transport.adresseDepart.coordonnees.lng,
+        }
       : null;
 
     // Charger les pondérations configurables (singleton MongoDB).
@@ -143,47 +147,49 @@ async function recommanderDispatch(transport, vehicules, chauffeurs, options = {
       ...(weights && { weights }),
       transport: {
         ...(transport._id != null && { _id: String(transport._id) }),
-        motif:               transport.motif,
-        mobilite:            mobilite || "ASSIS",
-        adresseDepart:       transport.adresseDepart?.rue
+        motif: transport.motif,
+        mobilite: mobilite || "ASSIS",
+        adresseDepart: transport.adresseDepart?.rue
           ? [transport.adresseDepart.rue, transport.adresseDepart.ville].filter(Boolean).join(", ")
-          : (transport.adresseDepart || ""),
-        adresseDestination:  transport.adresseDestination?.rue
-          ? [transport.adresseDestination.rue, transport.adresseDestination.ville].filter(Boolean).join(", ")
-          : (transport.adresseDestination || ""),
+          : transport.adresseDepart || "",
+        adresseDestination: transport.adresseDestination?.rue
+          ? [transport.adresseDestination.rue, transport.adresseDestination.ville]
+              .filter(Boolean)
+              .join(", ")
+          : transport.adresseDestination || "",
         positionDepart,
-        dateTransport:       transport.dateTransport,
-        heureDepart:         transport.heureDepart || transport.heureRDV,
-        oxygene:             transport.patient?.oxygene || false,
-        brancardage:         transport.patient?.brancardage || false,
-        prioriteMedicale:    transport.prioriteMedicale || "normal",
+        dateTransport: transport.dateTransport,
+        heureDepart: transport.heureDepart || transport.heureRDV,
+        oxygene: transport.patient?.oxygene || false,
+        brancardage: transport.patient?.brancardage || false,
+        prioriteMedicale: transport.prioriteMedicale || "normal",
         requiredVehicleType: transport.typeTransport || null,
       },
       vehicules: vehicules.map((v) => ({
-        _id:               String(v._id),
-        immatriculation:   v.immatriculation,
-        nom:               v.nom || v.immatriculation,
-        type:              v.type,
-        statut:            v.statut || "Disponible",
-        position:          v.position?.lat ? { lat: v.position.lat, lng: v.position.lng } : null,
+        _id: String(v._id),
+        immatriculation: v.immatriculation,
+        nom: v.nom || v.immatriculation,
+        type: v.type,
+        statut: v.statut || "Disponible",
+        position: v.position?.lat ? { lat: v.position.lat, lng: v.position.lng } : null,
         capacites: {
           fauteuil: v.capacites?.equipeFauteuil ?? v.equipeFauteuil ?? false,
-          oxygene:  v.capacites?.equipeOxygene  ?? v.equipeOxygene  ?? false,
-          brancard: v.capacites?.equipeBrancard  ?? v.equipeBrancard  ?? false,
+          oxygene: v.capacites?.equipeOxygene ?? v.equipeOxygene ?? false,
+          brancard: v.capacites?.equipeBrancard ?? v.equipeBrancard ?? false,
         },
-        ponctualite:         v.tauxPonctualite ?? null,
-        nbTransportsDuJour:  v._planningLoad?.nbMissions ?? v.nbTransportsDuJour ?? null,
-        chargeScore:         v._planningLoad?.score ?? null,
+        ponctualite: v.tauxPonctualite ?? null,
+        nbTransportsDuJour: v._planningLoad?.nbMissions ?? v.nbTransportsDuJour ?? null,
+        chargeScore: v._planningLoad?.score ?? null,
       })),
       chauffeurs: chauffeurs.map((c) => ({
-        _id:               String(c._id),
-        nom:               c.nom,
-        prenom:            c.prenom,
-        statut:            c.statut || "Disponible",
-        certifications:    (c.certifications || []).map((cert) =>
-          typeof cert === "string" ? cert : cert.nom
+        _id: String(c._id),
+        nom: c.nom,
+        prenom: c.prenom,
+        statut: c.statut || "Disponible",
+        certifications: (c.certifications || []).map((cert) =>
+          typeof cert === "string" ? cert : cert.nom,
         ),
-        ponctualite:        c.tauxPonctualite ?? null,
+        ponctualite: c.tauxPonctualite ?? null,
         nbTransportsDuJour: c._planningLoad?.nbMissions ?? null,
       })),
     });
@@ -191,9 +197,9 @@ async function recommanderDispatch(transport, vehicules, chauffeurs, options = {
     return data;
   } catch (err) {
     if (err.code === "ECONNREFUSED" || err.code === "ENOTFOUND") {
-      throw new Error("Service IA indisponible (dispatch)");
+      throw new Error("Service IA indisponible (dispatch)", { cause: err });
     }
-    throw new Error(err.response?.data?.detail || err.message);
+    throw new Error(err.response?.data?.detail || err.message, { cause: err });
   }
 }
 
@@ -216,15 +222,15 @@ async function optimiserTournee({ date, transports, vehicules, depot }) {
     const { data } = await client.post(
       "/routing/optimize",
       { date, transports, vehicules, depot },
-      { timeout: 60000 } // OR-Tools peut prendre jusqu'à 60s pour des tournées complexes
+      { timeout: 60000 }, // OR-Tools peut prendre jusqu'à 60s pour des tournées complexes
     );
 
     return data;
   } catch (err) {
     if (err.code === "ECONNREFUSED" || err.code === "ENOTFOUND") {
-      throw new Error("Service IA indisponible (optimisation tournée)");
+      throw new Error("Service IA indisponible (optimisation tournée)", { cause: err });
     }
-    throw new Error(err.response?.data?.detail || err.message);
+    throw new Error(err.response?.data?.detail || err.message, { cause: err });
   }
 }
 
@@ -262,20 +268,20 @@ function _serviceHeaders() {
 
 async function relancerEntrainement({ since } = {}) {
   const params = since ? { since } : undefined;
-  const { data } = await client.post(
-    "/optimizer/model/retrain",
-    null,
-    { params, headers: _serviceHeaders(), timeout: 30_000 },
-  );
+  const { data } = await client.post("/optimizer/model/retrain", null, {
+    params,
+    headers: _serviceHeaders(),
+    timeout: 30_000,
+  });
   logger.info("[aiClient] retrain demandé", { status: data?.status });
   return data;
 }
 
 async function statutModele() {
-  const { data } = await client.get(
-    "/optimizer/model/status",
-    { headers: _serviceHeaders(), timeout: 10_000 },
-  );
+  const { data } = await client.get("/optimizer/model/status", {
+    headers: _serviceHeaders(),
+    timeout: 10_000,
+  });
   return data;
 }
 

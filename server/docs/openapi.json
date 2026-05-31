@@ -67,13 +67,7 @@
           },
           "role": {
             "type": "string",
-            "enum": [
-              "dispatcher",
-              "superviseur",
-              "admin",
-              "comptable",
-              "patient"
-            ]
+            "enum": ["dispatcher", "superviseur", "admin", "comptable", "patient"]
           },
           "mustChangePassword": {
             "type": "boolean",
@@ -87,10 +81,7 @@
       },
       "LoginRequest": {
         "type": "object",
-        "required": [
-          "email",
-          "password"
-        ],
+        "required": ["email", "password"],
         "properties": {
           "email": {
             "type": "string",
@@ -130,11 +121,7 @@
           },
           "typeTransport": {
             "type": "string",
-            "enum": [
-              "VSL",
-              "TPMR",
-              "AMBULANCE"
-            ]
+            "enum": ["VSL", "TPMR", "AMBULANCE"]
           },
           "motif": {
             "type": "string",
@@ -253,12 +240,7 @@
           },
           "mobilite": {
             "type": "string",
-            "enum": [
-              "ASSIS",
-              "FAUTEUIL_ROULANT",
-              "ALLONGE",
-              "CIVIERE"
-            ]
+            "enum": ["ASSIS", "FAUTEUIL_ROULANT", "ALLONGE", "CIVIERE"]
           },
           "oxygene": {
             "type": "boolean",
@@ -290,20 +272,11 @@
           },
           "type": {
             "type": "string",
-            "enum": [
-              "VSL",
-              "AMBULANCE",
-              "TPMR"
-            ]
+            "enum": ["VSL", "AMBULANCE", "TPMR"]
           },
           "statut": {
             "type": "string",
-            "enum": [
-              "Disponible",
-              "En service",
-              "Maintenance",
-              "Hors service"
-            ]
+            "enum": ["Disponible", "En service", "Maintenance", "Hors service"]
           },
           "position": {
             "type": "object",
@@ -338,6 +311,154 @@
           }
         }
       },
+      "Personnel": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "nom": {
+            "type": "string",
+            "example": "Durand"
+          },
+          "prenom": {
+            "type": "string",
+            "example": "Paul"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["Ambulancier", "Secouriste", "Infirmier", "Médecin", "Chauffeur", "Autre"]
+          },
+          "typeContrat": {
+            "type": "string",
+            "enum": ["CDI", "CDD", "Intérim", "Stage", "Alternance", ""]
+          },
+          "statut": {
+            "type": "string",
+            "enum": ["Disponible", "En shift", "Congé", "Maladie", "Formation", "Inactif"]
+          },
+          "telephone": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true
+          },
+          "actif": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "Prescription": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "numero": {
+            "type": "string",
+            "example": "PMT-20260524-0001"
+          },
+          "patientId": {
+            "type": "string",
+            "nullable": true
+          },
+          "transportId": {
+            "type": "string",
+            "nullable": true
+          },
+          "medecin": {
+            "type": "string",
+            "example": "Dr. Bernard"
+          },
+          "dateEmission": {
+            "type": "string",
+            "format": "date"
+          },
+          "dateExpiration": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "motif": {
+            "type": "string",
+            "example": "Dialyse — 3 fois/semaine"
+          },
+          "fichierUrl": {
+            "type": "string",
+            "description": "URL du PDF/image scanné"
+          },
+          "ocrStatus": {
+            "type": "string",
+            "enum": ["pending", "processing", "done", "error", "skipped"]
+          },
+          "extractedData": {
+            "type": "object",
+            "description": "Champs OCR extraits par le service IA"
+          },
+          "validee": {
+            "type": "boolean",
+            "default": false
+          },
+          "validePar": {
+            "type": "string",
+            "nullable": true,
+            "description": "User ObjectId du valideur"
+          },
+          "valideAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "AuditLog": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "example": "PATIENT_ANONYMIZED"
+          },
+          "userId": {
+            "type": "string",
+            "nullable": true
+          },
+          "userEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "userRole": {
+            "type": "string",
+            "nullable": true
+          },
+          "target": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "example": "Patient"
+              },
+              "id": {
+                "type": "string"
+              }
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Contexte additionnel (reason, IP, before/after)"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Patient": {
         "type": "object",
         "properties": {
@@ -363,12 +484,7 @@
           },
           "mobilite": {
             "type": "string",
-            "enum": [
-              "ASSIS",
-              "FAUTEUIL_ROULANT",
-              "ALLONGE",
-              "CIVIERE"
-            ]
+            "enum": ["ASSIS", "FAUTEUIL_ROULANT", "ALLONGE", "CIVIERE"]
           },
           "oxygene": {
             "type": "boolean"
@@ -381,11 +497,7 @@
           },
           "source": {
             "type": "string",
-            "enum": [
-              "web",
-              "app_mobile",
-              "papier"
-            ]
+            "enum": ["web", "app_mobile", "papier"]
           }
         }
       },
@@ -427,14 +539,7 @@
           },
           "paymentStatus": {
             "type": "string",
-            "enum": [
-              "UNPAID",
-              "PENDING",
-              "SUCCEEDED",
-              "FAILED",
-              "REFUNDED",
-              "PARTIALLY_REFUNDED"
-            ]
+            "enum": ["UNPAID", "PENDING", "SUCCEEDED", "FAILED", "REFUNDED", "PARTIALLY_REFUNDED"]
           }
         }
       },
@@ -453,10 +558,7 @@
           },
           "source": {
             "type": "string",
-            "enum": [
-              "ia",
-              "fallback_node"
-            ]
+            "enum": ["ia", "fallback_node"]
           },
           "bestRecommendation": {
             "$ref": "#/components/schemas/DispatchCandidate"
@@ -480,11 +582,7 @@
             "properties": {
               "status": {
                 "type": "string",
-                "enum": [
-                  "pending",
-                  "accepted",
-                  "rejected"
-                ]
+                "enum": ["pending", "accepted", "rejected"]
               },
               "decidedAt": {
                 "type": "string",
@@ -612,6 +710,16 @@
       }
     },
     "responses": {
+      "BadRequest": {
+        "description": "Requête malformée (paramètre invalide, JSON parse error, etc.)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
       "Unauthorized": {
         "description": "Token manquant, invalide ou expiré",
         "content": {
@@ -642,8 +750,18 @@
           }
         }
       },
+      "Conflict": {
+        "description": "Conflit d'état (transition de statut interdite, doublon, lock, etc.)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
       "ValidationError": {
-        "description": "Validation des données échouée",
+        "description": "Validation des données échouée (corps de requête invalide)",
         "content": {
           "application/json": {
             "schema": {
@@ -698,6 +816,14 @@
       "description": "Facturation CPAM + paiement Stripe"
     },
     {
+      "name": "GDPR",
+      "description": "Conformité RGPD : export, anonymisation, consentement"
+    },
+    {
+      "name": "Tracking",
+      "description": "Suivi GPS temps réel des véhicules (driver write / dispatcher read)"
+    },
+    {
       "name": "AI",
       "description": "Module IA : dispatch, extraction PMT, prédiction durée"
     },
@@ -715,11 +841,32 @@
     }
   ],
   "paths": {
+    "/api/ai/dispatch/auto/queue": {
+      "get": {
+        "tags": ["AI"],
+        "summary": "File des propositions auto-dispatch en attente de validation",
+        "responses": {
+          "200": {
+            "description": "Liste paginée des propositions pending"
+          }
+        }
+      }
+    },
+    "/api/ai/dispatch/auto/{recId}/accept": {
+      "post": {
+        "tags": ["AI"],
+        "summary": "Valide une proposition (assigne le véhicule + chauffeur recommandés)"
+      }
+    },
+    "/api/ai/dispatch/auto/{recId}/reject": {
+      "post": {
+        "tags": ["AI"],
+        "summary": "Rejette une proposition (raison obligatoire, min 3 caractères)"
+      }
+    },
     "/api/ai/dispatch/manual": {
       "post": {
-        "tags": [
-          "AI"
-        ],
+        "tags": ["AI"],
         "summary": "Recommandation libre (sans transport en base)",
         "description": "Permet de tester le dispatch IA depuis un formulaire libre.",
         "responses": {
@@ -737,10 +884,7 @@
     },
     "/api/ai/dispatch/history": {
       "get": {
-        "tags": [
-          "AI",
-          "Admin"
-        ],
+        "tags": ["AI", "Admin"],
         "summary": "Stats sur les recommandations IA (taux acceptation, score moyen, etc.)",
         "parameters": [
           {
@@ -763,9 +907,7 @@
     },
     "/api/ai/dispatch/{transportId}": {
       "post": {
-        "tags": [
-          "AI"
-        ],
+        "tags": ["AI"],
         "summary": "Génère une recommandation IA pour un transport",
         "parameters": [
           {
@@ -799,10 +941,7 @@
     },
     "/api/ai/training-data": {
       "get": {
-        "tags": [
-          "AI",
-          "Admin"
-        ],
+        "tags": ["AI", "Admin"],
         "summary": "Export du dataset d'entraînement (service-to-service)",
         "description": "Appelé par le microservice IA Python pour pull TransportFeature.",
         "security": [
@@ -844,10 +983,7 @@
     },
     "/api/ai/model/retrain": {
       "post": {
-        "tags": [
-          "AI",
-          "Admin"
-        ],
+        "tags": ["AI", "Admin"],
         "summary": "Déclenche un réentraînement async du DurationPredictor",
         "description": "Pousse un job BullMQ → worker appelle Python /optimizer/model/retrain.",
         "requestBody": {
@@ -881,10 +1017,7 @@
     },
     "/api/ai/model/status": {
       "get": {
-        "tags": [
-          "AI",
-          "Admin"
-        ],
+        "tags": ["AI", "Admin"],
         "summary": "État du dernier réentraînement + metrics courantes",
         "responses": {
           "200": {
@@ -898,10 +1031,7 @@
     },
     "/api/ai/dispatch/config": {
       "get": {
-        "tags": [
-          "AI",
-          "Admin"
-        ],
+        "tags": ["AI", "Admin"],
         "summary": "Pondérations actuelles du scoring dispatch + valeurs par défaut",
         "responses": {
           "200": {
@@ -917,10 +1047,7 @@
         }
       },
       "put": {
-        "tags": [
-          "AI",
-          "Admin"
-        ],
+        "tags": ["AI", "Admin"],
         "summary": "Met à jour les pondérations (somme == 1.0 ± 1e-3)",
         "requestBody": {
           "required": true,
@@ -928,9 +1055,7 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "weights"
-                ],
+                "required": ["weights"],
                 "properties": {
                   "weights": {
                     "type": "object",
@@ -962,9 +1087,7 @@
     },
     "/api/auth/login": {
       "post": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Connexion utilisateur",
         "description": "Renvoie un JWT (header `Authorization`) ET pose un cookie httpOnly\n`bb_access` (15 min) + `bb_refresh` (7 j). Rate-limit 10/15 min/IP.\nSi 2FA actif : renvoie `{ requiresTwoFactor: true, tempToken }` (à passer\nà /2fa/verify-login).\n",
         "security": [],
@@ -1006,9 +1129,7 @@
     },
     "/api/auth/forgot-password": {
       "post": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Demande de réinitialisation par email",
         "security": [],
         "requestBody": {
@@ -1022,9 +1143,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "email"
-                ]
+                "required": ["email"]
               }
             }
           }
@@ -1041,9 +1160,7 @@
     },
     "/api/auth/refresh": {
       "post": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Rotation du refresh token (cookie httpOnly)",
         "description": "Utilise le cookie `bb_refresh` pour émettre un nouveau JWT + nouveau refresh.",
         "security": [
@@ -1063,9 +1180,7 @@
     },
     "/api/auth/logout": {
       "post": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Déconnexion (révoque les tokens, efface les cookies)",
         "responses": {
           "200": {
@@ -1076,9 +1191,7 @@
     },
     "/api/auth/me": {
       "get": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Profil de l'utilisateur connecté",
         "responses": {
           "200": {
@@ -1098,6 +1211,1950 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/factures": {
+      "get": {
+        "tags": ["Factures"],
+        "summary": "Liste paginée des factures",
+        "description": "Filtres optionnels statut, paymentStatus, période d'émission, patient.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "statut",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "brouillon",
+                "emise",
+                "en_attente",
+                "payee",
+                "annulee",
+                "payment_failed",
+                "remboursee",
+                "en_retard"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "paymentStatus",
+            "schema": {
+              "type": "string",
+              "enum": ["UNPAID", "PENDING", "SUCCEEDED", "FAILED", "REFUNDED"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "dateFrom",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dateTo",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page de factures",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Facture"
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/factures/{id}": {
+      "get": {
+        "tags": ["Factures"],
+        "summary": "Détail d'une facture",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Facture trouvée",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Facture"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/factures/{id}/statut": {
+      "patch": {
+        "tags": ["Factures"],
+        "summary": "Changer le statut d'une facture (paiement, annulation, etc.)",
+        "description": "Endpoint générique de transition. Cas d'usage principaux :\n`payee` (paiement enregistré côté CPAM/comptable), `annulee` (geste\ncommercial), `en_retard` (suivi des impayés). Pour un paiement Stripe\ndéclenché par le patient, utiliser `POST /api/payments/intent` —\nle webhook bascule alors automatiquement le statut.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["statut"],
+                "properties": {
+                  "statut": {
+                    "type": "string",
+                    "enum": [
+                      "brouillon",
+                      "emise",
+                      "en_attente",
+                      "payee",
+                      "annulee",
+                      "payment_failed",
+                      "remboursee",
+                      "en_retard"
+                    ]
+                  },
+                  "modePaiement": {
+                    "type": "string",
+                    "enum": ["virement", "cheque", "cb", "especes", "cpam_direct", "stripe", ""]
+                  },
+                  "notes": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Statut mis à jour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Facture"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/factures/{id}/pdf": {
+      "get": {
+        "tags": ["Factures"],
+        "summary": "Télécharger le PDF d'une facture",
+        "description": "Génère le PDF à la volée (PDFKit) s'il n'est pas en cache, sinon\nsert le fichier mis en cache (`Facture.pdf.invoicePdfUrl`). Renvoie\nl'inline application/pdf, prêt pour visualisation navigateur ou\ntéléchargement direct.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF facture",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/gdpr/export": {
+      "get": {
+        "tags": ["GDPR"],
+        "summary": "Export des données personnelles (droit à la portabilité — Art. 20)",
+        "description": "Renvoie un JSON exhaustif des données détenues sur l'utilisateur\nauthentifié : profil User, dossier Patient (si lié), historique des\ntransports, factures, prescriptions, consentements. Champs santé\ndéchiffrés à la volée. Format ré-importable manuellement chez un\nautre prestataire.\n",
+        "responses": {
+          "200": {
+            "description": "Bundle JSON des données personnelles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    },
+                    "patient": {
+                      "$ref": "#/components/schemas/Patient"
+                    },
+                    "transports": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Transport"
+                      }
+                    },
+                    "factures": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Facture"
+                      }
+                    },
+                    "prescriptions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Prescription"
+                      }
+                    },
+                    "exportedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/gdpr/patients/{id}/anonymize": {
+      "post": {
+        "tags": ["GDPR"],
+        "summary": "Anonymiser un patient (droit à l'oubli — Art. 17, admin/DPO)",
+        "description": "**IRRÉVERSIBLE.** Anonymise effectivement le dossier patient et toutes\nses données embarquées (subdocs Transport.patient, dénormalisations\nFacture). Refuse si transports actifs en cours. Trace `PATIENT_ANONYMIZED`\ndans AuditLog avec `confirmReason` requis. Rate-limit 3/h.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["confirmReason"],
+                "properties": {
+                  "confirmReason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "example": "Demande écrite du patient datée du 2026-05-15"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Patient anonymisé",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "patientId": {
+                      "type": "string"
+                    },
+                    "anonymizedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "transportsCleaned": {
+                      "type": "integer"
+                    },
+                    "facturesCleaned": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "description": "Rate limit dépassé (3/h)"
+          }
+        }
+      }
+    },
+    "/api/patients": {
+      "get": {
+        "tags": ["Patients"],
+        "summary": "Liste paginée des patients (soft-deleted exclus)",
+        "description": "Filtres optionnels nom, source, actif. Champs santé (`antecedents`, `allergies`) non remontés sauf opt-in via select.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Recherche partielle nom/prénom/numeroPatient"
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "schema": {
+              "type": "string",
+              "enum": ["web", "app_mobile", "papier"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page de patients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Patient"
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Patients"],
+        "summary": "Créer un dossier patient",
+        "description": "Numéro `PAT-YYYYMMDD-XXXX` attribué atomiquement. Le `numeroSecu` est\nchiffré AES-256-GCM et indexé via hash HMAC pour la recherche. RBAC :\nadmin / superviseur / dispatcher.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["nom"],
+                "properties": {
+                  "nom": {
+                    "type": "string"
+                  },
+                  "prenom": {
+                    "type": "string"
+                  },
+                  "dateNaissance": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "genre": {
+                    "type": "string",
+                    "enum": ["M", "F", "autre"]
+                  },
+                  "telephone": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "numeroSecu": {
+                    "type": "string",
+                    "description": "Chiffré AES côté serveur"
+                  },
+                  "mobilite": {
+                    "type": "string",
+                    "enum": ["ASSIS", "FAUTEUIL_ROULANT", "ALLONGE", "CIVIERE"]
+                  },
+                  "oxygene": {
+                    "type": "boolean"
+                  },
+                  "brancardage": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Patient créé",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Patient"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/patients/{id}/consent": {
+      "post": {
+        "tags": ["GDPR"],
+        "summary": "Mettre à jour le consentement RGPD du patient",
+        "description": "Trace dans `Patient.consentHistory` (qui, quand, version, scope). Sert\nde preuve légale Art. 7 RGPD. Utilisé par l'app mobile patient lors\ndu premier login et lors d'une mise à jour de la politique.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["consentGiven", "consentVersion"],
+                "properties": {
+                  "consentGiven": {
+                    "type": "boolean"
+                  },
+                  "consentVersion": {
+                    "type": "string",
+                    "example": "2026-Q1"
+                  },
+                  "consentSource": {
+                    "type": "string",
+                    "enum": ["web", "mobile", "papier"]
+                  },
+                  "marketingConsent": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "medicalDataConsent": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Consentement enregistré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "patientId": {
+                      "type": "string"
+                    },
+                    "consentRecorded": {
+                      "type": "boolean"
+                    },
+                    "consentVersion": {
+                      "type": "string"
+                    },
+                    "recordedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/patients/{id}": {
+      "get": {
+        "tags": ["Patients"],
+        "summary": "Détail patient (sans données santé sauf si rôle médical)",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Patient trouvé",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Patient"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Patients"],
+        "summary": "Mettre à jour un dossier patient",
+        "description": "Mise à jour partielle. Modification d'antécédents / allergies / numeroSecu\ndéclenche re-chiffrement AES + log RGPD `Patient.accessHistory`. RBAC :\nadmin / superviseur / dispatcher.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Patient"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Patient mis à jour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Patient"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/prescriptions/upload": {
+      "post": {
+        "tags": ["Prescriptions"],
+        "summary": "Uploader une Prescription Médicale de Transport (PMT)",
+        "description": "Accepte un PDF ou une image (PNG/JPEG/WEBP, max 10 Mo) en `multipart/form-data`,\nchamp `fichier`. Crée une `Prescription` en statut `ocrStatus=pending`\net déclenche un job OCR asynchrone (Tesseract + spaCy local côté\nmicroservice IA) qui peuplera `extractedData`. Le résultat est récupérable\nvia `GET /api/prescriptions/:id/ocr-result`. RBAC : admin / superviseur /\ndispatcher.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["fichier"],
+                "properties": {
+                  "fichier": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "PDF/PNG/JPEG/WEBP ≤ 10 MB"
+                  },
+                  "patientId": {
+                    "type": "string",
+                    "description": "Si connu, lie la PMT au dossier patient"
+                  },
+                  "transportId": {
+                    "type": "string",
+                    "description": "Lien optionnel vers un transport"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "PMT créée (OCR en cours)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Prescription"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "description": "Fichier trop volumineux (> 10 MB)"
+          }
+        }
+      }
+    },
+    "/api/prescriptions/{id}/validate": {
+      "patch": {
+        "tags": ["Prescriptions"],
+        "summary": "Valider une PMT (IA + humain)",
+        "description": "Marque la prescription comme validée. Workflow : l'IA fait l'OCR\npré-validation, puis un staff valide manuellement les champs\nextraits. Trace `validePar` + `valideAt` pour audit CPAM.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "corrections": {
+                    "type": "object",
+                    "description": "Corrections apportées aux champs OCR (medecin, dateEmission, motif, …)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "PMT validée",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Prescription"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/prescriptions/{id}": {
+      "get": {
+        "tags": ["Prescriptions"],
+        "summary": "Détail d'une prescription",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prescription trouvée",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Prescription"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/tracking/batch": {
+      "post": {
+        "tags": ["Tracking"],
+        "summary": "Envoyer un batch de positions GPS (app chauffeur)",
+        "description": "Le mobile chauffeur (Flutter) bufferise les positions GPS toutes les\n5s et envoie un batch toutes les 30s pour économiser batterie + réseau.\nLes positions alimentent le `TrackingPoint` (historique) et le store\nin-memory `vehiclePositionStore` qui rebroadcast en WebSocket aux\ndispatchers / patients suivant la course. Auth : JWT Personnel\n(header `Authorization` ou cookie chauffeur).\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["shiftId", "points"],
+                "properties": {
+                  "shiftId": {
+                    "type": "string"
+                  },
+                  "points": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                      "type": "object",
+                      "required": ["lat", "lng", "timestamp"],
+                      "properties": {
+                        "lat": {
+                          "type": "number",
+                          "minimum": -90,
+                          "maximum": 90
+                        },
+                        "lng": {
+                          "type": "number",
+                          "minimum": -180,
+                          "maximum": 180
+                        },
+                        "speed": {
+                          "type": "number",
+                          "description": "m/s"
+                        },
+                        "heading": {
+                          "type": "number",
+                          "description": "degrés 0-360"
+                        },
+                        "accuracy": {
+                          "type": "number",
+                          "description": "mètres"
+                        },
+                        "timestamp": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Positions enregistrées",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "saved": {
+                      "type": "integer",
+                      "description": "Nombre de points insérés"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/tracking/live": {
+      "get": {
+        "tags": ["Tracking"],
+        "summary": "Positions GPS temps réel de la flotte (dispatcher)",
+        "description": "Snapshot des dernières positions connues des véhicules en shift actif.\nPour un suivi continu, l'UI s'abonne en plus aux événements Socket.IO\n`vehicle:position` (room `dispatch:fleet`). Le patient suit son\nvéhicule via `vehicle:position` filtré sur la room du transport\n(cf. `docs/socket-events.md`). RBAC : dispatcher / superviseur / admin.\n",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string",
+              "enum": ["VSL", "AMBULANCE", "TPMR"]
+            },
+            "description": "Filtrer par type de véhicule"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des positions actuelles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "vehicles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "vehicleId": {
+                            "type": "string"
+                          },
+                          "immatriculation": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "object",
+                            "properties": {
+                              "lat": {
+                                "type": "number"
+                              },
+                              "lng": {
+                                "type": "number"
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            }
+                          },
+                          "currentTransportId": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/transports": {
+      "get": {
+        "tags": ["Transports"],
+        "summary": "Liste paginée des transports",
+        "description": "Filtres combinables sur statut, période, véhicule, chauffeur, patient et type. Tri par dateTransport décroissant.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "statut",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtrer par statut (REQUESTED, ASSIGNED, COMPLETED, …)"
+          },
+          {
+            "in": "query",
+            "name": "dateFrom",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dateTo",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page de transports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Transport"
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "pages": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Transports"],
+        "summary": "Créer un transport sanitaire",
+        "description": "Crée un transport en statut `REQUESTED`. Géocodage automatique des\nadresses (BAN), création du dossier Patient si nécessaire, enqueue\ndu job auto-dispatch BullMQ. Le numéro `TRS-YYYYMMDD-XXXX` est\nattribué atomiquement (Counter Mongo).\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "patient",
+                  "typeTransport",
+                  "motif",
+                  "dateTransport",
+                  "heureRDV",
+                  "adresseDepart",
+                  "adresseDestination"
+                ],
+                "properties": {
+                  "patient": {
+                    "$ref": "#/components/schemas/PatientSubdoc"
+                  },
+                  "typeTransport": {
+                    "type": "string",
+                    "enum": ["VSL", "TPMR", "AMBULANCE"]
+                  },
+                  "motif": {
+                    "type": "string",
+                    "example": "Dialyse"
+                  },
+                  "dateTransport": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "heureRDV": {
+                    "type": "string",
+                    "example": "09:30"
+                  },
+                  "allerRetour": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "adresseDepart": {
+                    "$ref": "#/components/schemas/Adresse"
+                  },
+                  "adresseDestination": {
+                    "$ref": "#/components/schemas/Adresse"
+                  },
+                  "tauxPriseEnCharge": {
+                    "type": "number",
+                    "default": 65
+                  },
+                  "notes": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Transport créé",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transport"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/transports/recurrents": {
+      "post": {
+        "tags": ["Transports"],
+        "summary": "Générer une série de transports récurrents",
+        "description": "À partir d'un transport modèle, génère N transports planifiés selon\nune fréquence (hebdo, jours sélectionnés) jusqu'à une date de fin.\nCas d'usage type : dialyse 3×/sem pendant 6 mois.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["modele", "recurrence"],
+                "properties": {
+                  "modele": {
+                    "description": "Payload Transport identique à POST /api/transports",
+                    "$ref": "#/components/schemas/Transport"
+                  },
+                  "recurrence": {
+                    "type": "object",
+                    "required": ["frequence", "dateFin"],
+                    "properties": {
+                      "frequence": {
+                        "type": "string",
+                        "example": "hebdomadaire"
+                      },
+                      "joursSemaine": {
+                        "type": "array",
+                        "description": "1=lundi … 7=dimanche",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 7
+                        }
+                      },
+                      "dateFin": {
+                        "type": "string",
+                        "format": "date"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Série créée",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "integer",
+                      "example": 24
+                    },
+                    "transports": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Transport"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/transports/{id}": {
+      "get": {
+        "tags": ["Transports"],
+        "summary": "Détail d'un transport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transport trouvé",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transport"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Transports"],
+        "summary": "Modifier un transport",
+        "description": "Whitelist de champs modifiables : `notes`, `heureDepart`, `allerRetour`,\n`adresseDepart`, `adresseDestination`, `tauxPriseEnCharge`. Les autres\nchamps (statut, vehicule, chauffeur) passent par des transitions dédiées.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "notes": {
+                    "type": "string"
+                  },
+                  "heureDepart": {
+                    "type": "string",
+                    "example": "09:00"
+                  },
+                  "allerRetour": {
+                    "type": "boolean"
+                  },
+                  "adresseDepart": {
+                    "$ref": "#/components/schemas/Adresse"
+                  },
+                  "adresseDestination": {
+                    "$ref": "#/components/schemas/Adresse"
+                  },
+                  "tauxPriseEnCharge": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transport mis à jour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transport"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/transports/{id}/assign": {
+      "patch": {
+        "tags": ["Transports"],
+        "summary": "Assigner véhicule + chauffeur à un transport",
+        "description": "Transition `CONFIRMED/SCHEDULED → ASSIGNED`. Claim atomique du\nvéhicule (`Vehicle.findOneAndUpdate` garde `statut=Disponible`),\nenqueue push FCM canal critique vers le chauffeur. RBAC : dispatcher\n/ superviseur / admin.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["vehiculeId"],
+                "properties": {
+                  "vehiculeId": {
+                    "type": "string"
+                  },
+                  "chauffeurId": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Si null, dérivé du shift actif du véhicule"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transport assigné",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transport"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/transports/{id}/complete": {
+      "patch": {
+        "tags": ["Transports"],
+        "summary": "Marquer transport comme terminé (transition de statut représentative)",
+        "description": "Transition `ARRIVED_AT_DESTINATION → COMPLETED`. Libère le véhicule\n(`statut=Disponible`), enqueue job billing BullMQ, calcule la durée\nréelle, émet WebSocket `transport:status_updated`. Endpoint emblématique\nde la state machine — les autres transitions suivent le même contrat\n(404 si introuvable, 409 si transition interdite, 200 + Transport\nmis à jour). Voir transitions sœurs : `/cancel`, `/no-show`, `/en-route`,\n`/arrived`, `/on-board`, `/destination`, etc.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dureeAttenteMinutes": {
+                    "type": "integer",
+                    "description": "Saisie chauffeur"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transport terminé",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transport"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/transports/{id}/no-show": {
+      "patch": {
+        "tags": ["Transports"],
+        "summary": "Marquer le patient comme absent (no-show)",
+        "description": "Transition `ASSIGNED/EN_ROUTE_TO_PICKUP/ARRIVED_AT_PICKUP → NO_SHOW`. Libère le véhicule et trace le motif.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "raison": {
+                    "type": "string",
+                    "example": "Patient introuvable à l'adresse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transport marqué NO_SHOW",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transport"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/transports/{id}/cancel": {
+      "patch": {
+        "tags": ["Transports"],
+        "summary": "Annuler un transport",
+        "description": "Transition `REQUESTED/CONFIRMED/SCHEDULED/ASSIGNED → CANCELLED`.\nLibère le véhicule si déjà assigné, notifie le chauffeur via FCM,\ntrace `raisonAnnulation`. Annulation post-départ : voir `/no-show`\nou `/fail`.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "raison": {
+                    "type": "string",
+                    "example": "Patient hospitalisé en urgence"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transport annulé",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transport"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/transports/{id}/timeline": {
+      "get": {
+        "tags": ["Transports"],
+        "summary": "Historique riche des changements de statut",
+        "description": "Renvoie le `statusLog` ordonné chronologiquement : qui (User + rôle),\nquand, depuis quel statut vers quel statut, motif éventuel et metadata\n(raison annulation, vehicule assigné, etc.). Source d'audit principale\npour les contestations CPAM et les revues qualité.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Timeline ordonnée (ancien → récent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transportId": {
+                      "type": "string"
+                    },
+                    "numero": {
+                      "type": "string",
+                      "example": "TRS-20260524-0001"
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "to": {
+                            "type": "string"
+                          },
+                          "changedBy": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "changedByRole": {
+                            "type": "string"
+                          },
+                          "changedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "metadata": {
+                            "type": "object"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/vehicles": {
+      "get": {
+        "tags": ["Vehicles"],
+        "summary": "Liste paginée des véhicules",
+        "description": "Filtres optionnels statut/type/disponible. Populate chauffeur assigné + transport en cours.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "statut",
+            "schema": {
+              "type": "string",
+              "enum": ["Disponible", "En service", "Maintenance", "Hors service"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string",
+              "enum": ["VSL", "AMBULANCE", "TPMR"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "disponible",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Raccourci équivalent à statut=Disponible"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page de véhicules",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Vehicle"
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "pages": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Vehicles"],
+        "summary": "Créer un véhicule (admin / superviseur)",
+        "description": "L'immatriculation doit être unique. Le statut par défaut est Disponible.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["immatriculation", "nom", "type"],
+                "properties": {
+                  "immatriculation": {
+                    "type": "string",
+                    "example": "AB-123-CD"
+                  },
+                  "nom": {
+                    "type": "string",
+                    "example": "VSL-Niçois 01"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["VSL", "AMBULANCE", "TPMR"]
+                  },
+                  "statut": {
+                    "type": "string",
+                    "enum": ["Disponible", "En service", "Maintenance", "Hors service"],
+                    "default": "Disponible"
+                  },
+                  "equipements": {
+                    "type": "object",
+                    "properties": {
+                      "oxygene": {
+                        "type": "boolean"
+                      },
+                      "fauteuilRampe": {
+                        "type": "boolean"
+                      },
+                      "brancard": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Véhicule créé",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vehicle"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/vehicles/availability": {
+      "get": {
+        "tags": ["Vehicles"],
+        "summary": "Disponibilité de la flotte par créneau horaire",
+        "description": "Pour une date donnée, renvoie l'occupation prévue par tranche horaire\nen croisant transports planifiés + maintenance + shifts chauffeur. Sert\nau planning pour identifier les créneaux libres.\n",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Format YYYY-MM-DD. Défaut : aujourd'hui."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Slots de disponibilité",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "date": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "slots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "hour": {
+                            "type": "integer",
+                            "example": 9
+                          },
+                          "totalVehicles": {
+                            "type": "integer"
+                          },
+                          "available": {
+                            "type": "integer"
+                          },
+                          "occupied": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/vehicles/{id}": {
+      "put": {
+        "tags": ["Vehicles"],
+        "summary": "Mettre à jour un véhicule (admin / superviseur)",
+        "description": "Remplacement complet du document selon `updateVehicleSchema`. Si le\nstatut change, émet `unit:status_changed` via Socket.IO pour rafraîchir\nles UI dispatcher en temps réel.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Vehicle"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Véhicule mis à jour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vehicle"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }

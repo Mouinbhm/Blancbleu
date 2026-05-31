@@ -16,18 +16,19 @@ function renderLogin() {
 }
 
 describe("Login page", () => {
-  beforeEach(() => { mockLogin.mockReset(); });
+  beforeEach(() => {
+    mockLogin.mockReset();
+  });
 
   test("affiche les champs email et password", () => {
     renderLogin();
-    expect(document.querySelector('input[name="email"]')).toBeInTheDocument();
-    expect(document.querySelector('input[name="password"]')).toBeInTheDocument();
+    expect(screen.getByTestId("login-email")).toBeInTheDocument();
+    expect(screen.getByTestId("login-password")).toBeInTheDocument();
   });
 
   test("submit vide n'appelle pas login et affiche un message d'erreur", async () => {
     renderLogin();
-    const form = document.querySelector("form");
-    fireEvent.submit(form);
+    fireEvent.click(screen.getByTestId("login-submit"));
     expect(mockLogin).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(screen.getByText(/remplir tous les champs/i)).toBeInTheDocument();
@@ -37,11 +38,9 @@ describe("Login page", () => {
   test("submit avec credentials appelle useAuth().login", async () => {
     mockLogin.mockResolvedValueOnce(undefined);
     renderLogin();
-    const email = document.querySelector('input[name="email"]');
-    const pwd   = document.querySelector('input[name="password"]');
-    fireEvent.change(email, { target: { value: "x@y.fr" } });
-    fireEvent.change(pwd,   { target: { value: "secret123" } });
-    fireEvent.submit(document.querySelector("form"));
+    fireEvent.change(screen.getByTestId("login-email"), { target: { value: "x@y.fr" } });
+    fireEvent.change(screen.getByTestId("login-password"), { target: { value: "secret123" } });
+    fireEvent.click(screen.getByTestId("login-submit"));
     await waitFor(() => expect(mockLogin).toHaveBeenCalledWith("x@y.fr", "secret123"));
   });
 });

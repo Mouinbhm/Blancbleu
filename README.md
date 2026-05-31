@@ -35,6 +35,7 @@
 - [Documentation API](#-documentation-api)
 - [Structure du projet](#-structure-du-projet)
 - [Tests](#-tests)
+- [Conformité RGPD](#-conformité-rgpd)
 - [Documentation opérationnelle](#-documentation-opérationnelle)
 - [Auteur](#-auteur)
 
@@ -103,25 +104,40 @@
 
 ## Architecture
 
-```
-┌──────────────────────────┐     ┌──────────────────────────────┐
-│     WEB CLIENT (React)   │     │  MOBILE CLIENT (Flutter)     │
-│  Port 3000               │     │  Android & iOS               │
-│  Tailwind · Leaflet ·    │     │  flutter_map · Stripe ·      │
-│  Chart.js · Socket.io    │     │  shared_preferences          │
-└────────────┬─────────────┘     └──────────────┬───────────────┘
-             │ HTTP / WebSocket                  │ HTTP REST
-             └──────────────────┬───────────────┘
-                                │
-┌───────────────────────────────▼─────────────────────────────┐
-│                   SERVER (Express / Node.js)                  │
-│   Port 5000 — REST API · Socket.IO · JWT · Mongoose          │
-└──────────┬────────────────────────────────┬─────────────────┘
-           │                                │
-┌──────────▼──────────┐        ┌────────────▼────────────────┐
-│  MongoDB (Atlas /   │        │  Microservice IA (FastAPI)   │
-│  Docker) Port 27017 │        │  Port 5002 — OCR · Dispatch  │
-└─────────────────────┘        └─────────────────────────────┘
+Documentation complète (3 diagrammes Mermaid — contexte, conteneurs, séquence) :
+**[docs/architecture.md](docs/architecture.md)**.
+
+### Vue conteneurs (C4 niveau 2)
+
+```mermaid
+graph TB
+    subgraph Clients
+        Web["🌐 Web React<br/>Port 3000"]
+        Patient["📱 App Patient Flutter"]
+        Driver["🚑 App Chauffeur Flutter"]
+    end
+
+    subgraph Backend["Backend Node 20 / Express"]
+        API["⚙️ API REST + Socket.IO<br/>Port 5000"]
+        Workers["⏱️ Workers BullMQ"]
+    end
+
+    IA["🤖 Microservice IA FastAPI<br/>Port 5002"]
+
+    Mongo[("🗄️ MongoDB 7")]
+    Redis[("📮 Redis 7")]
+
+    Web -->|"REST + WebSocket"| API
+    Patient -->|"REST + WebSocket"| API
+    Driver -->|"REST + WebSocket (GPS)"| API
+
+    API -->|"Mongoose"| Mongo
+    API -->|"Enqueue jobs + pub/sub"| Redis
+    Workers -->|"Consume queues"| Redis
+    Workers -->|"Mongoose"| Mongo
+
+    API -->|"POST /pmt /dispatch /optimizer"| IA
+    Workers -.->|"Scoring auto-dispatch"| IA
 ```
 
 ---
@@ -466,16 +482,40 @@ npm run test:e2e
 
 ---
 
+## Conformité RGPD
+
+La plateforme traite des **données de santé** (catégorie particulière,
+art. 9 RGPD). Le cadrage de conformité est documenté dans 3 fichiers
+complémentaires :
+
+| Document                                                     | Contenu                                                                                                  |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| [docs/rgpd.md](docs/rgpd.md)                                 | Cadrage opérationnel : bases légales, durées de conservation, droits des personnes, sous-traitants, HDS. |
+| [docs/dpia.md](docs/dpia.md)                                 | Analyse d'impact (DPIA / AIPD) v1.0 — description du traitement, risques, mitigations, droits.           |
+| [docs/registre-traitements.md](docs/registre-traitements.md) | Registre des activités de traitement (art. 30) — 7 fiches.                                               |
+
+**Statut** : version POC — **non hébergée HDS**, **aucune donnée patient
+réelle**. La bascule vers un Hébergeur de Données de Santé agréé est
+obligatoire avant ouverture à des patients réels — cf. `docs/rgpd.md` §13.
+
+Endpoints RGPD implémentés (extrait) : `GET /api/gdpr/export` (droit
+d'accès + portabilité), `DELETE /api/gdpr/me` (effacement self-service),
+`POST /api/gdpr/patients/:id/anonymize` (anonymisation admin avec
+confirmReason obligatoire, 7 tests d'intégration).
+
+---
+
 ## Documentation opérationnelle
 
-| Document                                                       | Contenu                                                                     |
-| -------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| [docs/operations.md](docs/operations.md)                       | Déploiement prod, sauvegardes, monitoring, scaling, runbook incidents       |
-| [docs/security.md](docs/security.md)                           | Auth, secrets, audit, dépendances, divulgation responsable                  |
-| [docs/rgpd.md](docs/rgpd.md)                                   | Bases légales, durées de conservation, droits des personnes, sous-traitants |
-| [docs/ia-dispatch-scoring.md](docs/ia-dispatch-scoring.md)     | Algorithme de scoring dispatch                                              |
-| [docs/ia-duration-predictor.md](docs/ia-duration-predictor.md) | Modèle de prédiction de durée                                               |
-| [docs/ocr-benchmark.md](docs/ocr-benchmark.md)                 | Benchmark OCR PMT                                                           |
+| Document                                                       | Contenu                                                               |
+| -------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [docs/operations.md](docs/operations.md)                       | Déploiement prod, sauvegardes, monitoring, scaling, runbook incidents |
+| [docs/security.md](docs/security.md)                           | Auth, secrets, audit, dépendances, divulgation responsable            |
+| [docs/mobile-security.md](docs/mobile-security.md)             | Sécurité apps Flutter (pinning, secure storage, logger no-op, Sentry) |
+| [docs/architecture.md](docs/architecture.md)                   | 3 diagrammes Mermaid : contexte, conteneurs, séquence                 |
+| [docs/ia-dispatch-scoring.md](docs/ia-dispatch-scoring.md)     | Algorithme de scoring dispatch                                        |
+| [docs/ia-duration-predictor.md](docs/ia-duration-predictor.md) | Modèle de prédiction de durée                                         |
+| [docs/ocr-benchmark.md](docs/ocr-benchmark.md)                 | Benchmark OCR PMT                                                     |
 
 ---
 

@@ -61,7 +61,9 @@ const exportData = async (req, res) => {
 
         const [transports, prescriptions, factures] = await Promise.all([
           Transport.find({ patientId: patient._id })
-            .select("numero statut dateTransport adresseDepart adresseDestination motif typeTransport createdAt")
+            .select(
+              "numero statut dateTransport adresseDepart adresseDestination motif typeTransport createdAt",
+            )
             .lean(),
           Prescription.find({ patientId: patient._id })
             .select("numero statut motif dateEmission medecin createdAt")
@@ -184,4 +186,46 @@ const eraseData = async (req, res) => {
   }
 };
 
-module.exports = { exportData, eraseData };
+// ─────────────────────────────────────────────────────────────────────────────
+// @desc    Anonymisation administrative d'un patient (RGPD Art. 17)
+//          IRRÉVERSIBLE — réservé aux rôles admin / dpo. Requires confirmReason
+//          dans le body (min 10 chars) pour éviter une anonymisation accidentelle.
+// @route   POST /api/gdpr/patients/:id/anonymize
+// @access  Privé (admin, dpo)
+// ─────────────────────────────────────────────────────────────────────────────
+const anonymizePatientById = async (req, res) => {
+  try {
+    const { confirmReason } = req.body || {};
+
+    if (!confirmReason || typeof confirmReason !== "string" || confirmReason.trim().length < 10) {
+      return res.status(400).json({
+        message: "Le champ confirmReason est requis (min. 10 caractères) — opération irréversible.",
+        code: "CONFIRM_REASON_REQUIRED",
+      });
+    }
+
+    const patientGdprService = require("../services/patientGdprService");
+    const patient = await patientGdprService.anonymizePatient(
+      req.params.id,
+      req.user,
+      confirmReason.trim(),
+      req,
+    );
+
+    return res.json({
+      success: true,
+      message: "Patient anonymisé conformément au RGPD Art. 17",
+      patientId: patient._id,
+      numeroPatient: patient.numeroPatient,
+      anonymizedAt: patient.gdpr.anonymizedAt,
+    });
+  } catch (err) {
+    const status = err.statusCode || 500;
+    return res.status(status).json({
+      message: status === 500 ? safeMsg(err) : err.message,
+      code: err.code,
+    });
+  }
+};
+
+module.exports = { exportData, eraseData, anonymizePatientById };

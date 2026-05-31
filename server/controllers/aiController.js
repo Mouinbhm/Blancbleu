@@ -79,10 +79,7 @@ const extrairePMT = async (req, res) => {
     }
     // Propager le code HTTP retourné par FastAPI (422, 400, 500…)
     const status = err.response?.status || 500;
-    const message =
-      err.response?.data?.detail ||
-      err.response?.data?.message ||
-      err.message;
+    const message = err.response?.data?.detail || err.response?.data?.message || err.message;
     return res.status(status).json({ message: `Erreur microservice IA : ${message}` });
   }
 };
@@ -116,7 +113,7 @@ const validerPMT = async (req, res) => {
           "prescription.valideAt": new Date(),
         },
       },
-      { new: true }
+      { new: true },
     );
 
     if (!transport) {
@@ -138,8 +135,8 @@ const validerPMT = async (req, res) => {
 // MODULE 2 — Dispatch (recommandation véhicule/chauffeur)
 // ════════════════════════════════════════════════════════════════════════════
 
-const planningLoadSvc     = require("../services/planningLoadService");
-const driverPerfSvc       = require("../services/driverPerformanceService");
+const planningLoadSvc = require("../services/planningLoadService");
+const driverPerfSvc = require("../services/driverPerformanceService");
 
 /**
  * POST /api/ai/dispatch/:transportId
@@ -149,7 +146,7 @@ const driverPerfSvc       = require("../services/driverPerformanceService");
 const recommanderDispatch = async (req, res) => {
   try {
     const Transport = require("../models/Transport");
-    const Vehicle   = require("../models/Vehicle");
+    const Vehicle = require("../models/Vehicle");
     const Personnel = require("../models/Personnel");
 
     const transport = await Transport.findById(req.params.transportId);
@@ -169,8 +166,8 @@ const recommanderDispatch = async (req, res) => {
     if (depart?.lat != null && depart?.lng != null) {
       candidatesQuery.location = {
         $near: {
-          $geometry:     { type: "Point", coordinates: [depart.lng, depart.lat] },
-          $maxDistance:  30000, // 30 km
+          $geometry: { type: "Point", coordinates: [depart.lng, depart.lat] },
+          $maxDistance: 30000, // 30 km
         },
       };
       limitVehicules = 15;
@@ -201,7 +198,7 @@ const recommanderDispatch = async (req, res) => {
       }),
       ...chauffeurs.map(async (c) => {
         c.tauxPonctualite = await driverPerfSvc.getDriverPunctualityScore(c._id);
-        c._planningLoad   = await planningLoadSvc.getDriverPlanningLoad(c._id, dateTransport);
+        c._planningLoad = await planningLoadSvc.getDriverPlanningLoad(c._id, dateTransport);
       }),
     ]);
 
@@ -220,7 +217,9 @@ const recommanderDispatch = async (req, res) => {
     // Métrique Prometheus : compte les recos générées par source.
     try {
       dispatchCounter.labels(fallbackUsed ? "fallback_node" : "ia").inc();
-    } catch { /* metrics best-effort */ }
+    } catch {
+      /* metrics best-effort */
+    }
 
     // Persister un document DispatchRecommendation (historique complet)
     let dispatchRec = null;
@@ -237,9 +236,13 @@ const recommanderDispatch = async (req, res) => {
         bestRecommendation: best,
         excludedCandidates: result.excludedCandidates || [],
         summary: result.summary || {
-          totalCandidates:    vehicules.length,
-          eligibleCandidates: Array.isArray(result.recommendations) ? result.recommendations.length : 1,
-          excludedCandidates: Array.isArray(result.excludedCandidates) ? result.excludedCandidates.length : 0,
+          totalCandidates: vehicules.length,
+          eligibleCandidates: Array.isArray(result.recommendations)
+            ? result.recommendations.length
+            : 1,
+          excludedCandidates: Array.isArray(result.excludedCandidates)
+            ? result.excludedCandidates.length
+            : 0,
         },
       });
 
@@ -247,17 +250,17 @@ const recommanderDispatch = async (req, res) => {
       await Transport.findByIdAndUpdate(transport._id, {
         $set: {
           "aiDispatch.recommendedVehicleId": best.vehiculeId,
-          "aiDispatch.recommendedDriverId":  best.driverId || null,
-          "aiDispatch.vehicleName":          best.vehiculeName || best.immatriculation || "",
-          "aiDispatch.driverName":           best.driverName || "",
-          "aiDispatch.score":                best.finalScore ?? best.score ?? null,
-          "aiDispatch.criteriaScores":       best.criteriaScores || null,
-          "aiDispatch.explanation":          best.explanation || best.justification || [],
-          "aiDispatch.risks":                best.risks || [],
-          "aiDispatch.warnings":             best.warnings || [],
-          "aiDispatch.source":               result.source || (fallbackUsed ? "fallback" : "ia"),
-          "aiDispatch.fallbackUsed":         fallbackUsed,
-          "aiDispatch.generatedAt":          new Date(),
+          "aiDispatch.recommendedDriverId": best.driverId || null,
+          "aiDispatch.vehicleName": best.vehiculeName || best.immatriculation || "",
+          "aiDispatch.driverName": best.driverName || "",
+          "aiDispatch.score": best.finalScore ?? best.score ?? null,
+          "aiDispatch.criteriaScores": best.criteriaScores || null,
+          "aiDispatch.explanation": best.explanation || best.justification || [],
+          "aiDispatch.risks": best.risks || [],
+          "aiDispatch.warnings": best.warnings || [],
+          "aiDispatch.source": result.source || (fallbackUsed ? "fallback" : "ia"),
+          "aiDispatch.fallbackUsed": fallbackUsed,
+          "aiDispatch.generatedAt": new Date(),
           "aiDispatch.acceptedByDispatcher": null,
           "aiDispatch.lastRecommendationId": dispatchRec._id,
         },
@@ -286,7 +289,9 @@ const getDispatchExplanation = async (req, res) => {
       .populate("chauffeur", "nom prenom");
     if (!transport) return res.status(404).json({ message: "Transport introuvable" });
     if (!transport.aiDispatch?.generatedAt) {
-      return res.status(404).json({ message: "Aucune recommandation IA générée pour ce transport" });
+      return res
+        .status(404)
+        .json({ message: "Aucune recommandation IA générée pour ce transport" });
     }
     return res.json({ numero: transport.numero, aiDispatch: transport.aiDispatch });
   } catch (err) {
@@ -309,11 +314,11 @@ const accepterRecommandationIA = async (req, res) => {
 
     await Transport.findByIdAndUpdate(transport._id, {
       $set: {
-        vehicule:                        transport.aiDispatch.recommendedVehicleId,
-        chauffeur:                       transport.aiDispatch.recommendedDriverId || transport.chauffeur,
-        scoreDispatch:                   transport.aiDispatch.score,
+        vehicule: transport.aiDispatch.recommendedVehicleId,
+        chauffeur: transport.aiDispatch.recommendedDriverId || transport.chauffeur,
+        scoreDispatch: transport.aiDispatch.score,
         "aiDispatch.acceptedByDispatcher": true,
-        "aiDispatch.acceptedAt":         new Date(),
+        "aiDispatch.acceptedAt": new Date(),
       },
     });
 
@@ -322,10 +327,10 @@ const accepterRecommandationIA = async (req, res) => {
     if (recId) {
       await DispatchRecommendation.findByIdAndUpdate(recId, {
         $set: {
-          "decision.status":           "accepted",
-          "decision.decidedAt":        new Date(),
-          "decision.decidedBy":        req.user._id,
-          "decision.finalVehiculeId":  transport.aiDispatch.recommendedVehicleId,
+          "decision.status": "accepted",
+          "decision.decidedAt": new Date(),
+          "decision.decidedBy": req.user._id,
+          "decision.finalVehiculeId": transport.aiDispatch.recommendedVehicleId,
           "decision.finalChauffeurId": transport.aiDispatch.recommendedDriverId || null,
         },
       });
@@ -355,11 +360,11 @@ const refuserRecommandationIA = async (req, res) => {
       {
         $set: {
           "aiDispatch.acceptedByDispatcher": false,
-          "aiDispatch.rejectedReason":       raison,
-          "aiDispatch.acceptedAt":           new Date(),
+          "aiDispatch.rejectedReason": raison,
+          "aiDispatch.acceptedAt": new Date(),
         },
       },
-      { new: true }
+      { new: true },
     );
     if (!transport) return res.status(404).json({ message: "Transport introuvable" });
 
@@ -368,9 +373,9 @@ const refuserRecommandationIA = async (req, res) => {
     if (recId) {
       await DispatchRecommendation.findByIdAndUpdate(recId, {
         $set: {
-          "decision.status":          "rejected",
-          "decision.decidedAt":       new Date(),
-          "decision.decidedBy":       req.user._id,
+          "decision.status": "rejected",
+          "decision.decidedAt": new Date(),
+          "decision.decidedBy": req.user._id,
           "decision.rejectionReason": raison,
         },
       });
@@ -452,7 +457,9 @@ const recommanderDispatchManuel = async (req, res) => {
     const { motif, mobilite, oxygene, brancardage, adresseDepart, adresseDestination } = req.body;
 
     if (!mobilite) {
-      return res.status(400).json({ message: "mobilite requise (ASSIS | FAUTEUIL_ROULANT | ALLONGE | CIVIERE)" });
+      return res
+        .status(400)
+        .json({ message: "mobilite requise (ASSIS | FAUTEUIL_ROULANT | ALLONGE | CIVIERE)" });
     }
 
     const [vehicules, chauffeurs] = await Promise.all([
@@ -548,12 +555,12 @@ const optimiserTournee = async (req, res) => {
     await Promise.all(
       transports.map(async (t) => {
         const manqueDepart = !t.adresseDepart?.coordonnees?.lat;
-        const manqueDest   = !t.adresseDestination?.coordonnees?.lat;
+        const manqueDest = !t.adresseDestination?.coordonnees?.lat;
         if (!manqueDepart && !manqueDest) return;
         try {
           const [geoD, geoDest] = await geocodeTransport(
             manqueDepart ? t.adresseDepart : null,
-            manqueDest   ? t.adresseDestination : null,
+            manqueDest ? t.adresseDestination : null,
           );
           if (manqueDepart && geoD) {
             t.adresseDepart = t.adresseDepart.toObject
@@ -566,15 +573,22 @@ const optimiserTournee = async (req, res) => {
           }
           if (manqueDest && geoDest) {
             t.adresseDestination = t.adresseDestination.toObject
-              ? { ...t.adresseDestination.toObject(), coordonnees: { lat: geoDest.lat, lng: geoDest.lng } }
+              ? {
+                  ...t.adresseDestination.toObject(),
+                  coordonnees: { lat: geoDest.lat, lng: geoDest.lng },
+                }
               : { ...t.adresseDestination, coordonnees: { lat: geoDest.lat, lng: geoDest.lng } };
             await t.constructor.updateOne(
               { _id: t._id },
-              { $set: { "adresseDestination.coordonnees": { lat: geoDest.lat, lng: geoDest.lng } } },
+              {
+                $set: { "adresseDestination.coordonnees": { lat: geoDest.lat, lng: geoDest.lng } },
+              },
             );
           }
-        } catch { /* géocodage non bloquant */ }
-      })
+        } catch {
+          /* géocodage non bloquant */
+        }
+      }),
     );
 
     const result = await aiClient.optimiserTournee({
@@ -601,7 +615,7 @@ const optimiserTournee = async (req, res) => {
         type: v.type,
         position: v.position?.lat ? { lat: v.position.lat, lng: v.position.lng } : null,
       })),
-      depot: depot || { lat: 43.7102, lng: 7.2620 }, // Nice centre par défaut
+      depot: depot || { lat: 43.7102, lng: 7.262 }, // Nice centre par défaut
     });
 
     await audit.iaRouteOptimization(date, transports.length, result.distanceTotale);
@@ -651,7 +665,13 @@ const getDispatchHistory = async (req, res) => {
         { $group: { _id: null, avg: { $avg: "$bestRecommendation.score" }, n: { $sum: 1 } } },
       ]),
       DispatchRecommendation.aggregate([
-        { $match: { generatedAt: { $gte: since }, "decision.status": "rejected", "decision.rejectionReason": { $ne: null, $ne: "" } } },
+        {
+          $match: {
+            generatedAt: { $gte: since },
+            "decision.status": "rejected",
+            "decision.rejectionReason": { $nin: [null, ""] },
+          },
+        },
         { $group: { _id: "$decision.rejectionReason", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 5 },
@@ -662,7 +682,7 @@ const getDispatchHistory = async (req, res) => {
     const byStatus = Object.fromEntries(statusBreakdown.map((x) => [x._id || "unknown", x.count]));
     const accepted = byStatus.accepted || 0;
     const rejected = byStatus.rejected || 0;
-    const pending  = byStatus.pending  || 0;
+    const pending = byStatus.pending || 0;
 
     return res.json({
       days,
@@ -671,8 +691,8 @@ const getDispatchHistory = async (req, res) => {
       accepted,
       rejected,
       pending,
-      acceptanceRate: total ? +(100 * accepted / total).toFixed(1) : 0,
-      rejectionRate:  total ? +(100 * rejected / total).toFixed(1) : 0,
+      acceptanceRate: total ? +((100 * accepted) / total).toFixed(1) : 0,
+      rejectionRate: total ? +((100 * rejected) / total).toFixed(1) : 0,
       averageScore: avgScore[0]?.avg != null ? +avgScore[0].avg.toFixed(1) : null,
       bySource: Object.fromEntries(sourceBreakdown.map((x) => [x._id || "unknown", x.count])),
       topRejectionReasons: topRejections.map((x) => ({ reason: x._id, count: x.count })),
@@ -725,18 +745,18 @@ const getTrainingData = async (req, res) => {
       .lean();
 
     const features = rows.map((r) => ({
-      distanceKm:         r.distanceKm,
-      heureDepart:        r.heureDepart,
-      jourSemaine:        r.jourSemaine,
-      mobilite:           r.mobilite,
-      typeVehicule:       r.typeVehicule,
-      motif:              r.motif,
-      allerRetour:        r.allerRetour,
-      oxygene:            r.oxygene,
-      brancardage:        r.brancardage,
+      distanceKm: r.distanceKm,
+      heureDepart: r.heureDepart,
+      jourSemaine: r.jourSemaine,
+      mobilite: r.mobilite,
+      typeVehicule: r.typeVehicule,
+      motif: r.motif,
+      allerRetour: r.allerRetour,
+      oxygene: r.oxygene,
+      brancardage: r.brancardage,
       dureeReelleMinutes: r.dureeReelleMinutes,
-      completedAt:        r.completedAt,
-      source:             r.source || "real",
+      completedAt: r.completedAt,
+      source: r.source || "real",
     }));
 
     const payload = { count: features.length, features };
@@ -764,23 +784,26 @@ const triggerModelRetrain = async (req, res) => {
   try {
     const { since } = req.body || {};
     const queue = queues[QUEUES.AI] || queues[QUEUES.OCR]; // fallback si queue AI absente
-    const job = await queue.add("model_retrain", { since: since || null, requestedBy: req.user._id });
+    const job = await queue.add("model_retrain", {
+      since: since || null,
+      requestedBy: req.user._id,
+    });
 
     await log({
-      action:    "AI_MODEL_RETRAIN",
-      origine:   "HUMAIN",
+      action: "AI_MODEL_RETRAIN",
+      origine: "HUMAIN",
       utilisateur: req.user,
       ressource: { type: "Model", reference: "DurationPredictor" },
       details: {
         metadata: { since: since || null, jobId: job?.id || null },
-        message:  "Réentraînement du modèle de durée demandé",
+        message: "Réentraînement du modèle de durée demandé",
       },
     });
 
     return res.status(202).json({
       message: "Réentraînement programmé",
-      jobId:   job?.id || null,
-      since:   since || null,
+      jobId: job?.id || null,
+      since: since || null,
     });
   } catch (err) {
     return res.status(500).json({ message: err.message });
@@ -803,9 +826,9 @@ const getDispatchConfig = async (req, res) => {
       // Auto-bootstrap au défaut
       cfg = {
         _id: "default",
-        weights:      DispatchConfig.DEFAULT_WEIGHTS,
+        weights: DispatchConfig.DEFAULT_WEIGHTS,
         autoDispatch: DispatchConfig.DEFAULT_AUTODISPATCH,
-        updatedBy:    null,
+        updatedBy: null,
       };
     }
     // Hydrate autoDispatch si absent (configs créées avant Sprint 6)
@@ -860,8 +883,8 @@ const updateDispatchConfig = async (req, res) => {
     if (autoDispatch) {
       const a = autoDispatch;
       const validated = {
-        enabled:         Boolean(a.enabled),
-        scoreThreshold:  Number.isFinite(a.scoreThreshold)
+        enabled: Boolean(a.enabled),
+        scoreThreshold: Number.isFinite(a.scoreThreshold)
           ? Math.max(50, Math.min(100, a.scoreThreshold))
           : DispatchConfig.DEFAULT_AUTODISPATCH.scoreThreshold,
         requireApproval: a.requireApproval !== false, // défaut TRUE (safe)
@@ -876,13 +899,13 @@ const updateDispatchConfig = async (req, res) => {
     );
 
     await log({
-      action:     "AI_DISPATCH_CONFIG_UPDATE",
-      origine:    "HUMAIN",
+      action: "AI_DISPATCH_CONFIG_UPDATE",
+      origine: "HUMAIN",
       utilisateur: req.user,
-      ressource:  { type: "DispatchConfig", reference: "default" },
+      ressource: { type: "DispatchConfig", reference: "default" },
       details: {
         metadata: { weights: $set.weights || null, autoDispatch: $set.autoDispatch || null },
-        message:  "Config dispatch mise à jour",
+        message: "Config dispatch mise à jour",
       },
     });
 
@@ -904,7 +927,7 @@ const getModelStatus = async (req, res) => {
   } catch (err) {
     return res.status(503).json({
       message: "Microservice IA indisponible",
-      error:   err.message,
+      error: err.message,
     });
   }
 };

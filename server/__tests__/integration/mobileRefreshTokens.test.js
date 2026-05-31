@@ -24,9 +24,9 @@ let app;
 
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
-  process.env.MONGO_URI  = mongod.getUri();
+  process.env.MONGO_URI = mongod.getUri();
   process.env.JWT_SECRET = "test-secret-m1-mobile-refresh";
-  process.env.NODE_ENV   = "test";
+  process.env.NODE_ENV = "test";
   process.env.AI_API_URL = "http://localhost:5002";
   await mongoose.connect(process.env.MONGO_URI);
   app = require("../../Server");
@@ -41,24 +41,22 @@ afterEach(async () => {
   const User = require("../../models/User");
   const Personnel = require("../../models/Personnel");
   const RefreshToken = require("../../models/RefreshToken");
-  await Promise.all([
-    User.deleteMany({}),
-    Personnel.deleteMany({}),
-    RefreshToken.deleteMany({}),
-  ]);
+  await Promise.all([User.deleteMany({}), Personnel.deleteMany({}), RefreshToken.deleteMany({})]);
 });
 
 async function seedPersonnel(overrides = {}) {
   const Personnel = require("../../models/Personnel");
   const hash = await bcrypt.hash(overrides.password || "password123", 10);
   return Personnel.create({
-    nom: "Test", prenom: "Driver",
-    email:    overrides.email || "driver@bb.fr",
-    password: hash,
-    role:     overrides.role || "Chauffeur",
-    actif:    true,
+    nom: "Test",
+    prenom: "Driver",
+    email: overrides.email || "driver@bb.fr",
+    role: overrides.role || "Chauffeur",
+    actif: true,
     ...overrides,
-    password: hash, // override
+    // Override doit venir APRÈS ...overrides pour neutraliser un éventuel
+    // password fourni en clair dans les overrides — le hash est canonique.
+    password: hash,
   });
 }
 
@@ -66,14 +64,16 @@ async function seedPatient(overrides = {}) {
   const User = require("../../models/User");
   const hash = await bcrypt.hash(overrides.password || "password123", 10);
   return User.create({
-    nom: "DOE", prenom: "Jane",
+    nom: "DOE",
+    prenom: "Jane",
     email: overrides.email || "jane@bb.fr",
-    password: hash,
     role: "patient",
     actif: true,
     telephone: "0600000000",
     mobilite: "ASSIS",
     ...overrides,
+    // Idem seedPersonnel : le hash override doit gagner sur tout password
+    // que les overrides auraient pu fournir en clair.
     password: hash,
   });
 }
@@ -121,9 +121,7 @@ describe("personnel mobile refresh flow", () => {
   });
 
   test("refresh 400 si body sans refreshToken", async () => {
-    const res = await request(app)
-      .post("/api/v1/personnel/auth/refresh")
-      .send({});
+    const res = await request(app).post("/api/v1/personnel/auth/refresh").send({});
     expect(res.status).toBe(400);
   });
 

@@ -20,9 +20,9 @@
 
 require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
 const mongoose = require("mongoose");
-const bcrypt   = require("bcryptjs");
+const bcrypt = require("bcryptjs");
 
-const User      = require("../models/User");
+const User = require("../models/User");
 const Personnel = require("../models/Personnel");
 
 const DRIVER_ROLES = ["ambulancier", "chauffeur", "driver"];
@@ -43,7 +43,9 @@ async function run() {
   const users = await User.find({ role: { $in: DRIVER_ROLES } }).select("+password");
   console.log(`Trouvé ${users.length} User(s) avec rôle ambulancier/chauffeur/driver\n`);
 
-  let linked = 0, created = 0, alreadyDone = 0;
+  let linked = 0,
+    created = 0,
+    alreadyDone = 0;
   const tempPasswords = [];
 
   for (const u of users) {
@@ -53,7 +55,7 @@ async function run() {
       continue;
     }
 
-    let personnel = await Personnel.findOne({ email }).select("+password");
+    const personnel = await Personnel.findOne({ email }).select("+password");
 
     if (personnel) {
       if (personnel.password) {
@@ -61,17 +63,19 @@ async function run() {
         alreadyDone++;
       } else {
         // Copy hashed password from User
-        personnel.password            = u.password;
+        personnel.password = u.password;
         personnel.forcePasswordChange = true;
         if (!personnel.role) personnel.role = mapRole(u.role);
         await personnel.save({ validateBeforeSave: false });
-        console.log(`  LINK ${email} — hash copié depuis User → Personnel (forcePasswordChange=true)`);
+        console.log(
+          `  LINK ${email} — hash copié depuis User → Personnel (forcePasswordChange=true)`,
+        );
         linked++;
       }
     } else {
       // Create minimal Personnel record
-      const tempPwd    = genTempPassword();
-      const hashedPwd  = await bcrypt.hash(tempPwd, 12);
+      const tempPwd = genTempPassword();
+      const hashedPwd = await bcrypt.hash(tempPwd, 12);
       const [prenom, ...restNom] = (u.nom || "Inconnu Inconnu").split(" ");
       const nom = restNom.join(" ") || prenom;
 
@@ -79,10 +83,10 @@ async function run() {
         nom,
         prenom,
         email,
-        role:                mapRole(u.role),
-        password:            hashedPwd,
+        role: mapRole(u.role),
+        password: hashedPwd,
         forcePasswordChange: true,
-        actif:               u.actif !== false,
+        actif: u.actif !== false,
       });
 
       tempPasswords.push({ email, tempPassword: tempPwd });
