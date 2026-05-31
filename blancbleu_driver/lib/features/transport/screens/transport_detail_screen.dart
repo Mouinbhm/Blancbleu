@@ -135,6 +135,9 @@ class _TransportDetailScreenState extends State<TransportDetailScreen> {
   }
 
   Future<void> _sendSos() async {
+    // Sprint M6 — rationale UI avant la popup système (cf. permission_helper).
+    await LocationService.instance.requestPermissionWithRationale(context);
+    if (!mounted) return;
     final pos = await LocationService.instance.getCurrentPosition();
     if (!mounted) return;
     final shiftState = context.read<ShiftCubit>().state;

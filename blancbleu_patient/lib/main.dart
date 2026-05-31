@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging, SentryInit, DeviceIntegrity;
+import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging, SentryInit, DeviceIntegrity, PermissionHelper;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
@@ -74,7 +74,15 @@ class BlancBleuApp extends StatelessWidget {
 /// Sprint M4 — Branche les handlers FCM patient (token POST + foreground notif
 /// + tap deep-link). Appele apres login/register reussi ET au boot si deja
 /// loggé. No-op si Firebase non configure (PushService.init() a renvoye false).
-void attachPatientFcmHandlers() {
+///
+/// Sprint M6 — si un BuildContext est passe, demande la permission de
+/// notifications avec rationale UI avant d'attacher les handlers. Sans
+/// context (cold start sans UI), on attache silencieusement et la permission
+/// sera demandee au prochain login.
+void attachPatientFcmHandlers({BuildContext? context}) {
+  if (context != null && context.mounted) {
+    unawaited(PermissionHelper.requestNotificationsWithRationale(context));
+  }
   PushService.instance.attachHandlers(
     onTokenChanged: (token) async {
       await ApiService.registerFcmToken(token);
@@ -146,9 +154,11 @@ class _AuthGateState extends State<_AuthGate> {
     if (!mounted) return;
 
     // Sprint M4 — Si deja loggé, brancher FCM (token POST + handlers) au
-    // demarrage de l'app sans attendre un nouveau login.
+    // demarrage de l'app sans attendre un nouveau login. Sprint M6 — passe
+    // le context pour que la rationale UI s'affiche au boot si la permission
+    // n'a jamais ete demandee.
     if (loggedIn) {
-      attachPatientFcmHandlers();
+      attachPatientFcmHandlers(context: context);
     }
 
     Navigator.pushReplacement(

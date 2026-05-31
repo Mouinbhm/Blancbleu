@@ -1,3 +1,5 @@
+import 'package:bb_core/bb_core.dart' show PermissionHelper;
+import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 
 /// Sprint M1 — Service de localisation simplifié.
@@ -25,6 +27,23 @@ class LocationService {
   String? _activeTransportId;
   String? get activeTransportId => _activeTransportId;
 
+  /// Demande la permission de géolocalisation **avec rationale UI**.
+  ///
+  /// Utiliser cette variante depuis l'UI (shift_screen, transport_detail,
+  /// onboarding…) — elle explique l'usage avant la popup système et redirige
+  /// vers les Réglages en cas de refus définitif. La permission est ensuite
+  /// disponible silencieusement pour les flux internes (GPS background).
+  Future<bool> requestPermissionWithRationale(BuildContext context) async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return false;
+    if (!context.mounted) return false;
+    return PermissionHelper.requestLocationWithRationale(context);
+  }
+
+  /// Variante silencieuse — pour les workers/services qui n'ont pas de
+  /// BuildContext. Ne montre PAS de rationale ; à appeler uniquement après
+  /// que [requestPermissionWithRationale] ait été utilisée au moins une fois
+  /// au cours de la session.
   Future<bool> requestPermission() async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return false;

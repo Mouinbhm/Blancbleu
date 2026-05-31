@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging, SentryInit, DeviceIntegrity;
+import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging, SentryInit, DeviceIntegrity, PermissionHelper;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -227,6 +227,9 @@ class _RootState extends State<_Root> {
 
           // Sprint M4 — brancher FCM apres login : POST du token + handlers.
           // PushService est no-op si Firebase non configure (degradation).
+          // Sprint M6 — rationale UI avant la popup permission systeme. Si
+          // refus l'attach continue (le token n'arrivera juste pas).
+          unawaited(PermissionHelper.requestNotificationsWithRationale(context));
           PushService.instance.attachHandlers(
             onTokenChanged: (token) async {
               await ApiClient.instance.registerFcmToken(token);

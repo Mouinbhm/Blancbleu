@@ -59,6 +59,9 @@ export 'src/network/dio_client.dart';
 export 'src/network/socket_manager_base.dart';
 export 'src/network/ssl_pinning.dart';
 
+// permissions — rationale dialogs (Sprint M6)
+export 'src/permissions/permission_helper.dart';
+
 // push (M4)
 export 'src/push/push_service.dart';
 // Réexport pour que les apps n'aient pas à dépendre de firebase_messaging
