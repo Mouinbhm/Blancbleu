@@ -81,3 +81,34 @@ services:
         limits:
           memory: 128M
           cpus: "0.5"
+
+  # ─── Backup MongoDB quotidien (dump gzip + rétention 30j) ─────────────────
+  # Boucle 24h appelant scripts/backup.sh. RPO 24h. Restauration via
+  # scripts/restore.sh (cf. docs/operations.md §6).
+  backup:
+    image: mongo:7
+    container_name: blancbleu-backup
+    restart: always
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URI: mongodb://${MONGO_USER:?MONGO_USER must be set in .env}:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}@mongo:27017/blancbleu?replicaSet=rs0&authSource=admin&directConnection=true
+      BACKUP_DIR: /backups
+      RETENTION_DAYS: "30"
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+      - ./scripts/restore.sh:/restore.sh:ro
+    entrypoint:
+      - bash
+      - -c
+      - |
+        echo "[backup] service démarré — dump quotidien (RPO 24h)"
+        while true; do
+          bash /backup.sh || echo "[backup] échec — nouvelle tentative dans 24h"
+          sleep 86400
+        done
+    logging: *default-logging
+    networks:
+      - blancbleu-net

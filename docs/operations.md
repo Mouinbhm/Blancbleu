@@ -92,6 +92,45 @@ docker compose exec mongo mongorestore \
   --archive=/data/db/backup-2026-05-24.archive --gzip --drop
 ```
 
+### Automatisation — service `backup`
+
+`docker-compose.prod.yml` ajoute un service `backup` (image `mongo:7`) qui
+boucle toutes les 24h sur `scripts/backup.sh` : dump gzip horodaté dans
+`./backups/`, rétention 30 jours, journal `./backups/backup.log`.
+
+```bash
+# Démarré automatiquement avec la stack prod
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# Dump manuel à la demande
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec backup bash /backup.sh
+
+# Restauration (DESTRUCTIF — exige CONFIRM=yes)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  exec -e CONFIRM=yes backup bash /restore.sh blancbleu_20260531_020000.archive
+```
+
+| Objectif | Valeur | Justification                                            |
+| -------- | ------ | -------------------------------------------------------- |
+| **RPO**  | 24h    | un dump quotidien — perte max 24h de données en sinistre |
+| **RTO**  | 2h     | temps de restauration cible (pull image + mongorestore)  |
+
+**Procédure de restauration pas-à-pas**
+
+1. Identifier l'archive : `docker compose ... exec backup ls -1t /backups/`.
+2. Arrêter les écritures applicatives (stopper `server` + `worker`).
+3. Lancer `restore.sh` avec `CONFIRM=yes` (cf. commande ci-dessus).
+4. Vérifier l'intégrité (`mongosh` → `db.transports.countDocuments()`, etc.).
+5. Redémarrer `server` + `worker`.
+
+> **Test de restore mensuel recommandé** : restaurer le dernier dump sur une
+> base jetable (`MONGO_URI` pointant vers une DB temporaire) et valider les
+> compteurs. Un backup jamais testé n'est pas un backup.
+
+> **Chiffrement** : pour ce POC les archives ne sont pas chiffrées. En prod,
+> chiffrer au repos (volume chiffré ou `gpg --symmetric` sur l'archive) et
+> répliquer hors-site (S3/B2 avec SSE).
+
 ### Redis
 
 Le worker traite des jobs idempotents : pas de sauvegarde critique.
