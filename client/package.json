@@ -40,8 +40,29 @@
     "extends": [
       "react-app",
       "react-app/jest",
+      "plugin:jsx-a11y/recommended",
       "prettier"
-    ]
+    ],
+    "plugins": [
+      "jsx-a11y"
+    ],
+    "rules": {
+      "jsx-a11y/click-events-have-key-events": "warn",
+      "jsx-a11y/no-static-element-interactions": "warn",
+      "jsx-a11y/no-noninteractive-element-interactions": "warn",
+      "jsx-a11y/label-has-associated-control": "warn",
+      "jsx-a11y/no-autofocus": [
+        "warn",
+        {
+          "ignoreNonDOM": true
+        }
+      ],
+      "jsx-a11y/anchor-has-content": "error",
+      "jsx-a11y/anchor-is-valid": "error",
+      "jsx-a11y/alt-text": "error",
+      "jsx-a11y/aria-props": "error",
+      "jsx-a11y/aria-role": "error"
+    }
   },
   "jest": {
     "moduleNameMapper": {
@@ -63,6 +84,7 @@
   "devDependencies": {
     "autoprefixer": "^10.4.17",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "postcss": "^8.4.35",
     "prettier": "^3.8.3",
     "tailwindcss": "^3.4.1"

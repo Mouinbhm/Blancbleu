@@ -7,12 +7,8 @@ import { analyticsService, vehicleService, transportService, shiftService } from
 import useSocket from "../hooks/useSocket";
 import DemoControls from "../components/ui/DemoControls";
 
-const HeatmapFlotte = lazy(() =>
-  import("../components/dashboard/HeatmapFlotte"),
-);
-const AlertesFlotte = lazy(() =>
-  import("../components/dashboard/AlertesFlotte"),
-);
+const HeatmapFlotte = lazy(() => import("../components/dashboard/HeatmapFlotte"));
+const AlertesFlotte = lazy(() => import("../components/dashboard/AlertesFlotte"));
 
 const Spinner = () => (
   <div className="flex items-center justify-center py-12 text-slate-400 gap-3">
@@ -48,15 +44,17 @@ export default function Dashboard() {
       const [dashRes, vehiclesRes, transRes, shiftsRes] = await Promise.all([
         analyticsService.dashboard().catch(() => ({ data: null })),
         vehicleService.getAll().catch(() => ({ data: [] })),
-        transportService.getAll({
-          statut: [
-            "EN_ROUTE_TO_PICKUP",
-            "ARRIVED_AT_PICKUP",
-            "PATIENT_ON_BOARD",
-            "ASSIGNED",
-          ].join(","),
-          limit: 10,
-        }).catch(() => ({ data: { transports: [] } })),
+        transportService
+          .getAll({
+            statut: [
+              "EN_ROUTE_TO_PICKUP",
+              "ARRIVED_AT_PICKUP",
+              "PATIENT_ON_BOARD",
+              "ASSIGNED",
+            ].join(","),
+            limit: 10,
+          })
+          .catch(() => ({ data: { transports: [] } })),
         shiftService.getToday().catch(() => ({ data: { shifts: [] } })),
       ]);
 
@@ -65,9 +63,7 @@ export default function Dashboard() {
       const vehData = vehiclesRes.data;
       setVehicles(Array.isArray(vehData) ? vehData : vehData?.vehicles || []);
       const tData = transRes.data;
-      setTransportsActifs(
-        Array.isArray(tData) ? tData : tData?.transports || tData?.data || [],
-      );
+      setTransportsActifs(Array.isArray(tData) ? tData : tData?.transports || tData?.data || []);
     } catch (err) {
       setErreur("Impossible de charger les données du tableau de bord.");
     } finally {
@@ -84,7 +80,10 @@ export default function Dashboard() {
     }
   }, []);
 
-  useEffect(() => { loadData(); loadPrediction(); }, [loadData, loadPrediction]);
+  useEffect(() => {
+    loadData();
+    loadPrediction();
+  }, [loadData, loadPrediction]);
 
   // Refresh général 60s
   useEffect(() => {
@@ -101,13 +100,17 @@ export default function Dashboard() {
   // Temps réel : statut mis à jour (Sprint M2 — event unique transport:status)
   useEffect(() => {
     const u1 = subscribe("transport:status", () => loadData());
-    const u3 = subscribe("shift:started",    () => loadData());
-    const u4 = subscribe("shift:ended",      () => loadData());
-    return () => { u1(); u3(); u4(); };
+    const u3 = subscribe("shift:started", () => loadData());
+    const u4 = subscribe("shift:ended", () => loadData());
+    return () => {
+      u1();
+      u3();
+      u4();
+    };
   }, [subscribe, loadData]);
 
   const disponibles = vehicles.filter((v) => v.statut === "Disponible").length;
-  const enMission   = vehicles.filter((v) => v.statut === "En service").length;
+  const enMission = vehicles.filter((v) => v.statut === "En service").length;
   const sansVehicule = kpis?.transportsSansVehicule ?? 0;
 
   return (
@@ -117,9 +120,7 @@ export default function Dashboard() {
       {/* En-tête */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="font-brand font-bold text-navy text-xl">
-            Tableau de bord
-          </h1>
+          <h1 className="font-brand font-bold text-navy text-xl">Tableau de bord</h1>
           <p className="text-slate-400 text-sm mt-0.5">
             Transport sanitaire non urgent —{" "}
             {new Date().toLocaleDateString("fr-FR", {
@@ -130,7 +131,12 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <DemoControls onSuccess={() => { loadData(); loadPrediction(); }} />
+          <DemoControls
+            onSuccess={() => {
+              loadData();
+              loadPrediction();
+            }}
+          />
           <button
             onClick={() => navigate("/transports/new")}
             className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-md shadow-primary/20"
@@ -152,14 +158,14 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-7">
         <KpiCard
           label="Transports actifs"
-          value={loading ? "…" : kpis?.transportsActifs ?? enMission}
+          value={loading ? "…" : (kpis?.transportsActifs ?? enMission)}
           color="warning"
           icon="directions_car"
           trend="En déplacement"
         />
         <KpiCard
           label="Planifiés aujourd'hui"
-          value={loading ? "…" : kpis?.transportsAujourdhui ?? "—"}
+          value={loading ? "…" : (kpis?.transportsAujourdhui ?? "—")}
           color="primary"
           icon="calendar_month"
           trend={sansVehicule > 0 ? `${sansVehicule} sans véhicule` : "Tous assignés"}
@@ -167,7 +173,7 @@ export default function Dashboard() {
         />
         <KpiCard
           label="Terminés aujourd'hui"
-          value={loading ? "…" : kpis?.transportsTermines ?? "—"}
+          value={loading ? "…" : (kpis?.transportsTermines ?? "—")}
           color="success"
           icon="check_circle"
           trend="Depuis minuit"
@@ -190,7 +196,9 @@ export default function Dashboard() {
             <span className="material-symbols-outlined text-primary text-lg">schedule</span>
             Shifts actifs aujourd'hui
             {activeShifts.length > 0 && (
-              <span className="ml-1 bg-primary text-white text-xs font-mono px-2 py-0.5 rounded-full">{activeShifts.length}</span>
+              <span className="ml-1 bg-primary text-white text-xs font-mono px-2 py-0.5 rounded-full">
+                {activeShifts.length}
+              </span>
             )}
           </h2>
         </div>
@@ -201,12 +209,20 @@ export default function Dashboard() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {activeShifts.map((s) => {
-              const driver  = s.personnelId;
+              const driver = s.personnelId;
               const vehicle = s.vehicleId;
-              const count   = s.transportCount ?? 0;
-              const since   = s.startTime ? new Date(s.startTime).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—";
+              const count = s.transportCount ?? 0;
+              const since = s.startTime
+                ? new Date(s.startTime).toLocaleTimeString("fr-FR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "—";
               return (
-                <div key={String(s._id)} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                <div
+                  key={String(s._id)}
+                  className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm"
+                >
                   <div className="flex items-center gap-2 mb-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
                     <p className="font-bold text-navy text-sm truncate">
@@ -216,7 +232,9 @@ export default function Dashboard() {
                   <p className="text-xs text-slate-500 font-mono mb-1">
                     {vehicle ? `${vehicle.immatriculation} · ${vehicle.type}` : "—"}
                   </p>
-                  <p className="text-xs text-slate-400">Depuis {since} · {count} transport{count !== 1 ? "s" : ""}</p>
+                  <p className="text-xs text-slate-400">
+                    Depuis {since} · {count} transport{count !== 1 ? "s" : ""}
+                  </p>
                 </div>
               );
             })}
@@ -227,12 +245,10 @@ export default function Dashboard() {
       {/* Alerte véhicules sans transport */}
       {sansVehicule > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6 flex items-center gap-3">
-          <span className="material-symbols-outlined text-amber-500">
-            warning
-          </span>
+          <span className="material-symbols-outlined text-amber-500">warning</span>
           <p className="text-sm text-amber-800">
-            <span className="font-bold">{sansVehicule} transport(s)</span>{" "}
-            planifié(s) sans véhicule assigné.
+            <span className="font-bold">{sansVehicule} transport(s)</span> planifié(s) sans véhicule
+            assigné.
             <button
               onClick={() => navigate("/planning")}
               className="ml-2 font-bold text-amber-700 underline"
@@ -248,9 +264,7 @@ export default function Dashboard() {
         <div className="mb-7 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary text-base">
-                insights
-              </span>
+              <span className="material-symbols-outlined text-primary text-base">insights</span>
               <h2 className="font-brand font-bold text-navy text-base uppercase tracking-tight">
                 Prévision flotte — 7 jours
               </h2>
@@ -301,15 +315,10 @@ export default function Dashboard() {
             <Spinner />
           ) : transportsActifs.length === 0 ? (
             <div className="bg-white rounded-xl border border-slate-200 p-10 text-center">
-              <span
-                className="material-symbols-outlined text-slate-300"
-                style={{ fontSize: 48 }}
-              >
+              <span className="material-symbols-outlined text-slate-300" style={{ fontSize: 48 }}>
                 directions_car
               </span>
-              <p className="text-slate-400 text-sm mt-3">
-                Aucun transport en cours
-              </p>
+              <p className="text-slate-400 text-sm mt-3">Aucun transport en cours</p>
               <button
                 onClick={() => navigate("/transports/new")}
                 className="mt-4 bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
@@ -320,11 +329,7 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-3">
               {transportsActifs.map((t) => (
-                <TransportCard
-                  key={t._id}
-                  transport={t}
-                  onRefresh={loadData}
-                />
+                <TransportCard key={t._id} transport={t} onRefresh={loadData} />
               ))}
             </div>
           )}
@@ -351,7 +356,16 @@ export default function Dashboard() {
               {vehicles.slice(0, 8).map((v) => (
                 <div
                   key={v._id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => navigate("/flotte")}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      navigate("/flotte");
+                    }
+                  }}
+                  aria-label={`Ouvrir la flotte — véhicule ${v.immatriculation || v.nom || ""}`}
                   className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between cursor-pointer hover:shadow-sm transition-all"
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -381,9 +395,7 @@ export default function Dashboard() {
                       </span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-navy truncate">
-                        {v.nom}
-                      </p>
+                      <p className="text-sm font-semibold text-navy truncate">{v.nom}</p>
                       <p className="text-xs text-slate-400">{v.type}</p>
                     </div>
                   </div>

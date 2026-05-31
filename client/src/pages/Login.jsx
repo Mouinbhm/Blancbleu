@@ -129,7 +129,9 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} style={s.form} autoComplete="off">
             <div style={s.field}>
-              <label style={s.label}>Adresse email</label>
+              <label htmlFor="login-email" style={s.label}>
+                Adresse email
+              </label>
               <div style={s.wrap}>
                 <svg
                   style={s.ico}
@@ -137,11 +139,13 @@ export default function Login() {
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.8"
+                  aria-hidden="true"
                 >
                   <rect x="2" y="4" width="20" height="16" rx="3" />
                   <path d="M2 7l10 7 10-7" />
                 </svg>
                 <input
+                  id="login-email"
                   type="email"
                   name="email"
                   data-testid="login-email"
@@ -156,7 +160,9 @@ export default function Login() {
 
             <div style={s.field}>
               <div style={s.labelRow}>
-                <label style={s.label}>Mot de passe</label>
+                <label htmlFor="login-password" style={s.label}>
+                  Mot de passe
+                </label>
                 {/* ✅ Link vers /forgot-password — plus de alert() */}
                 <Link to="/forgot-password" style={s.forgot}>
                   Mot de passe oublié ?
@@ -174,6 +180,7 @@ export default function Login() {
                   <path d="M8 11V7a4 4 0 0 1 8 0v4" />
                 </svg>
                 <input
+                  id="login-password"
                   type={showPwd ? "text" : "password"}
                   name="password"
                   data-testid="login-password"
@@ -183,7 +190,12 @@ export default function Login() {
                   style={s.input}
                   autoComplete="new-password"
                 />
-                <button type="button" onClick={() => setShowPwd(!showPwd)} style={s.eye}>
+                <button
+                  type="button"
+                  onClick={() => setShowPwd(!showPwd)}
+                  style={s.eye}
+                  aria-label={showPwd ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                >
                   {showPwd ? (
                     <svg
                       width="18"
