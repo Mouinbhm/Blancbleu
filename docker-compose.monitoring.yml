@@ -1,0 +1,77 @@
+# Stack de monitoring (Prometheus + Grafana + node-exporter).
+#
+# À combiner avec le compose principal pour partager le réseau blancbleu-net :
+#
+#   echo -n "$METRICS_TOKEN" > monitoring/metrics_token   # une fois
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml \
+#     --profile monitoring up -d
+#
+# Grafana : http://localhost:3001  (admin / $GRAFANA_ADMIN_PASSWORD)
+# Prometheus : http://localhost:9090
+#
+# Tous les services portent le profile "monitoring" : ils ne démarrent QUE
+# si --profile monitoring est passé (le compose principal n'est pas impacté).
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: blancbleu-prometheus
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/metrics_token:/etc/prometheus/metrics_token:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - blancbleu-net
+    depends_on:
+      - node-exporter
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: blancbleu-grafana
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - blancbleu-net
+    depends_on:
+      - prometheus
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: blancbleu-node-exporter
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "9100:9100"
+    networks:
+      - blancbleu-net
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  blancbleu-net:
+    driver: bridge

@@ -139,6 +139,36 @@ fait, monter un volume Docker dédié et le sauvegarder avec `tar -czf`.
 | Heap Node                     | Prometheus       | `nodejs_heap_size_used_bytes`                                              |
 | Mongo connexions actives      | mongodb_exporter | `mongodb_connections{state="current"}`                                     |
 
+### Stack de monitoring (Prometheus + Grafana)
+
+Stack fournie dans `docker-compose.monitoring.yml` (profile `monitoring`) :
+Prometheus, Grafana (datasource + dashboard auto-provisionnés), node-exporter.
+
+```bash
+# 1. Écrire le token de scrape (lu par Prometheus, gitignoré)
+echo -n "$METRICS_TOKEN" > monitoring/metrics_token
+
+# 2. Démarrer la stack (réseau partagé avec le compose principal)
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml \
+  --profile monitoring up -d
+```
+
+| Service       | URL                   | Accès                             |
+| ------------- | --------------------- | --------------------------------- |
+| Grafana       | http://localhost:3001 | admin / `$GRAFANA_ADMIN_PASSWORD` |
+| Prometheus    | http://localhost:9090 | —                                 |
+| node-exporter | http://localhost:9100 | métriques système hôte            |
+
+- **Scrape `/metrics`** : Prometheus envoie `Authorization: Bearer <token>`
+  (bloc `authorization.credentials_file`). L'endpoint accepte ce bearer **ou**
+  le header `X-Metrics-Token` (cf. `server/Server.js`).
+- **Dashboard** « BlancBleu — Overview » : latence p50/p95/p99, débit par route,
+  taux 4xx/5xx, profondeur des files BullMQ (gauge `blancbleu_bullmq_queue_jobs`),
+  recommandations dispatch/heure, heap Node, charge hôte. Le panneau MongoDB
+  reste vide tant qu'un `mongodb_exporter` n'est pas ajouté (optionnel POC).
+- **Profile isolé** : sans `--profile monitoring`, le compose principal n'est
+  pas impacté.
+
 ---
 
 ## 5. Scaling
