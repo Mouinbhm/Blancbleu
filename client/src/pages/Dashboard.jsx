@@ -2,6 +2,11 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import KpiCard from "../components/ui/KpiCard";
+import {
+  TransportCardSkeleton,
+  VehicleCardSkeleton,
+  SkeletonList,
+} from "../components/ui/Skeleton";
 import TransportCard from "../components/transport/TransportCard";
 import { analyticsService, vehicleService, transportService, shiftService } from "../services/api";
 import useSocket from "../hooks/useSocket";
@@ -312,7 +317,7 @@ export default function Dashboard() {
           </div>
 
           {loading ? (
-            <Spinner />
+            <SkeletonList count={3} of={TransportCardSkeleton} gap="space-y-3" />
           ) : transportsActifs.length === 0 ? (
             <div className="bg-white rounded-xl border border-slate-200 p-10 text-center">
               <span className="material-symbols-outlined text-slate-300" style={{ fontSize: 48 }}>
@@ -350,7 +355,7 @@ export default function Dashboard() {
           </div>
 
           {loading ? (
-            <Spinner />
+            <SkeletonList count={5} of={VehicleCardSkeleton} />
           ) : (
             <div className="space-y-2">
               {vehicles.slice(0, 8).map((v) => (

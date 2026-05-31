@@ -6,6 +6,7 @@ import api, {
   comptabiliteService,
 } from "../services/api";
 import useSocket from "../hooks/useSocket";
+import { FactureRowSkeleton } from "../components/ui/Skeleton";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -2333,21 +2334,13 @@ export default function Factures() {
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan={9} className="text-center py-16 text-slate-400">
-                  <div
-                    style={{
-                      display: "inline-block",
-                      width: 20,
-                      height: 20,
-                      border: "2px solid #e2e8f0",
-                      borderTop: "2px solid #1D6EF5",
-                      borderRadius: "50%",
-                      animation: "spin .7s linear infinite",
-                    }}
-                  />
-                </td>
-              </tr>
+              <>
+                <FactureRowSkeleton />
+                <FactureRowSkeleton />
+                <FactureRowSkeleton />
+                <FactureRowSkeleton />
+                <FactureRowSkeleton />
+              </>
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={9} className="text-center py-16">
