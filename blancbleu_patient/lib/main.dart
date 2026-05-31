@@ -1,14 +1,28 @@
 import 'dart:async';
 
-import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging, SentryInit, DeviceIntegrity, PermissionHelper;
+import 'package:bb_core/bb_core.dart'
+    show
+        BbLog,
+        PushService,
+        RemoteMessage,
+        FirebaseMessaging,
+        SentryInit,
+        DeviceIntegrity,
+        PermissionHelper,
+        FcmRouter,
+        FcmRoute,
+        fcmId;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 
 import 'config/stripe_config.dart';
 import 'config/theme.dart';
+import 'screens/factures_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/prescriptions_screen.dart';
+import 'screens/transport_detail_screen.dart';
 import 'services/api_service.dart';
 import 'services/notification_service.dart';
 
@@ -66,9 +80,39 @@ class BlancBleuApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       theme: AppTheme.lightTheme,
+      onGenerateRoute: _generateRoute,
       home: const _AuthGate(),
     );
   }
+}
+
+/// Sprint M6 — Routes nommées patient. La home reste `_AuthGate` ; les
+/// onGenerateRoute servent au deep-link FCM (mes courses, factures, PMT).
+Route<dynamic>? _generateRoute(RouteSettings settings) {
+  final name = settings.name ?? '';
+  if (name.startsWith('/my-transport/')) {
+    final id = name.substring('/my-transport/'.length);
+    return MaterialPageRoute(
+      builder: (_) => TransportDetailScreen(transportId: id),
+      settings: settings,
+    );
+  }
+  if (name.startsWith('/invoice/')) {
+    // Pas d'écran détail facture en patient → on ouvre la liste qui scroll
+    // jusqu'à la facture. Compromis acceptable, à raffiner quand l'écran
+    // détail existera.
+    return MaterialPageRoute(
+      builder: (_) => const FacturesScreen(),
+      settings: settings,
+    );
+  }
+  if (name.startsWith('/prescription/')) {
+    return MaterialPageRoute(
+      builder: (_) => const PrescriptionsScreen(),
+      settings: settings,
+    );
+  }
+  return null;
 }
 
 /// Sprint M4 — Branche les handlers FCM patient (token POST + foreground notif
@@ -105,35 +149,43 @@ void attachPatientFcmHandlers({BuildContext? context}) {
   );
 }
 
-/// Sprint M4 — Routing deep-link FCM (patient).
-/// Pour M4 : feedback simple (snackbar). Routes nommees pleines arrivent
-/// avec la migration des ecrans en CP3 du Sprint M3 (cubits + repositories).
+/// Sprint M6 — Router FCM côté patient. Les routes ciblent /my-transport/:id
+/// (cycle de vie de SA course), /invoice/:id (paiement encaissé) et
+/// /prescription/:id (PMT créée ou validée).
+final FcmRouter _fcmRouter = FcmRouter(
+  navigatorKey: BlancBleuApp.navigatorKey,
+  routes: {
+    'transport_assigned': (data) {
+      final id = fcmId(data, 'transportId');
+      return id == null ? null : FcmRoute('/my-transport/$id');
+    },
+    'transport_status': (data) {
+      final id = fcmId(data, 'transportId');
+      return id == null ? null : FcmRoute('/my-transport/$id');
+    },
+    'payment_completed': (data) {
+      final id = fcmId(data, 'factureId');
+      return id == null ? null : FcmRoute('/invoice/$id');
+    },
+    'facture': (data) {
+      // Alias legacy : ancien type "facture" → idem payment_completed.
+      final id = fcmId(data, 'factureId');
+      return id == null ? null : FcmRoute('/invoice/$id');
+    },
+    'new_prescription': (data) {
+      final id = fcmId(data, 'prescriptionId');
+      return id == null ? null : FcmRoute('/prescription/$id');
+    },
+    'message_received': (data) {
+      final convId = fcmId(data, 'conversationId');
+      return convId == null ? null : FcmRoute('/chat/$convId');
+    },
+  },
+);
+
 void _handleFcmDeepLink(RemoteMessage msg) {
-  final type = msg.data['type']?.toString();
-  final transportId = msg.data['transportId']?.toString();
-  // M5 — log type seulement (no-op release via BbLog).
-  BbLog.d('[FCM tap patient] type=$type');
-
-  final ctx = BlancBleuApp.navigatorKey.currentContext;
-  if (ctx == null) return;
-  final messenger = ScaffoldMessenger.maybeOf(ctx);
-  if (messenger == null || type == null) return;
-
-  String label;
-  switch (type) {
-    case 'transport_status':
-      label = 'Mise à jour transport ${transportId ?? ""}';
-      break;
-    case 'transport_assigned':
-      label = 'Véhicule attribué — transport ${transportId ?? ""}';
-      break;
-    case 'facture':
-      label = 'Nouvelle facture disponible';
-      break;
-    default:
-      label = 'Notification reçue';
-  }
-  messenger.showSnackBar(SnackBar(content: Text(label)));
+  BbLog.d('[FCM tap patient] type=${msg.data['type']}');
+  _fcmRouter.route(msg);
 }
 
 class _AuthGate extends StatefulWidget {
