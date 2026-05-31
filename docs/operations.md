@@ -279,6 +279,39 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 - Jobs informatifs (continue-on-error) : `lint`, `audit`, `docker-build`, `e2e`.
 - Coverage gate : 60 % minimum côté server (à monter à 80 %).
 
+### Déploiement continu (CD)
+
+| Workflow                | Déclencheur                         | Cible      | Tags images                |
+| ----------------------- | ----------------------------------- | ---------- | -------------------------- |
+| `deploy-staging.yml`    | push `develop` **ou** manuel        | staging    | `<sha>` + `staging-latest` |
+| `deploy-production.yml` | **manuel uniquement** (+ `CONFIRM`) | production | `production-{version}`     |
+
+- **Pipeline** : gate de tests → build & push 3 images (GHCR) → deploy SSH
+  (`appleboy/ssh-action`) → healthcheck `/api/health` (retry 5×).
+- **Prod = manuel** : `workflow_dispatch` avec saisie `version` + `confirm`
+  (doit valoir exactement `CONFIRM`). **Rollback automatique** vers la version
+  précédente (`.deployed_tag` sur le host) si le healthcheck échoue.
+- GitHub ne supporte pas `needs:` inter-workflows : le gate de tests est
+  ré-exécuté dans chaque workflow de déploiement (ne pas présumer que ci.yml
+  a tourné).
+
+**Secrets GitHub à configurer** (Settings → Secrets and variables → Actions) :
+
+| Secret            | Usage                                                           |
+| ----------------- | --------------------------------------------------------------- |
+| `STAGING_HOST`    | IP/hostname du serveur staging                                  |
+| `STAGING_USER`    | utilisateur SSH staging                                         |
+| `STAGING_SSH_KEY` | clé privée SSH staging                                          |
+| `PROD_HOST`       | IP/hostname du serveur production                               |
+| `PROD_USER`       | utilisateur SSH production                                      |
+| `PROD_SSH_KEY`    | clé privée SSH production                                       |
+| `GITHUB_TOKEN`    | fourni automatiquement — push GHCR (pas de `GHCR_TOKEN` requis) |
+
+> **Prérequis host** : `/opt/blancbleu` contient `.env` + un override compose
+> mappant chaque service sur son image GHCR
+> (`image: ghcr.io/<owner>/blancbleu-<svc>:${IMAGE_TAG}`) pour que `docker
+compose pull` tire les images publiées plutôt que de rebuild localement.
+
 ---
 
 ## 8. Suppression d'entités métier (intégrité référentielle)
