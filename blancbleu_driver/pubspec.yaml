@@ -52,6 +52,10 @@ dependencies:
   connectivity_plus: ^5.0.2
   workmanager: ^0.5.2
 
+  # Offline-first queue (Sprint M6)
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
   # PDF & printing
   pdf: ^3.10.7
   printing: ^5.11.0

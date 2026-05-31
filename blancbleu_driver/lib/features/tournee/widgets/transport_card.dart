@@ -5,7 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../cubit/tournee_cubit.dart';
-import '../../../core/network/api_client.dart';
+import '../../../core/offline/action_queue.dart';
 import '../../../shared/theme/app_theme.dart';
 
 // ── Status configuration ──────────────────────────────────────────────────────
@@ -141,8 +141,15 @@ class _TransportCardState extends State<TransportCard> {
     if (id == null) return;
     setState(() => _loading = true);
     try {
-      await ApiClient.instance.updateTransportStatus(id, newStatus);
+      // Sprint M6 — offline-first : enqueue plutôt qu'appel direct. Si
+      // online la queue exécute immédiatement, sinon l'action sera
+      // rejouée au retour réseau (zones blanches montagne/parking).
+      await ActionQueue.instance.enqueue(
+        QueuedAction.transportStatus(transportId: id, newStatus: newStatus),
+      );
       if (mounted) {
+        // Update optimiste du cubit — l'utilisateur voit l'effet immédiat ;
+        // si la sync échoue plus tard, la prochaine SyncService.sync() corrigera.
         context.read<TourneeCubit>().updateTransportStatus(id, newStatus);
       }
     } catch (e) {

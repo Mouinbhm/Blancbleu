@@ -59,8 +59,13 @@ export 'src/network/dio_client.dart';
 export 'src/network/socket_manager_base.dart';
 export 'src/network/ssl_pinning.dart';
 
+// permissions — rationale dialogs (Sprint M6)
+export 'src/permissions/permission_helper.dart';
+
 // push (M4)
 export 'src/push/push_service.dart';
+// push deep-link routing (M6)
+export 'src/push/fcm_router.dart';
 // Réexport pour que les apps n'aient pas à dépendre de firebase_messaging
 // directement. Le handler background top-level DOIT être déclaré dans l'app
 // elle-même (contrainte FCM) — d'où l'export de FirebaseMessaging pour que

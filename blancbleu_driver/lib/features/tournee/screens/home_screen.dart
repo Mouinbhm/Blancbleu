@@ -15,6 +15,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/utils/constants.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/offline_banner.dart';
+import '../../../shared/widgets/queued_actions_badge.dart';
 
 class HomeScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -372,6 +373,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         child: Column(children: [
           _buildHeader(),
           const OfflineBanner(),
+          // Sprint M6 — badge actions en attente (queue offline). Auto-caché
+          // si pendingCount == 0 ; affiche un chip orange/rouge sinon.
+          const Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: EdgeInsets.only(top: 4, right: 8),
+              child: QueuedActionsBadge(),
+            ),
+          ),
           Expanded(
             child: BlocBuilder<TourneeCubit, TourneeState>(
               builder: (context, tourneeState) {

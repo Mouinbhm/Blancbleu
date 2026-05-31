@@ -194,6 +194,10 @@ class _ShiftScreenState extends State<ShiftScreen> {
   }
 
   Future<void> _sendSos() async {
+    // Sprint M6 — rationale UI avant la popup système, indispensable pour
+    // les chauffeurs qui voient la demande hors contexte sinon.
+    await LocationService.instance.requestPermissionWithRationale(context);
+    if (!mounted) return;
     final pos = await LocationService.instance.getCurrentPosition();
     if (!mounted) return;
     final shiftState = context.read<ShiftCubit>().state;

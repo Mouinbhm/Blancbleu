@@ -1,6 +1,17 @@
 import 'dart:async';
 
-import 'package:bb_core/bb_core.dart' show BbLog, PushService, RemoteMessage, FirebaseMessaging, SentryInit, DeviceIntegrity;
+import 'package:bb_core/bb_core.dart'
+    show
+        BbLog,
+        PushService,
+        RemoteMessage,
+        FirebaseMessaging,
+        SentryInit,
+        DeviceIntegrity,
+        PermissionHelper,
+        FcmRouter,
+        FcmRoute,
+        fcmId;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -9,12 +20,14 @@ import 'core/network/api_client.dart';
 import 'core/network/socket_manager.dart';
 import 'core/network/sync_service.dart';
 import 'core/notifications/notification_service.dart';
+import 'core/offline/action_queue.dart';
 import 'core/theme/theme_notifier.dart';
 import 'features/auth/cubit/auth_cubit.dart';
 import 'features/tournee/cubit/tournee_cubit.dart';
 import 'features/shift/cubit/shift_cubit.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/tournee/screens/home_screen.dart';
+import 'features/transport/screens/transport_detail_screen.dart';
 import 'services/gps_service.dart';
 import 'shared/theme/app_theme.dart';
 
@@ -37,6 +50,10 @@ void main() async {
   try { await GpsService.init(); } catch (e) { debugPrint('[main] GpsService.init error: $e'); }
   try { await ThemeNotifier.instance.init(); } catch (e) { debugPrint('[main] ThemeNotifier.init error: $e'); }
   try { await NotificationService.init(); } catch (e) { debugPrint('[main] NotificationService.init error: $e'); }
+  // Sprint M6 — file d'actions offline (zones blanches). init() ouvre la box
+  // Hive + abonne le Connectivity listener. Reste no-op tant qu'aucune action
+  // n'est enqueue.
+  try { await ActionQueue.instance.init(); } catch (e) { debugPrint('[main] ActionQueue.init error: $e'); }
 
   // Sprint M4 — Firebase Cloud Messaging (degradation gracieuse).
   // PushService.init() catch en interne — si la config Firebase est absente
@@ -92,6 +109,7 @@ class BlancBleuDriverApp extends StatelessWidget {
           theme: AppTheme.theme,
           darkTheme: AppTheme.darkTheme,
           themeMode: ThemeNotifier.instance.mode,
+          onGenerateRoute: _generateRoute,
           home: const _Root(),
         ),
       ),
@@ -99,46 +117,66 @@ class BlancBleuDriverApp extends StatelessWidget {
   }
 }
 
-/// Sprint M4 — Routing deep-link depuis un push FCM (data.type).
-/// Appelé par onMessageTap (background) et getInitialMessage (app tuée).
-/// Reste minimal : log + snackbar le temps qu'on ajoute les routes nommees.
-void _handleFcmDeepLink(RemoteMessage msg) {
-  final nav = BlancBleuDriverApp.navigatorKey.currentState;
-  final ctx = nav?.context;
-  final type = msg.data['type']?.toString();
-  final transportId = msg.data['transportId']?.toString();
-  // M5 — log type seulement (transportId est un id Mongo, OK). Pas de `data`
-  // brut pour éviter de fuiter quoi que ce soit dans logcat release.
-  BbLog.d('[FCM tap] type=$type');
-
-  if (ctx == null) return;
-  // TODO M5 — quand les routes nommees (/transports/:id, /chat, /shift)
-  // seront en place, naviguer via Navigator.of(ctx).pushNamed('/transports/$id').
-  // Pour l'instant : feedback visuel + sync de la tournee (l'utilisateur
-  // verra le transport apparaitre dans la liste).
-  final messenger = ScaffoldMessenger.maybeOf(ctx);
-  if (messenger != null && type != null) {
-    String label;
-    switch (type) {
-      case 'transport_assigned':
-        label = 'Nouvelle mission : ${transportId ?? ""}';
-        SyncService.instance.sync();
-        break;
-      case 'transport_status':
-        label = 'Mise à jour transport ${transportId ?? ""}';
-        SyncService.instance.sync();
-        break;
-      case 'shift_forced_end':
-        label = 'Votre shift a été terminé.';
-        break;
-      case 'message_dispatcher':
-        label = 'Nouveau message du dispatcher';
-        break;
-      default:
-        label = 'Notification reçue';
-    }
-    messenger.showSnackBar(SnackBar(content: Text(label)));
+/// Sprint M6 — Routes nommées driver. `home: _Root` reste la racine ; les
+/// onGenerateRoute servent uniquement aux deep-links FCM (transport assigné,
+/// chat dispatcher, prescription).
+Route<dynamic>? _generateRoute(RouteSettings settings) {
+  final name = settings.name ?? '';
+  // /transport/<id>
+  if (name.startsWith('/transport/')) {
+    final id = name.substring('/transport/'.length);
+    final args = <String, dynamic>{'_id': id, 'id': id};
+    return MaterialPageRoute(
+      builder: (_) => TransportDetailScreen(transport: args),
+      settings: settings,
+    );
   }
+  // /chat/<conversationId> — pas encore implémenté côté driver, fallback Home.
+  // Les routes inconnues retombent sur la home (évite un écran blanc si le
+  // backend pousse un type non géré côté mobile).
+  return null;
+}
+
+/// Sprint M6 — Router FCM (remplace _handleFcmDeepLink + snackbar). Mappe
+/// chaque `data.type` vers une route nommée. Les transports/statuts
+/// déclenchent en plus une sync pour rafraîchir la tournée locale.
+final FcmRouter _fcmRouter = FcmRouter(
+  navigatorKey: BlancBleuDriverApp.navigatorKey,
+  routes: {
+    'transport_assigned': (data) {
+      SyncService.instance.sync();
+      final id = fcmId(data, 'transportId');
+      return id == null ? null : FcmRoute('/transport/$id');
+    },
+    'transport_status': (data) {
+      SyncService.instance.sync();
+      final id = fcmId(data, 'transportId');
+      return id == null ? null : FcmRoute('/transport/$id');
+    },
+    'message_received': (data) {
+      final convId = fcmId(data, 'conversationId');
+      return convId == null ? null : FcmRoute('/chat/$convId');
+    },
+    'payment_completed': (data) {
+      final id = fcmId(data, 'factureId');
+      return id == null ? null : FcmRoute('/invoice/$id');
+    },
+    'new_prescription': (data) {
+      final id = fcmId(data, 'prescriptionId');
+      return id == null ? null : FcmRoute('/prescription/$id');
+    },
+    // shift_forced_end : pas de route — l'app refresh via SyncService au
+    // foreground et l'utilisateur voit le shift fermé.
+    'shift_forced_end': (data) {
+      SyncService.instance.sync();
+      return null;
+    },
+  },
+);
+
+void _handleFcmDeepLink(RemoteMessage msg) {
+  BbLog.d('[FCM tap] type=${msg.data['type']}');
+  _fcmRouter.route(msg);
 }
 
 class _Root extends StatefulWidget {
@@ -227,6 +265,9 @@ class _RootState extends State<_Root> {
 
           // Sprint M4 — brancher FCM apres login : POST du token + handlers.
           // PushService est no-op si Firebase non configure (degradation).
+          // Sprint M6 — rationale UI avant la popup permission systeme. Si
+          // refus l'attach continue (le token n'arrivera juste pas).
+          unawaited(PermissionHelper.requestNotificationsWithRationale(context));
           PushService.instance.attachHandlers(
             onTokenChanged: (token) async {
               await ApiClient.instance.registerFcmToken(token);
