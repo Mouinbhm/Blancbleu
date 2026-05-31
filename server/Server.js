@@ -16,7 +16,7 @@ const _sentryEnabled = !!initSentry();
 
 const logger = require("./utils/logger");
 const httpLogger = require("./middleware/httpLogger");
-const { healthHandler } = require("./utils/healthCheck");
+const { healthHandler, detailedHealthHandler } = require("./utils/healthCheck");
 const { noSqlSanitize, xssSanitize } = require("./middleware/sanitize");
 const { globalLimiter } = require("./middleware/rateLimiter");
 const { setupSwagger } = require("./middleware/swagger");
