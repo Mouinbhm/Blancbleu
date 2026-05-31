@@ -11,10 +11,10 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docker.com)
 [![CI](https://github.com/Mouinbhm/blancbleu/actions/workflows/ci.yml/badge.svg)](https://github.com/Mouinbhm/blancbleu/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/Licence-MIT-blue)](LICENSE)
+[![Projet](https://img.shields.io/badge/Projet-Fin%20d'%C3%A9tudes-blue)](#-auteur)
 
 > Système de dispatch, suivi GPS temps réel et assistance IA pour la gestion des transports médicaux — Nice, Alpes-Maritimes.
-> Application mobile patient disponible sur Android & iOS.
+> Applications mobiles patient & chauffeur sur Android & iOS.
 
 </div>
 
@@ -41,17 +41,20 @@
 
 ---
 
-## Présentation
+## 🎯 Présentation
 
-**Ambulances Blanc Bleu** est une plateforme complète de gestion du transport sanitaire non urgent (VSL, TPMR, Ambulance) composée de trois parties :
+**Ambulances Blanc Bleu** est une plateforme complète de gestion du transport sanitaire non urgent (VSL, TPMR, Ambulance) composée de quatre parties :
 
 - **Application web** (React) — interface dispatcher/admin pour gérer le cycle de vie complet d'un transport : réservation, assignation de véhicule, suivi GPS temps réel, facturation
-- **Application mobile** (Flutter) — interface patient pour réserver un transport, suivre son ambulance en direct, gérer ses prescriptions et consulter ses factures (Android & iOS)
+- **Application mobile patient** (Flutter) — réserver un transport, suivre son ambulance en direct, gérer ses prescriptions et consulter ses factures (Android & iOS)
+- **Application mobile chauffeur** (Flutter) — recevoir les missions, accepter/refuser, émettre la position GPS temps réel, signature patient, mode offline-first pour les zones blanches
 - **Microservice IA** (FastAPI / Python) — scoring de dispatch (système expert rule-based), prédicteur de durée (POC ML), extraction de PMT par OCR, optimisation de tournées (cf. [`ai-service/MODEL_CARD.md`](ai-service/MODEL_CARD.md) pour la posture officielle)
+
+Les deux apps Flutter partagent un package commun **`bb_core`** (modèles typés, client réseau, push FCM, permissions, deep-links).
 
 ---
 
-## Fonctionnalités
+## ✨ Fonctionnalités
 
 ### Transport & Dispatch
 
@@ -88,7 +91,17 @@
 - Historique des transports et des factures
 - Paiement en ligne via Stripe
 - Authentification sécurisée avec persistance de session (shared_preferences)
+- Notifications push FCM avec deep-links vers l'écran concerné
 - Interface Material 3 adaptée aux patients
+
+### Application mobile chauffeur (Flutter)
+
+- Réception des missions assignées en temps réel (Socket.IO + push FCM critique)
+- Acceptation / refus de mission, transitions de statut au fil de la course
+- Émission de la position GPS en arrière-plan (isolate dédié)
+- Signature du patient (preuve de prise en charge) et dépôt de PMT
+- **Offline-first** : file d'actions persistée (Hive) rejouée au retour réseau — conçu pour les zones blanches (tunnels, parkings, montagne)
+- Demandes de permission avec dialogues de justification (rationale) avant la popup système
 
 ### Système & Sécurité
 
@@ -102,7 +115,7 @@
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 Documentation complète (3 diagrammes Mermaid — contexte, conteneurs, séquence) :
 **[docs/architecture.md](docs/architecture.md)**.
@@ -142,25 +155,25 @@ graph TB
 
 ---
 
-## Stack technique
+## 🛠️ Stack technique
 
-| Couche               | Technologies                                                                   |
-| -------------------- | ------------------------------------------------------------------------------ |
-| **Web (Frontend)**   | React 19, React Router 7, Tailwind CSS 3, Leaflet, Chart.js, Socket.io-client  |
-| **Mobile**           | Flutter 3, Dart, flutter_map, flutter_stripe, shared_preferences, google_fonts |
-| **Backend**          | Node.js 20, Express 4, Socket.IO 4, Winston, Swagger UI                        |
-| **Base de données**  | MongoDB 7, Mongoose 8                                                          |
-| **Authentification** | JWT (access + refresh token), bcryptjs, cookies httpOnly                       |
-| **IA**               | FastAPI (Python), Tesseract OCR                                                |
-| **Cartographie**     | Leaflet, React-Leaflet, flutter_map, OSRM routing, BAN géocodage               |
-| **Paiement**         | Stripe (flutter_stripe)                                                        |
-| **Email**            | Nodemailer (SMTP)                                                              |
-| **Infrastructure**   | Docker, Docker Compose                                                         |
-| **Tests**            | Jest (backend), React Testing Library (frontend), flutter_test                 |
+| Couche               | Technologies                                                                                                                  |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Web (Frontend)**   | React 19, React Router 7, Tailwind CSS 3, Leaflet, Chart.js, Socket.io-client                                                 |
+| **Mobile**           | Flutter 3, Dart, flutter_map, flutter_stripe, Firebase Messaging (FCM), Hive (offline), connectivity_plus, permission_handler |
+| **Backend**          | Node.js 20, Express 4, Socket.IO 4, Winston, Swagger UI                                                                       |
+| **Base de données**  | MongoDB 7, Mongoose 8                                                                                                         |
+| **Authentification** | JWT (access + refresh token), bcryptjs, cookies httpOnly                                                                      |
+| **IA**               | FastAPI (Python), Tesseract OCR                                                                                               |
+| **Cartographie**     | Leaflet, React-Leaflet, flutter_map, OSRM routing, BAN géocodage                                                              |
+| **Paiement**         | Stripe (flutter_stripe)                                                                                                       |
+| **Email**            | Nodemailer (SMTP)                                                                                                             |
+| **Infrastructure**   | Docker, Docker Compose                                                                                                        |
+| **Tests**            | Jest (backend), React Testing Library (frontend), flutter_test                                                                |
 
 ---
 
-## Prérequis
+## 📋 Prérequis
 
 **Web & Backend**
 
@@ -177,7 +190,7 @@ graph TB
 
 ---
 
-## Installation
+## ⚙️ Installation
 
 ### 1. Cloner le dépôt
 
@@ -219,14 +232,25 @@ uvicorn main:app --host 0.0.0.0 --port 5002 --reload
 
 ---
 
-## Application mobile (Flutter)
+## 📱 Application mobile (Flutter)
 
-L'application patient `blancbleu_patient` est un projet Flutter indépendant ciblant Android et iOS.
+Deux applications Flutter indépendantes ciblant Android et iOS, partageant le
+package commun `packages/bb_core` (modèles, réseau, push, permissions, deep-links) :
+
+| Projet              | Cible                                      |
+| ------------------- | ------------------------------------------ |
+| `blancbleu_patient` | App patient (réservation, suivi, paiement) |
+| `blancbleu_driver`  | App chauffeur (missions, GPS, offline)     |
 
 ### Installation
 
 ```bash
+# App patient
 cd blancbleu_patient
+flutter pub get
+
+# App chauffeur
+cd ../blancbleu_driver
 flutter pub get
 ```
 
@@ -261,26 +285,26 @@ static const String baseUrl = 'http://192.168.x.x:5000/api';
 static const String baseUrl = 'https://api.blancbleu.fr/api';
 ```
 
-### Screens disponibles
+### Écrans de l'app patient
 
-| Screen                     | Description               |
-| -------------------------- | ------------------------- |
-| `LoginScreen`              | Connexion patient         |
-| `SignupScreen`             | Inscription               |
-| `HomeScreen`               | Tableau de bord patient   |
-| `NouveauTransportScreen`   | Réserver un transport     |
-| `TransportsScreen`         | Historique des transports |
-| `TransportDetailScreen`    | Détail d'un transport     |
-| `TrackingScreen`           | Suivi GPS temps réel      |
-| `PrescriptionsScreen`      | Gestion des PMT           |
-| `NouvelleOrdonnanceScreen` | Déposer une prescription  |
-| `FacturesScreen`           | Factures & paiements      |
-| `ProfileScreen`            | Profil utilisateur        |
-| `NotificationsScreen`      | Notifications             |
+| Écran                        | Description               |
+| ---------------------------- | ------------------------- |
+| `LoginScreen`                | Connexion patient         |
+| `SignupScreen`               | Inscription               |
+| `HomeScreen`                 | Tableau de bord patient   |
+| `NouveauTransportScreen`     | Réserver un transport     |
+| `TransportsScreen`           | Historique des transports |
+| `TransportDetailScreen`      | Détail d'un transport     |
+| `TrackingScreen`             | Suivi GPS temps réel      |
+| `PrescriptionsScreen`        | Gestion des PMT           |
+| `NouvellePrescriptionScreen` | Déposer une prescription  |
+| `FacturesScreen`             | Factures & paiements      |
+| `ProfileScreen`              | Profil utilisateur        |
+| `NotificationsScreen`        | Notifications             |
 
 ---
 
-## Variables d'environnement
+## 🔐 Variables d'environnement
 
 Copier `.env.example` en `.env` à la racine et renseigner toutes les valeurs :
 
@@ -320,7 +344,7 @@ ADMIN_PRENOM=BlancBleu
 
 ---
 
-## Premier démarrage
+## 🚀 Premier démarrage
 
 ### Créer le premier compte administrateur
 
@@ -347,7 +371,7 @@ curl -X POST http://localhost:5000/api/demo/reset
 
 ---
 
-## Docker
+## 🐳 Docker
 
 Démarrer l'ensemble de la stack (MongoDB + Backend + IA + Frontend) en une seule commande :
 
@@ -369,7 +393,7 @@ docker-compose down -v
 | --------------------- | -------------------------------------------------------- |
 | Frontend React        | http://localhost                                         |
 | API REST              | http://localhost:5000/api                                |
-| Documentation Swagger | http://localhost:5000/api/docs                           |
+| Documentation Swagger | http://localhost:5000/api-docs _(dev uniquement)_        |
 | Microservice IA       | http://localhost:5002                                    |
 | Health check          | http://localhost:5000/api/health                         |
 | Métriques Prometheus  | http://localhost:5000/metrics (header `X-Metrics-Token`) |
@@ -387,13 +411,18 @@ Voir [docs/operations.md](docs/operations.md) pour le runbook complet (backup, s
 
 ---
 
-## Documentation API
+## 📖 Documentation API
 
-La documentation interactive Swagger est disponible à l'adresse :
+La documentation interactive **Swagger UI** (OpenAPI 3.0) est disponible à l'adresse :
 
 ```
-http://localhost:5000/api/docs
+http://localhost:5000/api-docs
 ```
+
+> Active en développement uniquement. En production, elle reste désactivée sauf
+> `SWAGGER_IN_PROD=true` (à protéger derrière une auth admin). Spec brute
+> téléchargeable sur `/api-docs.json` ou régénérable via `npm --prefix server run docs:openapi`.
+> Détails dans **[docs/api.md](docs/api.md)**.
 
 ### Principales routes
 
@@ -415,7 +444,7 @@ http://localhost:5000/api/docs
 
 ---
 
-## Structure du projet
+## 📂 Structure du projet
 
 ```
 blancbleu/
@@ -431,36 +460,44 @@ blancbleu/
 │       └── services/              # api.js (Axios + tous les services)
 │
 ├── server/                        # Backend Express
-│   ├── controllers/               # Logique métier par domaine
-│   ├── middleware/                # auth, rateLimiter, sanitize, ...
-│   ├── models/                    # Schémas Mongoose (15 modèles)
-│   ├── routes/                    # Définition des routes REST
-│   ├── services/                  # simulationGPS, transportLifecycle,
-│   │                              # emailService, socketService
+│   ├── controllers/               # Logique métier par domaine (transport/ éclaté)
+│   ├── middleware/                # auth, rateLimiter, sanitize, swagger, ...
+│   ├── models/                    # Schémas Mongoose (23 modèles)
+│   ├── routes/                    # 27 routeurs REST
+│   ├── services/                  # transportLifecycle, transportStateMachine,
+│   │                              # tarifService, emailService, socketService
+│   ├── docs/                      # openapi-components.js, openapi.json
 │   ├── utils/                     # logger, geocodeUtils, healthCheck
-│   └── scripts/                   # create-admin.js
+│   ├── scripts/                   # create-admin.js, sync-indexes.js, ...
+│   └── __tests__/                 # 30 suites Jest (unit + integration)
 │
 ├── ai-service/                    # Microservice IA Python / FastAPI
 │   ├── routers/                   # pmt, dispatch, routing
+│   ├── MODEL_CARD.md              # Posture officielle des modèles
 │   └── main.py
 │
-├── blancbleu_patient/             # Application mobile Flutter (patient)
-│   ├── android/                   # Code natif Android
-│   ├── ios/                       # Code natif iOS
-│   └── lib/
-│       ├── config/                # theme.dart, stripe_config.dart
-│       ├── screens/               # 13 screens (login, tracking, ...)
-│       ├── services/              # api_service.dart
-│       └── widgets/               # app_bottom_nav.dart, ...
+├── packages/bb_core/             # Package Flutter partagé (patient + chauffeur)
+│   └── lib/src/                   # models, network, push (FCM + deep-links),
+│                                  # permissions, storage, observability
 │
+├── blancbleu_patient/             # App mobile Flutter — patient
+│   └── lib/                       # config, screens, services, widgets
+│
+├── blancbleu_driver/              # App mobile Flutter — chauffeur
+│   └── lib/                       # core (offline, network), features
+│                                  # (tournee, shift, transport, chat)
+│
+├── client/                        # Frontend React (cf. arbre ci-dessus)
+├── docs/                          # Architecture, RGPD, API, sécurité, ops, ...
+├── e2e/                           # Tests end-to-end Playwright
 ├── .env.example                   # Template des variables d'environnement
-├── docker-compose.yml             # Orchestration complète 4 services
+├── docker-compose.yml             # Orchestration complète
 └── README.md
 ```
 
 ---
 
-## Tests
+## 🧪 Tests
 
 ```bash
 # Backend — Jest
@@ -482,7 +519,7 @@ npm run test:e2e
 
 ---
 
-## Conformité RGPD
+## 🔒 Conformité RGPD
 
 La plateforme traite des **données de santé** (catégorie particulière,
 art. 9 RGPD). Le cadrage de conformité est documenté dans 3 fichiers
@@ -505,21 +542,24 @@ confirmReason obligatoire, 7 tests d'intégration).
 
 ---
 
-## Documentation opérationnelle
+## 📚 Documentation opérationnelle
 
 | Document                                                       | Contenu                                                               |
 | -------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [docs/architecture.md](docs/architecture.md)                   | 3 diagrammes Mermaid : contexte, conteneurs, séquence                 |
+| [docs/api.md](docs/api.md)                                     | Guide Swagger / OpenAPI : accès, auth, régénération de la spec        |
 | [docs/operations.md](docs/operations.md)                       | Déploiement prod, sauvegardes, monitoring, scaling, runbook incidents |
 | [docs/security.md](docs/security.md)                           | Auth, secrets, audit, dépendances, divulgation responsable            |
 | [docs/mobile-security.md](docs/mobile-security.md)             | Sécurité apps Flutter (pinning, secure storage, logger no-op, Sentry) |
-| [docs/architecture.md](docs/architecture.md)                   | 3 diagrammes Mermaid : contexte, conteneurs, séquence                 |
+| [docs/a11y.md](docs/a11y.md)                                   | Accessibilité web : règles jsx-a11y, conventions, audit               |
+| [docs/socket-events.md](docs/socket-events.md)                 | Catalogue des événements Socket.IO temps réel                         |
 | [docs/ia-dispatch-scoring.md](docs/ia-dispatch-scoring.md)     | Algorithme de scoring dispatch                                        |
 | [docs/ia-duration-predictor.md](docs/ia-duration-predictor.md) | Modèle de prédiction de durée                                         |
 | [docs/ocr-benchmark.md](docs/ocr-benchmark.md)                 | Benchmark OCR PMT                                                     |
 
 ---
 
-## Auteur
+## 👤 Auteur
 
 **Mouin Ben Hadj Mohamed**
 Projet de Fin d'Études (PFE) — Développement web full-stack
