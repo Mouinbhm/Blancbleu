@@ -298,11 +298,12 @@ const transportSchema = new mongoose.Schema(
     // ── Patient ref (entité propre) ───────────────────────────────────────────
     // Si le patient est enregistré en base, on stocke son ID ici.
     // Le sous-document patient reste pour la rétrocompatibilité et l'archivage.
+    // Note: pas d'index single ici — couvert par le composite { patientId, statut }
+    // ajouté plus bas (préfixe gauche sert aussi les requêtes patientId seul).
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Patient",
       default: null,
-      index: true,
     },
 
     // ── Prescription ref (entité propre) ──────────────────────────────────────
@@ -347,6 +348,15 @@ const transportSchema = new mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     deletedAt: { type: Date, default: null },
     notes: { type: String, default: "" },
+
+    // ── Cascade soft-flags ───────────────────────────────────────────────────
+    // Renseignés par les hooks pre("findOneAndDelete") de Vehicle/Personnel
+    // quand l'entité référencée est supprimée. Le Transport est préservé pour
+    // l'audit/facturation, mais le front peut afficher "véhicule retiré".
+    vehiculeDeleted: { type: Boolean, default: false },
+    vehiculeDeletedAt: { type: Date, default: null },
+    chauffeurDeleted: { type: Boolean, default: false },
+    chauffeurDeletedAt: { type: Date, default: null },
 
     // ── Origine de la demande ─────────────────────────────────────────────────
     origine: { type: String, default: "" },
@@ -401,6 +411,11 @@ transportSchema.index({ createdAt: -1 });
 // 2dsphere sur les adresses pour les requêtes géospatiales (calcul ETA, dispatch)
 transportSchema.index({ "adresseDepart.location": "2dsphere" });
 transportSchema.index({ "adresseDestination.location": "2dsphere" });
+// Composites pour les patterns fréquents : missions par chauffeur sur une période,
+// historique patient filtré par statut, planning trié par heure RDV.
+transportSchema.index({ chauffeur: 1, dateTransport: -1 });
+transportSchema.index({ patientId: 1, statut: 1 });
+transportSchema.index({ heureRDV: 1 });
 
 // Dual-write coords → GeoJSON sur les deux sous-docs adresse.
 // Le hook s'exécute à chaque validate (donc avant save) — couvre create + update.

@@ -12,13 +12,13 @@ const Counter = require("./Counter");
 // ── Sous-schéma historique ─────────────────────────────────────────────────────
 const historyEntrySchema = new mongoose.Schema(
   {
-    from:     { type: String, default: "" },
-    to:       { type: String, default: "" },
-    action:   { type: String, required: true },
-    by:       { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-    byEmail:  { type: String, default: "système" },
-    at:       { type: Date, default: Date.now },
-    reason:   { type: String, default: "" },
+    from: { type: String, default: "" },
+    to: { type: String, default: "" },
+    action: { type: String, required: true },
+    by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    byEmail: { type: String, default: "système" },
+    at: { type: Date, default: Date.now },
+    reason: { type: String, default: "" },
     metadata: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { _id: false },
@@ -48,9 +48,9 @@ const factureSchema = new mongoose.Schema(
     },
 
     // ── Informations patient (dénormalisées pour archive) ─────────────────────
-    patientNom:       { type: String, default: "" },
-    patientPrenom:    { type: String, default: "" },
-    patientNumeroSecu:{ type: String, default: "" },
+    patientNom: { type: String, default: "" },
+    patientPrenom: { type: String, default: "" },
+    patientNumeroSecu: { type: String, default: "" },
 
     // ── Dates ─────────────────────────────────────────────────────────────────
     dateEmission: { type: Date, default: Date.now },
@@ -58,18 +58,18 @@ const factureSchema = new mongoose.Schema(
     dateEcheance: { type: Date, default: null },
 
     // ── Motif & type ──────────────────────────────────────────────────────────
-    motif:       { type: String, default: "" },
-    typeVehicule:{ type: String, enum: ["VSL", "TPMR", "AMBULANCE"], default: "VSL" },
+    motif: { type: String, default: "" },
+    typeVehicule: { type: String, enum: ["VSL", "TPMR", "AMBULANCE"], default: "VSL" },
     allerRetour: { type: Boolean, default: false },
 
     // ── Distance & calcul CPAM ────────────────────────────────────────────────
-    distanceKm:         { type: Number, default: 0, min: 0 },
-    montantBase:        { type: Number, default: 0, min: 0 },
-    majoration:         { type: Number, default: 0, min: 0 },
-    montantTotal:       { type: Number, default: 0, min: 0 },
-    tauxPriseEnCharge:  { type: Number, default: 65, min: 0, max: 100 },
-    montantCPAM:        { type: Number, default: 0, min: 0 },
-    montantPatient:     { type: Number, default: 0, min: 0 },
+    distanceKm: { type: Number, default: 0, min: 0 },
+    montantBase: { type: Number, default: 0, min: 0 },
+    majoration: { type: Number, default: 0, min: 0 },
+    montantTotal: { type: Number, default: 0, min: 0 },
+    tauxPriseEnCharge: { type: Number, default: 65, min: 0, max: 100 },
+    montantCPAM: { type: Number, default: 0, min: 0 },
+    montantPatient: { type: Number, default: 0, min: 0 },
 
     // ── Statut facture ────────────────────────────────────────────────────────
     statut: {
@@ -104,9 +104,9 @@ const factureSchema = new mongoose.Schema(
     },
 
     // ── Établissement ─────────────────────────────────────────────────────────
-    lieuPrise:       { type: String, default: "" },
+    lieuPrise: { type: String, default: "" },
     lieuDestination: { type: String, default: "" },
-    notes:           { type: String, default: "" },
+    notes: { type: String, default: "" },
 
     // ── Détails du calcul tarifaire (barème CPAM 2024) ────────────────────────
     detailsCalcul: { type: mongoose.Schema.Types.Mixed, default: null },
@@ -116,33 +116,33 @@ const factureSchema = new mongoose.Schema(
 
     // ── Paiement Stripe ───────────────────────────────────────────────────────
     payment: {
-      provider:               { type: String, default: "stripe" },
-      stripeCustomerId:       { type: String, default: null },
-      stripePaymentIntentId:  { type: String, default: null, index: true, sparse: true },
-      stripeChargeId:         { type: String, default: null },
-      stripeReceiptUrl:       { type: String, default: null },
-      paidAt:                 { type: Date, default: null },
-      failedAt:               { type: Date, default: null },
-      failureReason:          { type: String, default: null },
-      refundedAt:             { type: Date, default: null },
-      refundAmount:           { type: Number, default: 0 },
-      refundReason:           { type: String, default: null },
-      stripeRefundId:         { type: String, default: null },
-      attempts:               { type: Number, default: 0 },
+      provider: { type: String, default: "stripe" },
+      stripeCustomerId: { type: String, default: null },
+      stripePaymentIntentId: { type: String, default: null, index: true, sparse: true },
+      stripeChargeId: { type: String, default: null },
+      stripeReceiptUrl: { type: String, default: null },
+      paidAt: { type: Date, default: null },
+      failedAt: { type: Date, default: null },
+      failureReason: { type: String, default: null },
+      refundedAt: { type: Date, default: null },
+      refundAmount: { type: Number, default: 0 },
+      refundReason: { type: String, default: null },
+      stripeRefundId: { type: String, default: null },
+      attempts: { type: Number, default: 0 },
     },
 
     // ── PDF ───────────────────────────────────────────────────────────────────
     pdf: {
       invoicePdfUrl: { type: String, default: null },
       receiptPdfUrl: { type: String, default: null },
-      generatedAt:   { type: Date, default: null },
+      generatedAt: { type: Date, default: null },
     },
 
     // ── Comptabilité ──────────────────────────────────────────────────────────
     accounting: {
-      exported:       { type: Boolean, default: false, index: true },
-      exportedAt:     { type: Date, default: null },
-      exportBatchId:  { type: String, default: null },
+      exported: { type: Boolean, default: false, index: true },
+      exportedAt: { type: Date, default: null },
+      exportBatchId: { type: String, default: null },
       accountingCode: { type: String, default: null },
     },
 
@@ -156,7 +156,24 @@ const factureSchema = new mongoose.Schema(
 factureSchema.index({ statut: 1, dateEmission: -1 });
 factureSchema.index({ paymentStatus: 1, dateEmission: -1 });
 factureSchema.index({ patientId: 1, dateEmission: -1 });
-factureSchema.index({ transportId: 1 }, { unique: true, sparse: true, partialFilterExpression: { statut: { $ne: "annulee" } } });
+// Index unique conditionnel : une seule facture non-annulée par transport.
+// Contraintes MongoDB sur partialFilterExpression :
+//   - $ne n'est pas supporté → on énumère explicitement les statuts non-annulés
+//   - sparse + partialFilterExpression sont mutuellement exclusifs
+const STATUTS_NON_ANNULES = [
+  "brouillon",
+  "emise",
+  "en_attente",
+  "payee",
+  "payment_failed",
+  "remboursee",
+  "partiellement_remboursee",
+  "en_retard",
+];
+factureSchema.index(
+  { transportId: 1 },
+  { unique: true, partialFilterExpression: { statut: { $in: STATUTS_NON_ANNULES } } },
+);
 factureSchema.index({ "accounting.exported": 1, dateEmission: -1 });
 
 // ── Numéro atomique : FAC-YYYY-XXXX ──────────────────────────────────────────
@@ -178,9 +195,9 @@ factureSchema.pre("save", async function (next) {
     this.isModified("majoration") ||
     this.isModified("tauxPriseEnCharge")
   ) {
-    this.montantTotal    = parseFloat((this.montantBase + this.majoration).toFixed(2));
-    this.montantCPAM     = parseFloat((this.montantTotal * this.tauxPriseEnCharge / 100).toFixed(2));
-    this.montantPatient  = parseFloat((this.montantTotal - this.montantCPAM).toFixed(2));
+    this.montantTotal = parseFloat((this.montantBase + this.majoration).toFixed(2));
+    this.montantCPAM = parseFloat(((this.montantTotal * this.tauxPriseEnCharge) / 100).toFixed(2));
+    this.montantPatient = parseFloat((this.montantTotal - this.montantCPAM).toFixed(2));
   }
   next();
 });
@@ -188,32 +205,32 @@ factureSchema.pre("save", async function (next) {
 // ── Virtual : libellé statut ──────────────────────────────────────────────────
 factureSchema.virtual("statutLabel").get(function () {
   const labels = {
-    brouillon:                 "Brouillon",
-    emise:                     "Émise",
-    en_attente:                "En attente",
-    payee:                     "Payée",
-    annulee:                   "Annulée",
-    payment_failed:            "Échec paiement",
-    remboursee:                "Remboursée",
-    partiellement_remboursee:  "Partiellement remboursée",
-    en_retard:                 "En retard",
+    brouillon: "Brouillon",
+    emise: "Émise",
+    en_attente: "En attente",
+    payee: "Payée",
+    annulee: "Annulée",
+    payment_failed: "Échec paiement",
+    remboursee: "Remboursée",
+    partiellement_remboursee: "Partiellement remboursée",
+    en_retard: "En retard",
   };
   return labels[this.statut] || this.statut;
 });
 
 factureSchema.virtual("paymentStatusLabel").get(function () {
   const labels = {
-    UNPAID:            "Non payé",
-    PENDING:           "En attente",
-    SUCCEEDED:         "Payé",
-    FAILED:            "Échec",
-    REFUNDED:          "Remboursé",
-    PARTIALLY_REFUNDED:"Partiellement remboursé",
+    UNPAID: "Non payé",
+    PENDING: "En attente",
+    SUCCEEDED: "Payé",
+    FAILED: "Échec",
+    REFUNDED: "Remboursé",
+    PARTIALLY_REFUNDED: "Partiellement remboursé",
   };
   return labels[this.paymentStatus] || this.paymentStatus;
 });
 
-factureSchema.set("toJSON",   { virtuals: true });
+factureSchema.set("toJSON", { virtuals: true });
 factureSchema.set("toObject", { virtuals: true });
 
 module.exports = mongoose.model("Facture", factureSchema);

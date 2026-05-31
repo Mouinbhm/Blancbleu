@@ -196,4 +196,19 @@ patientSchema.virtual("nomComplet").get(function () {
 patientSchema.set("toJSON", { virtuals: true });
 patientSchema.set("toObject", { virtuals: true });
 
+// ── Garde RGPD : suppression directe interdite (art. 17) ─────────────────────
+// L'effacement d'un patient doit passer par patientGdprService.anonymizePatient
+// qui : 1) vérifie l'absence de transport actif, 2) anonymise nom/prenom/email/
+// téléphone/adresse, 3) chiffre/écrase les données santé, 4) trace dans
+// AuditLog. Une suppression dure laisserait des Transport orphelins et casserait
+// la traçabilité requise pour les contestations CPAM (5 ans).
+// Couvre findOneAndDelete + findByIdAndDelete (alias Mongoose).
+patientSchema.pre("findOneAndDelete", function (next) {
+  next(
+    new Error(
+      "Suppression directe du patient interdite — utiliser patientGdprService.anonymizePatient (RGPD art. 17)",
+    ),
+  );
+});
+
 module.exports = mongoose.model("Patient", patientSchema);

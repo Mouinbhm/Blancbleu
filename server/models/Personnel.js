@@ -138,4 +138,38 @@ personnelSchema.methods.comparePassword = function (candidate) {
   return bcrypt.compare(candidate, this.password);
 };
 
+// ── Cascade cleanup : pre("findOneAndDelete") ────────────────────────────────
+// La route DELETE /api/personnel/:id fait un soft-delete (actif=false). Ce hook
+// protège contre les suppressions dures directes : refus si transport actif,
+// soft-flag chauffeurDeleted=true sur les Transport historiques.
+const TERMINAL_STATUTS_PERSONNEL = ["COMPLETED", "BILLED", "PAID", "CANCELLED", "FAILED"];
+personnelSchema.pre("findOneAndDelete", async function (next) {
+  try {
+    const Transport = mongoose.model("Transport");
+    const filter = this.getQuery();
+    const personnel = await this.model.findOne(filter).select("_id").lean();
+    if (!personnel) return next();
+
+    const activeCount = await Transport.countDocuments({
+      chauffeur: personnel._id,
+      statut: { $nin: TERMINAL_STATUTS_PERSONNEL },
+    });
+    if (activeCount > 0) {
+      return next(
+        new Error(
+          `Suppression refusée : ${activeCount} transport(s) actif(s) assigné(s) à ce chauffeur`,
+        ),
+      );
+    }
+
+    await Transport.updateMany(
+      { chauffeur: personnel._id },
+      { $set: { chauffeurDeleted: true, chauffeurDeletedAt: new Date() } },
+    );
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = mongoose.model("Personnel", personnelSchema);

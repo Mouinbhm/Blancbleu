@@ -89,10 +89,10 @@ const vehicleSchema = new mongoose.Schema(
     // ── Métriques ─────────────────────────────────────────────────────────────
     // Changed from flat Number to nested object for maintenance tracking
     kilometrage: {
-      actuel:          { type: Number, default: 0, min: 0 },
+      actuel: { type: Number, default: 0, min: 0 },
       dernierControle: { type: Number, default: 0 },
       prochainVidange: { type: Number },
-      prochainControle:{ type: Number },
+      prochainControle: { type: Number },
     },
     carburant: { type: Number, default: 100, min: 0, max: 100 },
     annee: { type: Number, min: 2000 },
@@ -106,11 +106,11 @@ const vehicleSchema = new mongoose.Schema(
     },
 
     // ── Identification étendue ────────────────────────────────────────────────────
-    marque:      { type: String, trim: true, default: "" },
-    modele:      { type: String, trim: true, default: "" },
-    couleur:     { type: String, trim: true, default: "" },
+    marque: { type: String, trim: true, default: "" },
+    modele: { type: String, trim: true, default: "" },
+    couleur: { type: String, trim: true, default: "" },
     numeroSerie: { type: String, trim: true, default: "" },
-    actif:       { type: Boolean, default: true },
+    actif: { type: Boolean, default: true },
 
     // ── Motorisation ──────────────────────────────────────────────────────────────
     typeEnergie: {
@@ -119,78 +119,78 @@ const vehicleSchema = new mongoose.Schema(
       default: "Diesel",
     },
     consommationL100: { type: Number, min: 0, max: 30 },
-    autonomieKm:      { type: Number, min: 0 },
-    puissanceCv:      { type: Number, min: 0 },
+    autonomieKm: { type: Number, min: 0 },
+    puissanceCv: { type: Number, min: 0 },
 
     // ── Contrôles réglementaires ──────────────────────────────────────────────────
     controleTechnique: {
       dateExpiration: { type: Date },
-      rappel30j:      { type: Boolean, default: true },
+      rappel30j: { type: Boolean, default: true },
     },
     assurance: {
-      compagnie:      { type: String, trim: true, default: "" },
-      numeroPolice:   { type: String, trim: true, default: "" },
+      compagnie: { type: String, trim: true, default: "" },
+      numeroPolice: { type: String, trim: true, default: "" },
       dateExpiration: { type: Date },
-      rappel30j:      { type: Boolean, default: true },
+      rappel30j: { type: Boolean, default: true },
     },
     vignetteControlePollution: {
-      categorie:      { type: String, enum: ["Crit'Air 1", "Crit'Air 2", "Crit'Air 3", "Non classé"] },
+      categorie: { type: String, enum: ["Crit'Air 1", "Crit'Air 2", "Crit'Air 3", "Non classé"] },
       dateExpiration: { type: Date },
     },
 
     // ── Équipements médicaux ──────────────────────────────────────────────────────
     equipements: {
-      oxygene:       { type: Boolean, default: false },
+      oxygene: { type: Boolean, default: false },
       fauteuilRampe: { type: Boolean, default: false },
-      brancard:      { type: Boolean, default: false },
-      dae:           { type: Boolean, default: false },
-      aspirateur:    { type: Boolean, default: false },
-      chauffage:     { type: Boolean, default: false },
+      brancard: { type: Boolean, default: false },
+      dae: { type: Boolean, default: false },
+      aspirateur: { type: Boolean, default: false },
+      chauffage: { type: Boolean, default: false },
       climatisation: { type: Boolean, default: false },
     },
 
     // ── Capacité ──────────────────────────────────────────────────────────────────
     capacite: {
-      placesAssises:  { type: Number, default: 1, min: 1, max: 6 },
+      placesAssises: { type: Number, default: 1, min: 1, max: 6 },
       placesFauteuil: { type: Number, default: 0, min: 0, max: 2 },
       placesBrancard: { type: Number, default: 0, min: 0, max: 1 },
     },
 
     // ── Garage d'attache ──────────────────────────────────────────────────────────
     garage: {
-      nom:     { type: String, default: "Garage principal" },
+      nom: { type: String, default: "Garage principal" },
       adresse: { type: String, default: "59 Bd Madeleine, Nice" },
-      lat:     { type: Number, default: 43.7102 },
-      lng:     { type: Number, default: 7.262 },
+      lat: { type: Number, default: 43.7102 },
+      lng: { type: Number, default: 7.262 },
     },
 
-    notes:     { type: String, default: "" },
+    notes: { type: String, default: "" },
     deletedAt: { type: Date, default: null },
 
     // ── Métriques performance (PHASE 1) ───────────────────────────────────────
     // Calculées et mises en cache via recalculateVehicleMetrics()
     vehicleMetrics: {
-      totalKm:           { type: Number, default: 0 },
-      monthlyKm:         { type: Number, default: 0 },
-      totalMissions:     { type: Number, default: 0 },
+      totalKm: { type: Number, default: 0 },
+      monthlyKm: { type: Number, default: 0 },
+      totalMissions: { type: Number, default: 0 },
       completedMissions: { type: Number, default: 0 },
       cancelledMissions: { type: Number, default: 0 },
       totalWorkingHours: { type: Number, default: 0 },
-      totalIdleHours:    { type: Number, default: 0 },
-      estimatedCost:     { type: Number, default: 0 },
-      lastMetricUpdate:  { type: Date,   default: null },
+      totalIdleHours: { type: Number, default: 0 },
+      estimatedCost: { type: Number, default: 0 },
+      lastMetricUpdate: { type: Date, default: null },
     },
 
     // ── Informations maintenance enrichies (PHASE 1) ──────────────────────────
     maintenanceInfo: {
-      lastMaintenanceDate:     { type: Date,   default: null },
-      nextMaintenanceDate:     { type: Date,   default: null },
-      nextMaintenanceKm:       { type: Number, default: null },
-      maintenanceIntervalKm:   { type: Number, default: 15000 },
+      lastMaintenanceDate: { type: Date, default: null },
+      nextMaintenanceDate: { type: Date, default: null },
+      nextMaintenanceKm: { type: Number, default: null },
+      maintenanceIntervalKm: { type: Number, default: 15000 },
       maintenanceIntervalDays: { type: Number, default: 365 },
       maintenanceStatus: {
-        type:    String,
-        enum:    ["ok", "soon", "urgent", "overdue"],
+        type: String,
+        enum: ["ok", "soon", "urgent", "overdue"],
         default: "ok",
       },
     },
@@ -198,16 +198,16 @@ const vehicleSchema = new mongoose.Schema(
     // ── Disponibilité opérationnelle (PHASE 1) ────────────────────────────────
     availability: {
       currentStatus: {
-        type:    String,
-        enum:    ["available", "in_mission", "maintenance", "out_of_service"],
+        type: String,
+        enum: ["available", "in_mission", "maintenance", "out_of_service"],
         default: "available",
       },
       currentTransportId: {
-        type:    mongoose.Schema.Types.ObjectId,
-        ref:     "Transport",
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Transport",
         default: null,
       },
-      availableFrom:     { type: Date,   default: null },
+      availableFrom: { type: Date, default: null },
       unavailableReason: { type: String, default: "" },
     },
   },
@@ -240,6 +240,45 @@ vehicleSchema.pre("save", function (next) {
     };
   }
   next();
+});
+
+// ── Cascade cleanup : pre("findOneAndDelete") ────────────────────────────────
+// La suppression dure (delete physique) n'est pas exposée par les routes — la
+// route admin DELETE /api/vehicles/:id fait un soft-delete via deletedAt. Ce
+// hook protège contre les suppressions directes (scripts, mongo shell) en :
+//   1. refusant si un Transport actif référence encore ce véhicule
+//   2. marquant les Transport terminés avec vehiculeDeleted=true (soft cascade)
+// Les statuts considérés "terminés" suivent la spec : COMPLETED, BILLED, PAID,
+// CANCELLED, FAILED (volontairement plus strict que Transport.virtual estTermine
+// — BILLING_PENDING et NO_SHOW comptent comme actifs ici).
+const TERMINAL_STATUTS_CASCADE = ["COMPLETED", "BILLED", "PAID", "CANCELLED", "FAILED"];
+vehicleSchema.pre("findOneAndDelete", async function (next) {
+  try {
+    const Transport = mongoose.model("Transport");
+    const filter = this.getQuery();
+    const vehicle = await this.model.findOne(filter).select("_id").lean();
+    if (!vehicle) return next();
+
+    const activeCount = await Transport.countDocuments({
+      vehicule: vehicle._id,
+      statut: { $nin: TERMINAL_STATUTS_CASCADE },
+    });
+    if (activeCount > 0) {
+      return next(
+        new Error(
+          `Suppression refusée : ${activeCount} transport(s) actif(s) référence(nt) ce véhicule`,
+        ),
+      );
+    }
+
+    await Transport.updateMany(
+      { vehicule: vehicle._id },
+      { $set: { vehiculeDeleted: true, vehiculeDeletedAt: new Date() } },
+    );
+    next();
+  } catch (err) {
+    next(err);
+  }
 });
 
 module.exports = mongoose.model("Vehicle", vehicleSchema);

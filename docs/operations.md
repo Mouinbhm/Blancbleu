@@ -131,13 +131,13 @@ fait, monter un volume Docker dédié et le sauvegarder avec `tar -czf`.
 
 ### Dashboards Grafana recommandés
 
-| Panel | Source | Métrique |
-|---|---|---|
-| Latence p50/p95/p99 par route | Prometheus | `histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))` |
-| Taux d'erreur 5xx | Prometheus | `sum(rate(http_request_duration_seconds_count{status=~"5.."}[5m]))` |
-| Dispatch IA vs fallback | Prometheus | `rate(dispatch_recommendations_total[10m])` |
-| Heap Node | Prometheus | `nodejs_heap_size_used_bytes` |
-| Mongo connexions actives | mongodb_exporter | `mongodb_connections{state="current"}` |
+| Panel                         | Source           | Métrique                                                                   |
+| ----------------------------- | ---------------- | -------------------------------------------------------------------------- |
+| Latence p50/p95/p99 par route | Prometheus       | `histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))` |
+| Taux d'erreur 5xx             | Prometheus       | `sum(rate(http_request_duration_seconds_count{status=~"5.."}[5m]))`        |
+| Dispatch IA vs fallback       | Prometheus       | `rate(dispatch_recommendations_total[10m])`                                |
+| Heap Node                     | Prometheus       | `nodejs_heap_size_used_bytes`                                              |
+| Mongo connexions actives      | mongodb_exporter | `mongodb_connections{state="current"}`                                     |
 
 ---
 
@@ -146,10 +146,11 @@ fait, monter un volume Docker dédié et le sauvegarder avec `tar -czf`.
 ### Vertical (rapide, par défaut)
 
 Resource limits prod (voir `docker-compose.prod.yml`) :
+
 - server : 768 MB / 1.5 cpu
 - worker : 512 MB / 1 cpu
-- ia     : 1 GB / 2 cpu
-- mongo  : non-limité (à adapter)
+- ia : 1 GB / 2 cpu
+- mongo : non-limité (à adapter)
 
 Ajuster en fonction des métriques (heap utilisation > 80 % → augmenter).
 
@@ -186,6 +187,7 @@ docker compose exec mongo mongosh -u "$MONGO_USER" -p "$MONGO_PASSWORD" \
 ### Tous les transports "stuck" (lifecycle bloqué)
 
 Vérifier la queue BullMQ :
+
 ```bash
 docker compose exec server node -e \
   'require("bullmq").Queue && new (require("bullmq").Queue)("transport-lifecycle").getJobCounts().then(console.log)'
@@ -210,13 +212,58 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 ---
 
-## 8. Runbook minimal
+## 8. Suppression d'entités métier (intégrité référentielle)
 
-| Symptôme | Action |
-|---|---|
-| `/api/health` retourne 503 | Voir logs server, restart |
-| Latence > 2 s p95 | Vérifier Mongo (slow query log), CPU, taille connexion pool |
-| Pas d'email envoyé | `EMAIL_*` env définis ? Worker tourne ? Quota SMTP ? |
-| OCR rejette tous les PMT | IA service up ? Tesseract installé dans container ? `curl ia:5002/health` |
-| Dispatch IA renvoie fallback systématiquement | IA service injoignable ou `AI_SERVICE_TOKEN` mismatch |
-| 429 Too Many Requests | Rate limit déclenché — vérifier IP appelante, ajuster `rateLimiter.js` |
+Les routes REST exposent uniquement du **soft-delete** (`deletedAt`, `actif: false`).
+Les hooks Mongoose `pre("findOneAndDelete")` posés sur `Vehicle`, `Personnel` et
+`Patient` protègent contre les suppressions dures faites depuis un script, le
+mongo shell ou un futur endpoint admin.
+
+### Règles
+
+| Entité      | Suppression dure                         | Comportement                                                                                                                                              |
+| ----------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Vehicle`   | `findOneAndDelete` / `findByIdAndDelete` | Refus si transport actif (statut hors `COMPLETED/BILLED/PAID/CANCELLED/FAILED`). Sinon → flag `vehiculeDeleted=true` sur tous les Transport référençants. |
+| `Personnel` | idem                                     | Idem mais sur `chauffeur` ; flag `chauffeurDeleted=true`.                                                                                                 |
+| `Patient`   | idem                                     | **Toujours refusé** — passer par `patientGdprService.anonymizePatient(...)` (RGPD art. 17).                                                               |
+
+### Que faire concrètement
+
+1. **Véhicule retiré du parc** : soft-delete via `DELETE /api/vehicles/:id`
+   (route existante, met `deletedAt`). Si purge dure souhaitée plus tard,
+   utiliser le mongo shell — le hook bloquera tant que des missions actives
+   référencent le véhicule.
+2. **Chauffeur qui quitte la société** : soft-delete via
+   `DELETE /api/personnel/:id` (met `actif=false`). Les missions futures ne le
+   prendront plus en compte ; l'historique reste lisible.
+3. **Patient — droit à l'oubli RGPD** : appeler
+   `POST /api/gdpr/patients/:id/anonymize` (admin/DPO uniquement) avec
+   `confirmReason`. Cf. `docs/rgpd.md` §droit à l'oubli.
+
+### Synchronisation des indexes
+
+Après tout ajout/retrait d'index dans un modèle, lancer :
+
+```bash
+# Dry-run d'abord (montre create/drop sans appliquer)
+node server/scripts/sync-indexes.js --dry-run
+
+# Application
+npm --prefix server run db:sync-indexes
+```
+
+En production : **mongodump avant**. `syncIndexes()` drop les indexes du schema
+disparus — vérifier le diff avant de presser le bouton.
+
+---
+
+## 9. Runbook minimal
+
+| Symptôme                                      | Action                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------------------- |
+| `/api/health` retourne 503                    | Voir logs server, restart                                                 |
+| Latence > 2 s p95                             | Vérifier Mongo (slow query log), CPU, taille connexion pool               |
+| Pas d'email envoyé                            | `EMAIL_*` env définis ? Worker tourne ? Quota SMTP ?                      |
+| OCR rejette tous les PMT                      | IA service up ? Tesseract installé dans container ? `curl ia:5002/health` |
+| Dispatch IA renvoie fallback systématiquement | IA service injoignable ou `AI_SERVICE_TOKEN` mismatch                     |
+| 429 Too Many Requests                         | Rate limit déclenché — vérifier IP appelante, ajuster `rateLimiter.js`    |
