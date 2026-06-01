@@ -11,12 +11,13 @@
  */
 
 const express = require("express");
-const router  = express.Router();
-const multer  = require("multer");
+const router = express.Router();
+const multer = require("multer");
+const { scanUpload } = require("../middleware/antivirus");
 
 const { protect, authorize } = require("../middleware/auth");
 const { aiLimiter } = require("../middleware/rateLimiter");
-const serviceToken  = require("../middleware/serviceToken");
+const serviceToken = require("../middleware/serviceToken");
 const ctrl = require("../controllers/aiController");
 
 router.use(aiLimiter);
@@ -36,7 +37,14 @@ const upload = multer({
 });
 
 // ── PMT ──────────────────────────────────────────────────────────────────────
-router.post( "/pmt/extract",           protect, authorize(...STAFF), upload.single("pmt"), ctrl.extrairePMT);
+router.post(
+  "/pmt/extract",
+  protect,
+  authorize(...STAFF),
+  upload.single("pmt"),
+  scanUpload,
+  ctrl.extrairePMT,
+);
 router.patch("/pmt/validate/:transportId", protect, authorize(...STAFF), ctrl.validerPMT);
 
 // ── Auto-dispatch HITL — routes statiques (avant /:id pour éviter le shadow) ──
@@ -51,8 +59,13 @@ const autoDispatchCtrl = require("../controllers/autoDispatchController");
  *     responses:
  *       200: { description: Liste paginée des propositions pending }
  */
-router.get("/dispatch/auto/queue",       protect, authorize(...STAFF), autoDispatchCtrl.getQueue);
-router.get("/dispatch/auto/queue/count", protect, authorize(...STAFF), autoDispatchCtrl.getQueueCount);
+router.get("/dispatch/auto/queue", protect, authorize(...STAFF), autoDispatchCtrl.getQueue);
+router.get(
+  "/dispatch/auto/queue/count",
+  protect,
+  authorize(...STAFF),
+  autoDispatchCtrl.getQueueCount,
+);
 
 /**
  * @openapi
@@ -86,7 +99,7 @@ router.post("/dispatch/auto/:recId/reject", protect, authorize(...STAFF), autoDi
  *       401: { $ref: "#/components/responses/Unauthorized" }
  *       403: { $ref: "#/components/responses/Forbidden" }
  */
-router.post("/dispatch/manual",        protect, authorize(...STAFF), ctrl.recommanderDispatchManuel);
+router.post("/dispatch/manual", protect, authorize(...STAFF), ctrl.recommanderDispatchManuel);
 
 /**
  * @openapi
@@ -101,7 +114,12 @@ router.post("/dispatch/manual",        protect, authorize(...STAFF), ctrl.recomm
  *     responses:
  *       200: { description: Agrégats }
  */
-router.get( "/dispatch/history",       protect, authorize("admin", "superviseur"), ctrl.getDispatchHistory);
+router.get(
+  "/dispatch/history",
+  protect,
+  authorize("admin", "superviseur"),
+  ctrl.getDispatchHistory,
+);
 
 /**
  * @openapi
@@ -123,8 +141,13 @@ router.get( "/dispatch/history",       protect, authorize("admin", "superviseur"
  *       404: { $ref: "#/components/responses/NotFound" }
  *       409: { description: Aucun véhicule disponible }
  */
-router.post("/dispatch/:transportId",  protect, authorize(...STAFF), ctrl.recommanderDispatch);
-router.get( "/dispatch/:transportId/explanation", protect, authorize(...STAFF), ctrl.getDispatchExplanation);
+router.post("/dispatch/:transportId", protect, authorize(...STAFF), ctrl.recommanderDispatch);
+router.get(
+  "/dispatch/:transportId/explanation",
+  protect,
+  authorize(...STAFF),
+  ctrl.getDispatchExplanation,
+);
 
 // ── Optimisation de tournée ───────────────────────────────────────────────────
 router.post("/routing/optimize", protect, authorize("superviseur", "admin"), ctrl.optimiserTournee);
@@ -189,7 +212,7 @@ router.post("/model/retrain", protect, authorize("admin"), ctrl.triggerModelRetr
  *       200: { description: État du job + metrics }
  *       503: { description: Microservice IA indisponible }
  */
-router.get( "/model/status",  protect, authorize("admin", "superviseur"), ctrl.getModelStatus);
+router.get("/model/status", protect, authorize("admin", "superviseur"), ctrl.getModelStatus);
 
 // ── Admin — Pondérations dispatch (singleton MongoDB) ────────────────────────
 
@@ -228,6 +251,6 @@ router.get( "/model/status",  protect, authorize("admin", "superviseur"), ctrl.g
  *       403: { $ref: "#/components/responses/Forbidden" }
  */
 router.get("/dispatch/config", protect, authorize("admin", "superviseur"), ctrl.getDispatchConfig);
-router.put("/dispatch/config", protect, authorize("admin"),                ctrl.updateDispatchConfig);
+router.put("/dispatch/config", protect, authorize("admin"), ctrl.updateDispatchConfig);
 
 module.exports = router;

@@ -1,0 +1,97 @@
+name: Security Audit
+
+# Audit automatique des dépendances : hebdomadaire (lundi 6h UTC) + à chaque
+# PR qui touche un manifeste de dépendances.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  pull_request:
+    paths:
+      - "server/package*.json"
+      - "client/package*.json"
+      - "ai-service/requirements*.txt"
+      - "blancbleu_driver/pubspec.*"
+      - "blancbleu_patient/pubspec.*"
+      - "packages/bb_core/pubspec.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Backend Node — bloquant sur high/critical ──────────────────────────────
+  npm-audit-server:
+    name: npm audit (server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Audit server (fail si high/critical)
+        working-directory: server
+        run: npm audit --audit-level=high
+
+  # ── Frontend React — informatif (CRA legacy souvent en warning) ────────────
+  npm-audit-client:
+    name: npm audit (client)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Audit client (rapport JSON)
+        working-directory: client
+        run: npm audit --audit-level=high --json > npm-audit-client.json || true
+      - name: Upload rapport
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit-client
+          path: client/npm-audit-client.json
+          if-no-files-found: ignore
+
+  # ── Microservice IA Python — pip-audit ─────────────────────────────────────
+  python-audit:
+    name: pip-audit (ai-service)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Audit requirements
+        working-directory: ai-service
+        run: pip-audit -r requirements.txt
+
+  # ── Apps Flutter — pub outdated (informatif) ───────────────────────────────
+  flutter-audit:
+    name: flutter pub outdated
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        app: [blancbleu_driver, blancbleu_patient]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.16.9"
+          channel: stable
+      - name: pub get
+        working-directory: ${{ matrix.app }}
+        run: flutter pub get
+      - name: pub outdated (JSON)
+        working-directory: ${{ matrix.app }}
+        run: flutter pub outdated --json > pub-outdated.json || true
+      - name: Upload rapport
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flutter-outdated-${{ matrix.app }}
+          path: ${{ matrix.app }}/pub-outdated.json
+          if-no-files-found: ignore

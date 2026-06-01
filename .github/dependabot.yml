@@ -1,0 +1,77 @@
+# Dependabot — mises à jour automatiques des dépendances.
+# Limite globale volontairement basse (5 PRs/écosystème) pour éviter le bruit.
+# Docs : https://docs.github.com/code-security/dependabot
+version: 2
+
+updates:
+  # ── Backend Node ───────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /server
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "server"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ── Frontend React ─────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /client
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "client"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ── Microservice IA Python ─────────────────────────────────────────────────
+  - package-ecosystem: pip
+    directory: /ai-service
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ai-service"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ── GitHub Actions ─────────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "chore(ci)"
+
+  # ── Apps Flutter (pub) ─────────────────────────────────────────────────────
+  # Dependabot supporte l'écosystème pub depuis 2023.
+  - package-ecosystem: pub
+    directory: /blancbleu_driver
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "mobile"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: pub
+    directory: /blancbleu_patient
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "mobile"]
+    commit-message:
+      prefix: "chore(deps)"

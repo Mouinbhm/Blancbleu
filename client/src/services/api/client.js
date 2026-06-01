@@ -15,6 +15,41 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// ─── CSRF — double-submit token ───────────────────────────────────────────────
+// Le serveur protège les routes mutantes (POST/PUT/PATCH/DELETE) par un token
+// CSRF. On le récupère au boot via GET /api/csrf-token et on le renvoie dans le
+// header X-CSRF-Token sur chaque requête mutante. Refresh auto si 403 EBADCSRFTOKEN.
+const MUTATING = ["post", "put", "patch", "delete"];
+let csrfToken = null;
+let csrfFetch = null;
+
+async function fetchCsrfToken() {
+  // Une seule requête en vol partagée (évite N appels concurrents au boot).
+  if (csrfFetch) return csrfFetch;
+  csrfFetch = axios
+    .get(`${API_URL}/csrf-token`, { withCredentials: true })
+    .then((res) => {
+      csrfToken = res.data?.csrfToken || null;
+      return csrfToken;
+    })
+    .catch(() => null)
+    .finally(() => {
+      csrfFetch = null;
+    });
+  return csrfFetch;
+}
+
+// Récupération au chargement du module (best-effort, non bloquant).
+fetchCsrfToken();
+
+api.interceptors.request.use(async (config) => {
+  if (MUTATING.includes((config.method || "").toLowerCase())) {
+    if (!csrfToken) await fetchCsrfToken();
+    if (csrfToken) config.headers["X-CSRF-Token"] = csrfToken;
+  }
+  return config;
+});
+
 // ─── Intercepteur réponse — gère les 401 et le refresh automatique ────────────
 let isRefreshing = false;
 let pendingQueue = [];
@@ -31,6 +66,19 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+
+    // CSRF expiré/invalide → re-fetch un token et rejouer une fois.
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.code === "EBADCSRFTOKEN" &&
+      !originalRequest._csrfRetry
+    ) {
+      originalRequest._csrfRetry = true;
+      csrfToken = null;
+      await fetchCsrfToken();
+      if (csrfToken) originalRequest.headers["X-CSRF-Token"] = csrfToken;
+      return api(originalRequest);
+    }
 
     if (
       error.response?.status === 401 &&

@@ -6,6 +6,7 @@ const { randomBytes } = require("crypto");
 const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
+const { scanUpload } = require("../middleware/antivirus");
 const User = require("../models/User");
 const Patient = require("../models/Patient");
 const Transport = require("../models/Transport");
@@ -833,6 +834,7 @@ router.post(
       next();
     });
   },
+  scanUpload,
   async (req, res) => {
     try {
       const { motif, dateEmission, etablissementDestination, notes } = req.body;

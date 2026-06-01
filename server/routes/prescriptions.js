@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { protect, authorize } = require("../middleware/auth");
 const { uploadPmt } = require("../middleware/upload");
+const { scanUpload } = require("../middleware/antivirus");
 const ctrl = require("../controllers/prescriptionController");
 
 const STAFF = ["admin", "superviseur", "dispatcher"];
@@ -66,6 +67,7 @@ router.post(
       next();
     });
   },
+  scanUpload,
   ctrl.uploadPmt,
 );
 
