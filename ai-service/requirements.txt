@@ -35,7 +35,7 @@ ruff==0.6.9                    # Linter + formatter Python (Sprint 5)
 # ── AI Transport Optimizer (ML) ───────────────────────────────────────────────
 xgboost==2.0.3                 # Gradient boosting (modèle gagnant benchmark)
 shap==0.45.0                   # Explicabilité SHAP (TreeExplainer)
-scikit-learn==1.4.2            # LinearRegression, RandomForest, métriques
+scikit-learn==1.8.0            # LinearRegression, RandomForest, métriques
 pandas==2.2.2                  # Manipulation datasets
 numpy==1.26.4                  # Calculs numériques
 matplotlib==3.8.4              # Génération plots SHAP
