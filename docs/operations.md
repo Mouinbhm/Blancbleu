@@ -92,6 +92,45 @@ docker compose exec mongo mongorestore \
   --archive=/data/db/backup-2026-05-24.archive --gzip --drop
 ```
 
+### Automatisation — service `backup`
+
+`docker-compose.prod.yml` ajoute un service `backup` (image `mongo:7`) qui
+boucle toutes les 24h sur `scripts/backup.sh` : dump gzip horodaté dans
+`./backups/`, rétention 30 jours, journal `./backups/backup.log`.
+
+```bash
+# Démarré automatiquement avec la stack prod
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# Dump manuel à la demande
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec backup bash /backup.sh
+
+# Restauration (DESTRUCTIF — exige CONFIRM=yes)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  exec -e CONFIRM=yes backup bash /restore.sh blancbleu_20260531_020000.archive
+```
+
+| Objectif | Valeur | Justification                                            |
+| -------- | ------ | -------------------------------------------------------- |
+| **RPO**  | 24h    | un dump quotidien — perte max 24h de données en sinistre |
+| **RTO**  | 2h     | temps de restauration cible (pull image + mongorestore)  |
+
+**Procédure de restauration pas-à-pas**
+
+1. Identifier l'archive : `docker compose ... exec backup ls -1t /backups/`.
+2. Arrêter les écritures applicatives (stopper `server` + `worker`).
+3. Lancer `restore.sh` avec `CONFIRM=yes` (cf. commande ci-dessus).
+4. Vérifier l'intégrité (`mongosh` → `db.transports.countDocuments()`, etc.).
+5. Redémarrer `server` + `worker`.
+
+> **Test de restore mensuel recommandé** : restaurer le dernier dump sur une
+> base jetable (`MONGO_URI` pointant vers une DB temporaire) et valider les
+> compteurs. Un backup jamais testé n'est pas un backup.
+
+> **Chiffrement** : pour ce POC les archives ne sont pas chiffrées. En prod,
+> chiffrer au repos (volume chiffré ou `gpg --symmetric` sur l'archive) et
+> répliquer hors-site (S3/B2 avec SSE).
+
 ### Redis
 
 Le worker traite des jobs idempotents : pas de sauvegarde critique.
@@ -138,6 +177,36 @@ fait, monter un volume Docker dédié et le sauvegarder avec `tar -czf`.
 | Dispatch IA vs fallback       | Prometheus       | `rate(dispatch_recommendations_total[10m])`                                |
 | Heap Node                     | Prometheus       | `nodejs_heap_size_used_bytes`                                              |
 | Mongo connexions actives      | mongodb_exporter | `mongodb_connections{state="current"}`                                     |
+
+### Stack de monitoring (Prometheus + Grafana)
+
+Stack fournie dans `docker-compose.monitoring.yml` (profile `monitoring`) :
+Prometheus, Grafana (datasource + dashboard auto-provisionnés), node-exporter.
+
+```bash
+# 1. Écrire le token de scrape (lu par Prometheus, gitignoré)
+echo -n "$METRICS_TOKEN" > monitoring/metrics_token
+
+# 2. Démarrer la stack (réseau partagé avec le compose principal)
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml \
+  --profile monitoring up -d
+```
+
+| Service       | URL                   | Accès                             |
+| ------------- | --------------------- | --------------------------------- |
+| Grafana       | http://localhost:3001 | admin / `$GRAFANA_ADMIN_PASSWORD` |
+| Prometheus    | http://localhost:9090 | —                                 |
+| node-exporter | http://localhost:9100 | métriques système hôte            |
+
+- **Scrape `/metrics`** : Prometheus envoie `Authorization: Bearer <token>`
+  (bloc `authorization.credentials_file`). L'endpoint accepte ce bearer **ou**
+  le header `X-Metrics-Token` (cf. `server/Server.js`).
+- **Dashboard** « BlancBleu — Overview » : latence p50/p95/p99, débit par route,
+  taux 4xx/5xx, profondeur des files BullMQ (gauge `blancbleu_bullmq_queue_jobs`),
+  recommandations dispatch/heure, heap Node, charge hôte. Le panneau MongoDB
+  reste vide tant qu'un `mongodb_exporter` n'est pas ajouté (optionnel POC).
+- **Profile isolé** : sans `--profile monitoring`, le compose principal n'est
+  pas impacté.
 
 ---
 
@@ -209,6 +278,39 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 - Jobs critiques (bloquants) : `test-server`, `test-ia`, `build-client`.
 - Jobs informatifs (continue-on-error) : `lint`, `audit`, `docker-build`, `e2e`.
 - Coverage gate : 60 % minimum côté server (à monter à 80 %).
+
+### Déploiement continu (CD)
+
+| Workflow                | Déclencheur                         | Cible      | Tags images                |
+| ----------------------- | ----------------------------------- | ---------- | -------------------------- |
+| `deploy-staging.yml`    | push `develop` **ou** manuel        | staging    | `<sha>` + `staging-latest` |
+| `deploy-production.yml` | **manuel uniquement** (+ `CONFIRM`) | production | `production-{version}`     |
+
+- **Pipeline** : gate de tests → build & push 3 images (GHCR) → deploy SSH
+  (`appleboy/ssh-action`) → healthcheck `/api/health` (retry 5×).
+- **Prod = manuel** : `workflow_dispatch` avec saisie `version` + `confirm`
+  (doit valoir exactement `CONFIRM`). **Rollback automatique** vers la version
+  précédente (`.deployed_tag` sur le host) si le healthcheck échoue.
+- GitHub ne supporte pas `needs:` inter-workflows : le gate de tests est
+  ré-exécuté dans chaque workflow de déploiement (ne pas présumer que ci.yml
+  a tourné).
+
+**Secrets GitHub à configurer** (Settings → Secrets and variables → Actions) :
+
+| Secret            | Usage                                                           |
+| ----------------- | --------------------------------------------------------------- |
+| `STAGING_HOST`    | IP/hostname du serveur staging                                  |
+| `STAGING_USER`    | utilisateur SSH staging                                         |
+| `STAGING_SSH_KEY` | clé privée SSH staging                                          |
+| `PROD_HOST`       | IP/hostname du serveur production                               |
+| `PROD_USER`       | utilisateur SSH production                                      |
+| `PROD_SSH_KEY`    | clé privée SSH production                                       |
+| `GITHUB_TOKEN`    | fourni automatiquement — push GHCR (pas de `GHCR_TOKEN` requis) |
+
+> **Prérequis host** : `/opt/blancbleu` contient `.env` + un override compose
+> mappant chaque service sur son image GHCR
+> (`image: ghcr.io/<owner>/blancbleu-<svc>:${IMAGE_TAG}`) pour que `docker
+compose pull` tire les images publiées plutôt que de rebuild localement.
 
 ---
 

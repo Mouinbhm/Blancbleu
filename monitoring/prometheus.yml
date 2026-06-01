@@ -1,0 +1,41 @@
+# Prometheus — configuration de scrape BlancBleu.
+#
+# Le job blancbleu-api scrape /metrics du backend, protégé par METRICS_TOKEN.
+# L'endpoint accepte Authorization: Bearer <token> → on utilise un
+# credentials_file (Prometheus n'interpole pas les variables d'env dans ce
+# fichier). Créer le fichier token AVANT de lancer la stack :
+#
+#   echo -n "$METRICS_TOKEN" > monitoring/metrics_token
+#
+# (gitignoré). Voir docs/operations.md §monitoring.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    app: blancbleu
+
+scrape_configs:
+  # ── Backend Express (métriques applicatives) ──────────────────────────────
+  - job_name: blancbleu-api
+    metrics_path: /metrics
+    scheme: http
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_token
+    static_configs:
+      - targets: ["server:5000"]
+        labels:
+          service: api
+
+  # ── node-exporter (métriques système hôte) ────────────────────────────────
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          service: host
+
+  # ── Prometheus lui-même ───────────────────────────────────────────────────
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

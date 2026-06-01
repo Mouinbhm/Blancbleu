@@ -23,11 +23,11 @@ const isTest = process.env.NODE_ENV === "test";
 // Import lazy pour éviter une dépendance circulaire (logger ↔ requestContext).
 const injectRequestContext = winston.format((info) => {
   try {
-    // eslint-disable-next-line global-require
+     
     const { getContext } = require("../middleware/requestContext");
     const ctx = getContext();
     if (ctx.requestId && !info.requestId) info.requestId = ctx.requestId;
-    if (ctx.userId    && !info.userId)    info.userId    = String(ctx.userId);
+    if (ctx.userId && !info.userId) info.userId = String(ctx.userId);
   } catch {
     // Pas de middleware dispo (test unitaire, script CLI) — pas grave.
   }
@@ -76,8 +76,8 @@ if (isProd) {
   transports.push(
     new winston.transports.File({
       filename: "logs/combined.log",
-      maxsize: 20 * 1024 * 1024, // 20 MB
-      maxFiles: 5,
+      maxsize: 10 * 1024 * 1024, // 10 MB
+      maxFiles: 10,
       tailable: true,
     }),
   );
@@ -85,12 +85,10 @@ if (isProd) {
 
 // ─── Création du logger ───────────────────────────────────────────────────────
 const logger = winston.createLogger({
-  level: isTest
-    ? "error"
-    : process.env.LOG_LEVEL || (isProd ? "info" : "debug"),
+  level: isTest ? "error" : process.env.LOG_LEVEL || (isProd ? "info" : "debug"),
   defaultMeta: {
     service: "blancbleu-api",
-    version: process.env.npm_package_version || "1.2.0",
+    version: process.env.APP_VERSION || process.env.npm_package_version || "unknown",
     env: process.env.NODE_ENV || "development",
   },
   transports,
@@ -100,8 +98,7 @@ const logger = winston.createLogger({
 
 // ─── Helper : logger les requêtes HTTP ───────────────────────────────────────
 logger.httpRequest = (req, res, duration) => {
-  const level =
-    res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
+  const level = res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
 
   logger[level](`${req.method} ${req.path}`, {
     status: res.statusCode,

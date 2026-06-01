@@ -1,0 +1,14 @@
+# Auto-provisioning de la datasource Prometheus dans Grafana.
+# Chargé au démarrage du conteneur (pas de configuration manuelle UI).
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s

@@ -11,6 +11,14 @@ const logger = require("./logger");
 const AI_URL = process.env.AI_API_URL || "http://localhost:5002";
 const AI_TIMEOUT = 2000;
 
+// Version applicative : APP_VERSION (injectée par le CI/CD) > package.json.
+let APP_VERSION = process.env.APP_VERSION || process.env.npm_package_version || "unknown";
+try {
+  if (APP_VERSION === "unknown") APP_VERSION = require("../package.json").version || "unknown";
+} catch {
+  /* package.json illisible */
+}
+
 /**
  * Vérifie la connexion MongoDB
  */
@@ -71,7 +79,7 @@ async function checkIA() {
  */
 async function checkRedis() {
   try {
-    // eslint-disable-next-line global-require
+     
     const { redis } = require("./redis");
     if (redis?._stub) {
       return { status: "skipped", reason: "REDIS_URL absent ou REDIS_DISABLED" };
@@ -79,7 +87,7 @@ async function checkRedis() {
     const start = Date.now();
     const pong = await redis.ping();
     return {
-      status:    pong === "PONG" ? "healthy" : "degraded",
+      status: pong === "PONG" ? "healthy" : "degraded",
       latencyMs: Date.now() - start,
     };
   } catch (err) {
@@ -118,17 +126,17 @@ async function healthHandler(req, res) {
           ? "degraded"
           : "healthy";
 
-    const statusCode =
-      sante === "healthy" ? 200 : sante === "degraded" ? 200 : 503;
+    const statusCode = sante === "healthy" ? 200 : sante === "degraded" ? 200 : 503;
 
     res.status(statusCode).json({
       status: sante,
       timestamp: new Date().toISOString(),
       uptime: Math.round(process.uptime()),
-      version: process.env.npm_package_version || "1.2.0",
+      version: APP_VERSION,
       env: process.env.NODE_ENV || "development",
       dureeMs: Date.now() - debut,
       services: {
+        api: "ok",
         mongodb: mongo,
         ia,
         redis,
@@ -149,4 +157,55 @@ async function healthHandler(req, res) {
   }
 }
 
-module.exports = { healthHandler, checkMongo, checkIA, checkRedis, checkMemoire };
+/**
+ * Handler détaillé (admin) pour GET /api/health/detailed.
+ * Reprend les checks publics + infos de connexion Mongo et process.
+ */
+async function detailedHealthHandler(req, res) {
+  const debut = Date.now();
+  try {
+    const [mongo, ia, redis] = await Promise.all([checkMongo(), checkIA(), checkRedis()]);
+    const memoire = checkMemoire();
+
+    const sante =
+      mongo.status !== "healthy"
+        ? "unhealthy"
+        : ia.status === "unhealthy" || (redis.status !== "healthy" && redis.status !== "skipped")
+          ? "degraded"
+          : "healthy";
+
+    res.status(sante === "unhealthy" ? 503 : 200).json({
+      status: sante,
+      timestamp: new Date().toISOString(),
+      uptime: Math.round(process.uptime()),
+      version: APP_VERSION,
+      env: process.env.NODE_ENV || "development",
+      dureeMs: Date.now() - debut,
+      services: { api: "ok", mongodb: mongo, ia, redis },
+      details: {
+        mongo: {
+          readyState: mongoose.connection.readyState, // 1 = connected
+          host: mongoose.connection.host || null,
+          name: mongoose.connection.name || null,
+        },
+        process: {
+          pid: process.pid,
+          node: process.version,
+          memoire,
+        },
+      },
+    });
+  } catch (err) {
+    logger.error("Health check détaillé échoué", { err: err.message });
+    res.status(503).json({ status: "unhealthy", error: err.message });
+  }
+}
+
+module.exports = {
+  healthHandler,
+  detailedHealthHandler,
+  checkMongo,
+  checkIA,
+  checkRedis,
+  checkMemoire,
+};

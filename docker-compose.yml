@@ -1,230 +1,93 @@
-version: "3.9"
-
-# ══════════════════════════════════════════════════════════════════════════════
-# BlancBleu — Orchestration complète
-# Démarrage : docker-compose up --build
-# ══════════════════════════════════════════════════════════════════════════════
-
 services:
-  # ─── MongoDB (replica set single-node pour support transactions) ───────────
   mongo:
-    image: mongo:7.0
+    image: mongo:7
     container_name: blancbleu-mongo
     restart: unless-stopped
-    # Génère un keyfile à la 1ère création puis démarre mongod en replica set.
-    # Le keyfile est requis dès que --auth + --replSet sont actifs ensemble.
-    command:
-      - bash
-      - -c
-      - |
-        if [ ! -f /data/keyfile/mongo-keyfile ]; then
-          mkdir -p /data/keyfile
-          openssl rand -base64 756 > /data/keyfile/mongo-keyfile
-          chmod 400 /data/keyfile/mongo-keyfile
-          chown mongodb:mongodb /data/keyfile/mongo-keyfile
-        fi
-        exec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /data/keyfile/mongo-keyfile
+    ports:
+      - "27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?MONGO_USER must be set in .env}
-      # MONGO_PASSWORD must be set in .env — no default to avoid committing credentials
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}
-      MONGO_INITDB_DATABASE: blancbleu
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-rootpass}
     volumes:
       - mongo_data:/data/db
-      - mongo_keyfile:/data/keyfile
-    ports:
-      - "127.0.0.1:27017:27017"
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
     networks:
       - blancbleu-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
-  # ─── Redis (cache + rate limiter distribué) ───────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: blancbleu-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
-    ports:
-      - "127.0.0.1:6379:6379"
+    networks:
+      - blancbleu-net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    networks:
-      - blancbleu-net
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
-  # ─── Initialisation one-shot du replica set ────────────────────────────────
-  # Exécute rs.initiate() au premier démarrage. Idempotent : si rs.status()
-  # répond déjà OK, ne fait rien.
-  mongo-init:
-    image: mongo:7.0
-    container_name: blancbleu-mongo-init
-    depends_on:
-      mongo:
-        condition: service_healthy
-    restart: "no"
-    entrypoint:
-      - bash
-      - -c
-      - |
-        sleep 3
-        mongosh --host mongo:27017 \
-          --username "${MONGO_USER}" \
-          --password "${MONGO_PASSWORD}" \
-          --authenticationDatabase admin \
-          --eval 'try { rs.status() } catch(e) { rs.initiate({_id:"rs0", members:[{_id:0, host:"mongo:27017"}]}) }'
-    environment:
-      MONGO_USER:     ${MONGO_USER:?MONGO_USER must be set in .env}
-      MONGO_PASSWORD: ${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}
-    networks:
-      - blancbleu-net
-
-  # ─── Backend Node.js / Express ──────────────────────────────────────────────
   server:
     build:
       context: ./server
       dockerfile: Dockerfile
     container_name: blancbleu-server
     restart: unless-stopped
-    depends_on:
-      mongo:
-        condition: service_healthy
-      mongo-init:
-        condition: service_completed_successfully
-      redis:
-        condition: service_healthy
-      ia:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      PORT: 5000
-      # ?replicaSet=rs0 obligatoire pour que le driver négocie une session
-      # transactionnelle (utilisé par withTransactionOrFallback).
-      MONGO_URI: mongodb://${MONGO_USER:?MONGO_USER must be set in .env}:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}@mongo:27017/blancbleu?replicaSet=rs0&authSource=admin&directConnection=true
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET}
-      AI_API_URL: http://ia:5002
-      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?AI_SERVICE_TOKEN must be set in .env}
-      CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
-      ALLOWED_ORIGINS: ${CLIENT_URL:-http://localhost:3000}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env}
-      EMAIL_HOST: ${EMAIL_HOST:-}
-      EMAIL_USER: ${EMAIL_USER:-}
-      EMAIL_PASS: ${EMAIL_PASS:-}
-      EMAIL_FROM: ${EMAIL_FROM:-noreply@blancbleu.fr}
-      # Sprint M4 — Firebase Cloud Messaging. Vide par défaut → FCM désactivé
-      # (dégradation gracieuse). Pour activer : poser le JSON du service
-      # account côté hôte et set FIREBASE_SERVICE_ACCOUNT (3 formats acceptés
-      # — JSON inline / base64 / chemin de fichier). Cf. docs/push-notifications.md.
-      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
     ports:
       - "5000:5000"
+    env_file: .env
+    depends_on:
+      - mongo
+      - redis
+    networks:
+      - blancbleu-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
-      interval: 15s
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 30s
-    networks:
-      - blancbleu-net
 
-  # ─── Worker BullMQ (jobs async : email, OCR, PDF, cleanup) ────────────────
-  worker:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
-    container_name: blancbleu-worker
-    restart: unless-stopped
-    command: ["node", "workers/start.js"]
-    depends_on:
-      mongo:
-        condition: service_healthy
-      mongo-init:
-        condition: service_completed_successfully
-      redis:
-        condition: service_healthy
-      ia:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      MONGO_URI: mongodb://${MONGO_USER:?MONGO_USER must be set in .env}:${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}@mongo:27017/blancbleu?replicaSet=rs0&authSource=admin&directConnection=true
-      REDIS_URL: redis://redis:6379
-      AI_API_URL: http://ia:5002
-      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?AI_SERVICE_TOKEN must be set in .env}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env}
-      EMAIL_HOST: ${EMAIL_HOST:-}
-      EMAIL_USER: ${EMAIL_USER:-}
-      EMAIL_PASS: ${EMAIL_PASS:-}
-      EMAIL_FROM: ${EMAIL_FROM:-noreply@blancbleu.fr}
-      CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
-      # Sprint M4 — FCM côté worker (le pushWorker consomme la queue push
-      # et appelle pushNotification qui a besoin du service account).
-      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
-    networks:
-      - blancbleu-net
-
-  # ─── Module IA Python / FastAPI ──────────────────────────────────────────────
-  ia:
+  ai:
     build:
       context: ./ai-service
       dockerfile: Dockerfile
-    container_name: blancbleu-ia
+    container_name: blancbleu-ai
     restart: unless-stopped
-    environment:
-      NODE_ORIGIN: http://server:5000
-      ALLOWED_ORIGINS: http://server:5000,http://localhost:3000
-      # Service-to-service (pour pull du dataset d'entraînement)
-      NODE_API_URL: http://server:5000
-      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?AI_SERVICE_TOKEN must be set in .env}
     ports:
       - "5002:5002"
-    # Port 5002 aligné avec uvicorn dans ai-service/main.py
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
+    env_file: .env
     networks:
       - blancbleu-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5002/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # ─── Frontend React (prod) ────────────────────────────────────────────────────
   client:
     build:
       context: ./client
       dockerfile: Dockerfile
     container_name: blancbleu-client
     restart: unless-stopped
-    # Nginx tourne en non-root et écoute sur 8080 dans le container
     ports:
-      - "80:8080"
+      - "80:80"
     depends_on:
-      server:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      - server
     networks:
       - blancbleu-net
 
 volumes:
   mongo_data:
-    driver: local
-  mongo_keyfile:
-    driver: local
   redis_data:
-    driver: local
 
 networks:
   blancbleu-net:
