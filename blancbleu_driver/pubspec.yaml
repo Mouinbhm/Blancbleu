@@ -49,7 +49,7 @@ dependencies:
 
   # Utils
   intl: ^0.18.1
-  connectivity_plus: ^5.0.2
+  connectivity_plus: ^7.1.1
   workmanager: ^0.5.2
 
   # Offline-first queue (Sprint M6)
