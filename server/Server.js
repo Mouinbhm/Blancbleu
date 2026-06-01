@@ -260,14 +260,18 @@ if (process.env.NODE_ENV !== "production") {
 app.get("/api/health", healthHandler);
 
 // ─── Métriques Prometheus ─────────────────────────────────────────────────────
-// Protégé par X-Metrics-Token (env METRICS_TOKEN). Ne JAMAIS exposer
-// publiquement. En l'absence de token, l'endpoint refuse tout accès.
+// Protégé par X-Metrics-Token OU Authorization: Bearer <token> (scrape
+// Prometheus natif via bloc authorization). En l'absence de token configuré,
+// l'endpoint refuse tout accès. Ne JAMAIS exposer publiquement.
 app.get("/metrics", async (req, res) => {
   const expected = process.env.METRICS_TOKEN;
   if (!expected) {
     return res.status(503).json({ message: "METRICS_TOKEN non configuré" });
   }
-  if (req.get("X-Metrics-Token") !== expected) {
+  const authHeader = req.get("authorization") || "";
+  const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const provided = req.get("X-Metrics-Token") || bearer;
+  if (provided !== expected) {
     return res.status(401).json({ message: "Metrics token invalide" });
   }
   const { register } = require("./utils/metrics");
