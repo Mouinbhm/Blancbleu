@@ -24,7 +24,7 @@ ortools==9.10.4067             # Google OR-Tools (VRP)
 pydantic==2.7.1                # Validation schémas (inclus dans FastAPI)
 
 # ── HTTP Client (calcul distances OSRM) ──────────────────────────────────────
-httpx==0.27.0                  # Client HTTP async
+httpx==0.28.1                  # Client HTTP async
 
 # ── Utilitaires ───────────────────────────────────────────────────────────────
 python-dateutil==2.9.0         # Parsing dates flexibles
