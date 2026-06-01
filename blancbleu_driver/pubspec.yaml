@@ -23,7 +23,7 @@ dependencies:
 
   # Network
   dio: ^5.3.2
-  web_socket_channel: ^2.4.0
+  web_socket_channel: ^3.0.3
 
   # Local storage
   sqflite: ^2.3.0
