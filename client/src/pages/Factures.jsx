@@ -1,8 +1,6 @@
 import { useState, useCallback } from "react";
 import api, { factureService, comptabiliteService } from "../services/api";
-import { fmtDate, fmtEur } from "../utils/formatters";
 import { patientNom } from "./Comptabilite/utils/factureMappers";
-import { MOIS_LABELS, MOIS_NOMS } from "./Comptabilite/utils/factureConstants";
 
 import ModalImpression from "./Comptabilite/modals/ModalImpression";
 import ModalNouvelleFacture from "./Comptabilite/modals/ModalNouvelleFacture";
@@ -11,7 +9,13 @@ import { ToastContainer, ConfirmToast } from "./Comptabilite/components/Toasts";
 import FactureFilters from "./Comptabilite/components/FactureFilters";
 import FactureTable from "./Comptabilite/components/FactureTable";
 import ComptabiliteDashboard from "./Comptabilite/components/ComptabiliteDashboard";
-import { downloadCsvBlob, downloadCsvString } from "./Comptabilite/utils/downloadHelpers";
+import RecapAnnuelTable from "./Comptabilite/components/RecapAnnuelTable";
+import { downloadCsvBlob } from "./Comptabilite/utils/downloadHelpers";
+import {
+  exportFacturesCsv,
+  exportDsnCsv,
+  exportRapportCsv,
+} from "./Comptabilite/utils/factureExports";
 import { useFactures } from "./Comptabilite/hooks/useFactures";
 import { useComptabilite } from "./Comptabilite/hooks/useComptabilite";
 import { useFactureMutations } from "./Comptabilite/hooks/useFactureMutations";
@@ -112,77 +116,10 @@ export default function Factures() {
   };
 
   // ── Exports ─────────────────────────────────────────────────────────────────
-  const exportCSV = () => {
-    const headers = [
-      "N° Facture",
-      "Date émission",
-      "Transport",
-      "Patient",
-      "Motif",
-      "Total €",
-      "CPAM €",
-      "Patient €",
-      "Statut",
-    ];
-    const rows = filtered.map((f) => [
-      f.numero,
-      fmtDate(f.dateEmission),
-      f.transportId?.numero || "",
-      patientNom(f),
-      f.transportId?.motif || "",
-      f.montantTotal,
-      f.montantCPAM,
-      f.montantPatient,
-      f.statut,
-    ]);
-    const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
-    downloadCsvString(csv, `factures-blancbleu-${new Date().toISOString().slice(0, 10)}.csv`);
-  };
-
-  const exportDSN = () => {
-    if (!compta) return;
-    const headers = ["SIRET", "NOM", "PRENOM", "PERIODE", "BRUT", "COT_SAL", "NET", "COT_PAT"];
-    const periode = `${String(moisActuel).padStart(2, "0")}/${anneeActuelle}`;
-    const csv = [
-      headers.join(";"),
-      `000000000000000;;(collectif);${periode};${compta.charges.salaires};${compta.urssaf.cotisationsSalariales};${compta.urssaf.salaireNet};${compta.urssaf.cotisationsPatronales}`,
-    ].join("\n");
-    downloadCsvString(csv, `DSN-URSSAF-${periode.replace("/", "-")}.csv`);
-  };
-
-  const exportRapport = () => {
-    if (!compta) {
-      exportCSV();
-      return;
-    }
-    const periode = `${MOIS_NOMS[moisActuel - 1]} ${anneeActuelle}`;
-    const lines = [
-      `"=== RAPPORT COMPTABLE — ${periode} ==="`,
-      `""`,
-      `"=== CHIFFRE D'AFFAIRES ==="`,
-      `"CA encaissé (paiements reçus ce mois)","${fmtEur(compta.ca.encaisse ?? 0)}"`,
-      `"CA facturé (émissions ce mois)","${fmtEur(compta.ca.facture ?? compta.ca.total)}"`,
-      `"Part CPAM","${fmtEur(compta.ca.partCPAM)}"`,
-      `"Part patient","${fmtEur(compta.ca.partPatient)}"`,
-      `""`,
-      `"=== CHARGES ==="`,
-      `"Salaires bruts","${fmtEur(compta.charges.salaires)}"`,
-      `"Cotisations patronales (URSSAF)","${fmtEur(compta.charges.urssaf)}"`,
-      `"Maintenances","${fmtEur(compta.charges.maintenances)}"`,
-      `"Total charges","${fmtEur(compta.charges.total)}"`,
-      `""`,
-      `"=== RÉSULTAT ==="`,
-      `"Résultat net","${fmtEur(compta.resultatNet)}"`,
-      `""`,
-      `"=== FACTURES ==="`,
-      `"N° Facture","Date","Patient","Montant","CPAM","Statut"`,
-      ...factures.map(
-        (f) =>
-          `"${f.numero}","${fmtDate(f.dateEmission)}","${patientNom(f)}","${f.montantTotal}","${f.montantCPAM}","${f.statut}"`,
-      ),
-    ];
-    downloadCsvString(lines.join("\n"), `rapport-comptable-${periode.replace(" ", "-")}.csv`);
-  };
+  const exportCSV = () => exportFacturesCsv(filtered);
+  const exportDSN = () => exportDsnCsv(compta, moisActuel, anneeActuelle);
+  const exportRapport = () =>
+    exportRapportCsv(compta, factures, filtered, moisActuel, anneeActuelle);
 
   const totalFiltre = filtered.reduce(
     (sum, f) => sum + (f.statut !== "annulee" ? f.montantTotal || 0 : 0),
@@ -327,92 +264,12 @@ export default function Factures() {
         onCancel={handleDelete}
       />
 
-      {/* ── Section E : Récapitulatif annuel ───────────────────────────────── */}
-      {compta?.recapAnnuel && (
-        <div className="mt-6">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="material-symbols-outlined text-slate-500 text-base">bar_chart</span>
-            <h2 className="font-brand font-bold text-navy text-base">
-              Récapitulatif annuel {anneeActuelle}
-            </h2>
-          </div>
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  {["Mois", "CA", "Charges", "Résultat", "Marge"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left text-xs font-mono font-bold text-slate-400 uppercase tracking-widest"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {compta.recapAnnuel.map((r) => {
-                  const estMoisActuel = r.mois === moisActuel;
-                  const estFutur = r.mois > moisActuel;
-                  const rowBg = estMoisActuel ? "bg-blue-50" : "";
-                  const numCls = estFutur ? "text-slate-300" : "text-slate-600";
-                  const resCls = r.resultat >= 0 ? "text-emerald-600" : "text-red-500";
-                  return (
-                    <tr key={r.mois} className={`${rowBg} hover:bg-slate-50 transition-colors`}>
-                      <td
-                        className={`px-4 py-2.5 font-semibold ${estMoisActuel ? "text-primary" : numCls}`}
-                      >
-                        {MOIS_LABELS[r.mois - 1]}
-                        {estMoisActuel && (
-                          <span className="ml-1.5 text-xs text-primary font-normal">← actuel</span>
-                        )}
-                      </td>
-                      <td className={`px-4 py-2.5 font-mono ${numCls}`}>{fmtEur(r.ca)}</td>
-                      <td className={`px-4 py-2.5 font-mono ${numCls}`}>{fmtEur(r.charges)}</td>
-                      <td
-                        className={`px-4 py-2.5 font-mono font-semibold ${estFutur ? "text-slate-300" : resCls}`}
-                      >
-                        {fmtEur(r.resultat)}
-                      </td>
-                      <td
-                        className={`px-4 py-2.5 font-mono text-xs ${estFutur ? "text-slate-300" : r.marge !== null && r.marge >= 0 ? "text-emerald-600" : "text-red-500"}`}
-                      >
-                        {estFutur || r.marge === null
-                          ? "—"
-                          : `${r.marge > 0 ? "+" : ""}${r.marge}×`}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="bg-slate-100 border-t-2 border-slate-200 font-bold">
-                  <td className="px-4 py-3 text-xs font-mono text-slate-500 uppercase tracking-widest">
-                    TOTAL
-                  </td>
-                  <td className="px-4 py-3 font-mono text-navy">
-                    {fmtEur(compta.recapAnnuel.reduce((s, r) => s + r.ca, 0))}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-navy">
-                    {fmtEur(compta.recapAnnuel.reduce((s, r) => s + r.charges, 0))}
-                  </td>
-                  <td className="px-4 py-3 font-mono">
-                    {(() => {
-                      const tot = compta.recapAnnuel.reduce((s, r) => s + r.resultat, 0);
-                      return (
-                        <span className={tot >= 0 ? "text-emerald-600" : "text-red-500"}>
-                          {fmtEur(tot)}
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-4 py-3 text-slate-400">—</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-      )}
+      {/* ── Récapitulatif annuel ────────────────────────────────────────────── */}
+      <RecapAnnuelTable
+        recapAnnuel={compta?.recapAnnuel}
+        anneeActuelle={anneeActuelle}
+        moisActuel={moisActuel}
+      />
     </div>
   );
 }
