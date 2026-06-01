@@ -1,20 +1,15 @@
 import { useState, useCallback } from "react";
 import api, { factureService, comptabiliteService } from "../services/api";
-import { FactureRowSkeleton } from "../components/ui/Skeleton";
-import { fmtDate, fmtMontant, fmtEur } from "../utils/formatters";
+import { fmtDate, fmtEur } from "../utils/formatters";
 import { patientNom } from "./Comptabilite/utils/factureMappers";
-import {
-  MOIS_LABELS,
-  MOIS_NOMS,
-  STATUT_STYLE,
-  PAYMENT_STATUS_STYLE,
-} from "./Comptabilite/utils/factureConstants";
+import { MOIS_LABELS, MOIS_NOMS } from "./Comptabilite/utils/factureConstants";
 
 import ModalImpression from "./Comptabilite/modals/ModalImpression";
 import ModalNouvelleFacture from "./Comptabilite/modals/ModalNouvelleFacture";
 import ModalDetailFacture from "./Comptabilite/modals/ModalDetailFacture";
 import { ToastContainer, ConfirmToast } from "./Comptabilite/components/Toasts";
 import FactureFilters from "./Comptabilite/components/FactureFilters";
+import FactureTable from "./Comptabilite/components/FactureTable";
 import ComptabiliteDashboard from "./Comptabilite/components/ComptabiliteDashboard";
 import { downloadCsvBlob, downloadCsvString } from "./Comptabilite/utils/downloadHelpers";
 import { useFactures } from "./Comptabilite/hooks/useFactures";
@@ -317,189 +312,20 @@ export default function Factures() {
         <h2 className="font-brand font-bold text-navy text-base">Factures — Facturation CPAM</h2>
       </div>
 
-      {/* ── Tableau factures (existant — intact) ───────────────────────────── */}
-      <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-navy">
-              {[
-                "N° Facture",
-                "Date",
-                "Transport",
-                "Patient",
-                "Montant total",
-                "Part CPAM",
-                "Part patient",
-                "Statut",
-                "Paiement",
-                "Actions",
-              ].map((h) => (
-                <th
-                  key={h}
-                  className="px-4 py-4 text-left font-mono text-xs text-white/70 uppercase tracking-widest"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <>
-                <FactureRowSkeleton />
-                <FactureRowSkeleton />
-                <FactureRowSkeleton />
-                <FactureRowSkeleton />
-                <FactureRowSkeleton />
-              </>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="text-center py-16">
-                  <span
-                    className="material-symbols-outlined text-slate-300"
-                    style={{ fontSize: 48 }}
-                  >
-                    receipt_long
-                  </span>
-                  <p className="text-slate-400 mt-3 text-sm">Aucune facture trouvée</p>
-                </td>
-              </tr>
-            ) : (
-              filtered.map((f, i) => {
-                const statCfg = STATUT_STYLE[f.statut] || STATUT_STYLE.en_attente;
-                const isPaying = actionId === f._id;
-                return (
-                  <tr
-                    key={f._id}
-                    onClick={() => setFactureDetail(f)}
-                    className={`cursor-pointer border-b border-slate-100 hover:bg-blue-50 transition-all ${i % 2 === 1 ? "bg-slate-50/30" : "bg-white"}`}
-                  >
-                    <td className="px-4 py-3 font-mono font-bold text-primary text-sm">
-                      {f.numero}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-sm text-slate-600">
-                      {fmtDate(f.dateEmission)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-500 font-mono">
-                      {f.transportId?.numero || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-sm font-medium text-navy">{patientNom(f)}</td>
-                    <td className="px-4 py-3 font-mono font-bold text-navy text-sm">
-                      {fmtMontant(f.montantTotal)}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-sm text-emerald-600">
-                      {fmtMontant(f.montantCPAM)}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-sm text-red-500">
-                      {fmtMontant(f.montantPatient)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${statCfg.cls}`}>
-                        {statCfg.label}
-                      </span>
-                    </td>
-                    {/* Badge statut paiement */}
-                    <td className="px-4 py-3">
-                      {(() => {
-                        const ps = f.paymentStatus || "UNPAID";
-                        const pCfg = PAYMENT_STATUS_STYLE[ps] || PAYMENT_STATUS_STYLE.UNPAID;
-                        return (
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${pCfg.cls}`}
-                          >
-                            <span className="material-symbols-outlined text-[11px]">
-                              {pCfg.icon}
-                            </span>
-                            {pCfg.label}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex gap-1 flex-wrap">
-                        {["brouillon", "emise", "en_attente", "payment_failed"].includes(
-                          f.statut,
-                        ) && (
-                          <button
-                            title="Marquer payée"
-                            onClick={() => setConfirmPay({ id: f._id, numero: f.numero })}
-                            disabled={isPaying}
-                            className="w-7 h-7 rounded-lg border border-emerald-200 bg-emerald-50 flex items-center justify-center hover:bg-emerald-100 disabled:opacity-50"
-                          >
-                            <span className="material-symbols-outlined text-emerald-600 text-sm">
-                              payments
-                            </span>
-                          </button>
-                        )}
-                        {f.statut === "brouillon" && (
-                          <button
-                            title="Émettre la facture"
-                            onClick={() => handleStatut(f._id, "emise")}
-                            className="w-7 h-7 rounded-lg border border-blue-200 bg-blue-50 flex items-center justify-center hover:bg-blue-100"
-                          >
-                            <span className="material-symbols-outlined text-blue-600 text-sm">
-                              send
-                            </span>
-                          </button>
-                        )}
-                        {/* Télécharger PDF facture */}
-                        <button
-                          title="Télécharger PDF facture"
-                          onClick={() => handleDownloadPdf(f._id, f.numero)}
-                          className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-blue-50 hover:border-primary transition-all group"
-                        >
-                          <span className="material-symbols-outlined text-slate-400 text-sm group-hover:text-primary">
-                            picture_as_pdf
-                          </span>
-                        </button>
-                        {/* Télécharger reçu — uniquement si payée */}
-                        {f.paymentStatus === "SUCCEEDED" && (
-                          <button
-                            title="Télécharger reçu PDF"
-                            onClick={() => handleDownloadReceipt(f._id, f.numero)}
-                            className="w-7 h-7 rounded-lg border border-emerald-200 bg-emerald-50 flex items-center justify-center hover:bg-emerald-100 transition-all"
-                          >
-                            <span className="material-symbols-outlined text-emerald-600 text-sm">
-                              receipt
-                            </span>
-                          </button>
-                        )}
-                        <button
-                          title="Imprimer"
-                          onClick={() => setFactureImprimer(f)}
-                          className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-blue-50 hover:border-primary transition-all group"
-                        >
-                          <span className="material-symbols-outlined text-slate-400 text-sm group-hover:text-primary">
-                            print
-                          </span>
-                        </button>
-                        {f.statut !== "annulee" && (
-                          <button
-                            title="Annuler"
-                            onClick={() => handleDelete(f._id)}
-                            className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-red-50 hover:border-red-400 transition-all group"
-                          >
-                            <span className="material-symbols-outlined text-slate-400 text-sm group-hover:text-red-500">
-                              cancel
-                            </span>
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-
-        <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-          <span className="text-xs text-slate-500">{filtered.length} facture(s) affichée(s)</span>
-          <span className="text-xs font-mono font-bold text-navy">
-            Total affiché : {fmtMontant(totalFiltre)}
-          </span>
-        </div>
-      </div>
+      {/* ── Tableau factures ───────────────────────────────────────────────── */}
+      <FactureTable
+        factures={filtered}
+        loading={loading}
+        totalFiltre={totalFiltre}
+        actionId={actionId}
+        onOpenDetail={setFactureDetail}
+        onConfirmPay={setConfirmPay}
+        onEmettre={handleStatut}
+        onDownloadPdf={handleDownloadPdf}
+        onDownloadReceipt={handleDownloadReceipt}
+        onPrint={setFactureImprimer}
+        onCancel={handleDelete}
+      />
 
       {/* ── Section E : Récapitulatif annuel ───────────────────────────────── */}
       {compta?.recapAnnuel && (
