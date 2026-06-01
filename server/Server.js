@@ -86,6 +86,13 @@ app.use(httpLogger);
 app.use(require("./middleware/metricsMiddleware"));
 app.use(require("./middleware/auditMiddleware"));
 
+// ── Protection CSRF (double-submit) ───────────────────────────────────────────
+// Placée après cookieParser/json. Vérifie X-CSRF-Token sur POST/PUT/PATCH/DELETE
+// sauf routes exclues (webhooks, service-to-service, mobile Bearer). No-op si
+// CSRF_ENABLED=false. Le webhook Stripe est monté AVANT (body raw) — non concerné.
+const { csrfProtection } = require("./middleware/csrf");
+app.use(csrfProtection);
+
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
 const io = new Server(server, {
   cors: {
@@ -256,6 +263,12 @@ if (process.env.NODE_ENV !== "production") {
   );
 }
 
+// ─── CSRF token ──────────────────────────────────────────────────────────────
+// Le client appelle ce GET au boot, stocke le token et le renvoie en header
+// X-CSRF-Token sur les requêtes mutantes.
+const { csrfTokenHandler } = require("./middleware/csrf");
+app.get("/api/csrf-token", csrfTokenHandler);
+
 // ─── Health ────────────────────────────────────────────────────────────────────
 app.get("/api/health", healthHandler);
 
@@ -278,6 +291,9 @@ app.get("/metrics", async (req, res) => {
   res.set("Content-Type", register.contentType);
   res.end(await register.metrics());
 });
+
+// Transforme une erreur de token CSRF en 403 propre (avant le 404 / errorHandler).
+app.use(require("./middleware/csrf").csrfErrorHandler);
 
 app.use((req, res) => res.status(404).json({ message: "Route non trouvée" }));
 

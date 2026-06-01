@@ -125,6 +125,31 @@ viruses }`. Tous les fichiers de la requête sont supprimés, pas seulement
 
 ---
 
+## 4c. Protection CSRF (double-submit)
+
+Les sessions reposent sur des cookies httpOnly auto-envoyés par le navigateur →
+vecteur CSRF. Deux couches :
+
+1. **`SameSite=Strict`** sur `bb_access`/`bb_refresh` (un site tiers ne peut pas
+   déclencher de requête authentifiée). Baseline déjà en place.
+2. **Double-submit token** (`csrf-csrf`, `server/middleware/csrf.js`) en
+   défense-en-profondeur : cookie `bb_csrf` (httpOnly, `__Host-` + Secure en
+   prod) + header `X-CSRF-Token` que seul un script same-origin peut poser.
+
+- **Flux client** : `GET /api/csrf-token` au boot → le client stocke le token
+  et le renvoie en header sur POST/PUT/PATCH/DELETE
+  (`client/src/services/api/client.js`). Refresh auto si `403 EBADCSRFTOKEN`.
+- **Exclusions** (pas de cookie de session → CSRF non applicable) : webhook
+  Stripe (signé HMAC), routes service-to-service IA (`AI_SERVICE_TOKEN`), app
+  mobile `/api/v1/*` et `/api/patient` (auth Bearer), `/api/auth/login` et
+  `/refresh`.
+- **Désactivable** : `CSRF_ENABLED=false` (défaut hors prod → tests/E2E
+  passent sans token ; les tests E2E tournent en `NODE_ENV=test`).
+- **Test** : `__tests__/integration/csrf.test.js` (token émis, 403 sans header,
+  200 avec header valide, route exclue, passe-through désactivé).
+
+---
+
 ## 5. Audit & logs
 
 - Toutes les actions sensibles loguées dans `AuditLog` (collection mongo).
@@ -162,7 +187,8 @@ viruses }`. Tous les fichiers de la requête sont supprimés, pas seulement
 
 - **NoSQL injection** : `express-mongo-sanitize` (middleware/sanitize.js) + Mongoose schemas stricts.
 - **XSS** : sanitization input + Helmet CSP + escaping React par défaut.
-- **CSRF** : SameSite=Lax sur cookies + token JWT requis sur mutations.
+- **CSRF** : `SameSite=Strict` sur les cookies de session **+** double-submit
+  token (csrf-csrf) sur les mutations — cf. §4c.
 - **SQL injection** : N/A (MongoDB).
 - **Brute force** : rate limiting + 2FA + verrouillage compte après X échecs (à confirmer).
 - **Énumération users** : `forgot-password` répond toujours 200 quelle que soit l'existence du compte.
