@@ -77,7 +77,7 @@
     "@bull-board/express": "^7.1.5",
     "@sentry/node": "^10.53.1",
     "@socket.io/redis-adapter": "^8.3.0",
-    "axios": "^1.14.0",
+    "axios": "^1.16.1",
     "bcryptjs": "^2.4.3",
     "blancbleu-monorepo": "file:..",
     "bullmq": "^5.77.0",

@@ -162,18 +162,39 @@ vecteur CSRF. Deux couches :
 
 ## 6. Dépendances & vulnérabilités
 
-### CI
+### Audit automatique
 
-- `npm audit --audit-level=high` sur server + client (informatif en CI).
-- `pip-audit` sur ai-service (informatif en CI).
-- Job CI : `.github/workflows/ci.yml` → `audit`.
+- **`.github/workflows/security.yml`** — hebdomadaire (lundi 6h UTC) + à chaque
+  PR touchant un manifeste de dépendances, + `workflow_dispatch` :
+  - `npm-audit-server` : `npm audit --audit-level=high` → **bloquant**.
+  - `npm-audit-client` : informatif (CRA legacy), rapport JSON en artifact.
+  - `python-audit` : `pip-audit -r ai-service/requirements.txt` → **bloquant**.
+  - `flutter-audit` : `flutter pub outdated --json` (driver + patient), artifact.
+- **`.github/dependabot.yml`** — PRs hebdo (lundi 6h) sur npm (server, client),
+  pip (ai-service), github-actions, pub (driver, patient). **Max 5 PRs /
+  écosystème** pour limiter le bruit.
+- **`scripts/check-deps.sh`** — même audit en local avant push (server + python
+  bloquants, client + flutter informatifs).
+- Le job `audit` de `ci.yml` reste en place (informatif, non bloquant).
 
-### Processus
+### Processus — SLA de patch
 
-1. Toute vuln **high** ou **critical** doit être traitée en moins de 7 jours.
-2. Patch dispo → `npm update <pkg>` + test → PR.
-3. Pas de patch → évaluer impact, désactiver le code path concerné si possible.
-4. Vulns connues acceptées : à documenter ici dans la section ci-dessous.
+| Sévérité     | Délai max de patch            |
+| ------------ | ----------------------------- |
+| **critical** | **48 h**                      |
+| **high**     | **7 jours**                   |
+| medium / low | best-effort (revue mensuelle) |
+
+En cas d'alerte high/critical (CI, Dependabot ou `check-deps.sh`) :
+
+1. **Reproduire** : `bash scripts/check-deps.sh` (ou `npm audit` ciblé).
+2. **Patch dispo** → bump (`npm update <pkg>` / merge PR Dependabot) + lancer
+   les tests → PR.
+3. **Pas de patch amont** → évaluer l'exploitabilité (le code path est-il
+   atteignable ?), désactiver/contourner le code concerné, ou pin une version
+   sûre. Documenter la décision ci-dessous.
+4. **Non corrigeable immédiatement** → consigner dans le tableau « Vulnérabilités
+   acceptées » avec justification + date de revue.
 
 ### Vulnérabilités acceptées (à supprimer dès que résolues)
 
