@@ -7,6 +7,8 @@ import { factureService } from "../../../services/api";
 import { fmtEur, fmtDate } from "../../../utils/formatters";
 import { patientNom } from "../utils/factureMappers";
 import { MODES_PAI, STATUT_STYLE, inputF, labelF } from "../utils/factureConstants";
+import FactureInfoCard from "./FactureInfoCard";
+import FactureAmountsReadonly from "./FactureAmountsReadonly";
 
 export default function ModalDetailFacture({ facture, onClose, onUpdated }) {
   const readonly = ["payee", "annulee"].includes(facture.statut);
@@ -131,65 +133,11 @@ export default function ModalDetailFacture({ facture, onClose, onUpdated }) {
           )}
 
           {/* Infos transport/patient */}
-          <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm border border-slate-100">
-            <p className={labelF}>Informations</p>
-            {facture.transportId?.numero && (
-              <div className="flex justify-between">
-                <span className="text-slate-500">Transport</span>
-                <span className="font-mono text-navy">{facture.transportId.numero}</span>
-              </div>
-            )}
-            <div className="flex justify-between">
-              <span className="text-slate-500">Patient</span>
-              <span className="font-semibold text-navy">{nomPatient}</span>
-            </div>
-            {facture.motif && (
-              <div className="flex justify-between">
-                <span className="text-slate-500">Motif</span>
-                <span className="text-slate-600">{facture.motif}</span>
-              </div>
-            )}
-            {facture.typeVehicule && (
-              <div className="flex justify-between">
-                <span className="text-slate-500">Type</span>
-                <span className="font-mono text-slate-600">{facture.typeVehicule}</span>
-              </div>
-            )}
-            {facture.allerRetour !== undefined && (
-              <div className="flex justify-between">
-                <span className="text-slate-500">Aller-retour</span>
-                <span className="text-slate-600">{facture.allerRetour ? "Oui" : "Non"}</span>
-              </div>
-            )}
-          </div>
+          <FactureInfoCard facture={facture} nomPatient={nomPatient} />
 
           {/* Montants — lecture seule si payée/annulée */}
           {readonly ? (
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-2 text-sm">
-              <p className={labelF}>Montants</p>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Montant total</span>
-                <span className="font-mono font-bold text-navy">
-                  {fmtEur(facture.montantTotal)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Part CPAM ({facture.tauxPriseEnCharge}%)</span>
-                <span className="font-mono text-emerald-600">{fmtEur(facture.montantCPAM)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Part patient</span>
-                <span className="font-mono text-red-500">{fmtEur(facture.montantPatient)}</span>
-              </div>
-              {facture.statut === "payee" && facture.datePaiement && (
-                <div className="flex justify-between pt-1 border-t border-blue-100">
-                  <span className="text-slate-500">Payée le</span>
-                  <span className="font-semibold text-emerald-600">
-                    {fmtDate(facture.datePaiement)}
-                  </span>
-                </div>
-              )}
-            </div>
+            <FactureAmountsReadonly facture={facture} />
           ) : (
             <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-100">
               <p className={labelF}>Montants (modifiables)</p>
