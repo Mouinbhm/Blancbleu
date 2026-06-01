@@ -1,24 +1,21 @@
 import { useState, useCallback } from "react";
-import api, { factureService, comptabiliteService } from "../services/api";
-import { patientNom } from "./Comptabilite/utils/factureMappers";
+import api, { factureService, comptabiliteService } from "../../services/api";
+import { patientNom } from "./utils/factureMappers";
 
-import ModalImpression from "./Comptabilite/modals/ModalImpression";
-import ModalNouvelleFacture from "./Comptabilite/modals/ModalNouvelleFacture";
-import ModalDetailFacture from "./Comptabilite/modals/ModalDetailFacture";
-import { ToastContainer, ConfirmToast } from "./Comptabilite/components/Toasts";
-import FactureFilters from "./Comptabilite/components/FactureFilters";
-import FactureTable from "./Comptabilite/components/FactureTable";
-import ComptabiliteDashboard from "./Comptabilite/components/ComptabiliteDashboard";
-import RecapAnnuelTable from "./Comptabilite/components/RecapAnnuelTable";
-import { downloadCsvBlob } from "./Comptabilite/utils/downloadHelpers";
-import {
-  exportFacturesCsv,
-  exportDsnCsv,
-  exportRapportCsv,
-} from "./Comptabilite/utils/factureExports";
-import { useFactures } from "./Comptabilite/hooks/useFactures";
-import { useComptabilite } from "./Comptabilite/hooks/useComptabilite";
-import { useFactureMutations } from "./Comptabilite/hooks/useFactureMutations";
+import ModalImpression from "./modals/ModalImpression";
+import ModalNouvelleFacture from "./modals/ModalNouvelleFacture";
+import ModalDetailFacture from "./modals/ModalDetailFacture";
+import { ToastContainer, ConfirmToast } from "./components/Toasts";
+import FactureFilters from "./components/FactureFilters";
+import FactureTable from "./components/FactureTable";
+import ComptabiliteDashboard from "./components/ComptabiliteDashboard";
+import ComptabiliteHeader from "./components/ComptabiliteHeader";
+import RecapAnnuelTable from "./components/RecapAnnuelTable";
+import { downloadCsvBlob } from "./utils/downloadHelpers";
+import { exportFacturesCsv, exportDsnCsv, exportRapportCsv } from "./utils/factureExports";
+import { useFactures } from "./hooks/useFactures";
+import { useComptabilite } from "./hooks/useComptabilite";
+import { useFactureMutations } from "./hooks/useFactureMutations";
 
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function Factures() {
@@ -168,59 +165,18 @@ export default function Factures() {
       )}
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-        <div>
-          <h1 className="font-brand font-bold text-2xl text-navy">Comptabilité</h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Finances & Facturation CPAM — Ambulances Blanc Bleu
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={exportCSV}
-            className="flex items-center gap-2 text-xs font-bold text-primary border border-primary/30 px-4 py-2 rounded-lg hover:bg-primary hover:text-white transition-all"
-          >
-            <span className="material-symbols-outlined text-sm">download</span>Exporter CSV
-          </button>
-          <button
-            onClick={handleExportInvoicesCsv}
-            className="flex items-center gap-2 text-xs font-bold text-indigo-600 border border-indigo-200 px-4 py-2 rounded-lg hover:bg-indigo-600 hover:text-white transition-all"
-            title="Export comptable factures (avec statut paiement Stripe)"
-          >
-            <span className="material-symbols-outlined text-sm">account_balance</span>CSV Comptable
-          </button>
-          <button
-            onClick={handleExportPaymentsCsv}
-            className="flex items-center gap-2 text-xs font-bold text-violet-600 border border-violet-200 px-4 py-2 rounded-lg hover:bg-violet-600 hover:text-white transition-all"
-            title="Export paiements Stripe"
-          >
-            <span className="material-symbols-outlined text-sm">credit_card</span>CSV Paiements
-          </button>
-          <button
-            onClick={exportDSN}
-            className="flex items-center gap-2 text-xs font-bold text-orange-600 border border-orange-300 px-4 py-2 rounded-lg hover:bg-orange-600 hover:text-white transition-all"
-          >
-            <span className="material-symbols-outlined text-sm">description</span>Export DSN URSSAF
-          </button>
-          <button
-            onClick={exportRapport}
-            className="flex items-center gap-2 text-xs font-bold text-emerald-600 border border-emerald-300 px-4 py-2 rounded-lg hover:bg-emerald-600 hover:text-white transition-all"
-          >
-            <span className="material-symbols-outlined text-sm">bar_chart</span>Rapport complet
-          </button>
-          {stats?.parStatut?.brouillons > 0 ||
-          (compta?.ca?.total === 0 && stats?.parStatut?.payees > 0) ? (
-            <button
-              onClick={handleRecalculateAmounts}
-              className="flex items-center gap-2 text-xs font-bold text-red-600 border border-red-300 px-4 py-2 rounded-lg hover:bg-red-600 hover:text-white transition-all"
-              title="Recalculer les montants des factures à 0 €"
-            >
-              <span className="material-symbols-outlined text-sm">calculate</span>Recalculer
-              montants
-            </button>
-          ) : null}
-        </div>
-      </div>
+      <ComptabiliteHeader
+        showRecalculate={
+          stats?.parStatut?.brouillons > 0 ||
+          (compta?.ca?.total === 0 && stats?.parStatut?.payees > 0)
+        }
+        onExportCsv={exportCSV}
+        onExportInvoicesCsv={handleExportInvoicesCsv}
+        onExportPaymentsCsv={handleExportPaymentsCsv}
+        onExportDSN={exportDSN}
+        onExportRapport={exportRapport}
+        onRecalculate={handleRecalculateAmounts}
+      />
 
       {/* ── Dashboard comptabilité (période, alertes, KPI, graphiques, charges) ── */}
       <ComptabiliteDashboard

@@ -13,14 +13,16 @@ import Dashboard from "./pages/Dashboard";
 import Transports from "./pages/Transports";
 import NouveauTransport from "./pages/NouveauTransport";
 import TransportDetail from "./pages/TransportDetail";
-import Flotte         from "./pages/Flotte";
+import Flotte from "./pages/Flotte";
 import FleetDashboard from "./pages/FleetDashboard";
 import Planning from "./pages/Planning";
 import Patients from "./pages/Patients";
 import PatientDetail from "./pages/PatientDetail";
 import PrescriptionValidation from "./pages/PrescriptionValidation";
 import Personnel from "./pages/Personnel";
-import Factures from "./pages/Factures";
+// Page « Comptabilité » (dashboard finances + facturation). Montée sur /factures
+// — URL et libellé de nav inchangés (cf. refactor Comptabilite/).
+import Factures from "./pages/Comptabilite";
 import AideIA from "./pages/AideIA";
 import Utilisateurs from "./pages/Utilisateurs";
 import ForceChangePassword from "./pages/ForceChangePassword";
@@ -29,7 +31,7 @@ import Shifts from "./pages/Shifts";
 import StyleguidePage from "./pages/_StyleguidePage";
 import DispatchConfigPage from "./pages/admin/DispatchConfigPage";
 import AutoDispatchQueue from "./pages/AutoDispatchQueue";
-import CarteAnalytique  from "./pages/CarteAnalytique";
+import CarteAnalytique from "./pages/CarteAnalytique";
 
 function App() {
   return (
@@ -62,7 +64,7 @@ function App() {
             <Route path="/transports/new" element={<NouveauTransport />} />
             <Route path="/transports/:id" element={<TransportDetail />} />
             <Route path="/missions" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/flotte"           element={<Flotte />} />
+            <Route path="/flotte" element={<Flotte />} />
             <Route path="/flotte/dashboard" element={<FleetDashboard />} />
             <Route path="/planning" element={<Planning />} />
             <Route path="/patients" element={<Patients />} />
@@ -75,8 +77,8 @@ function App() {
             <Route path="/suivi-en-direct" element={<SuiviEnDirect />} />
             <Route path="/shifts" element={<Shifts />} />
             <Route path="/admin/dispatch-config" element={<DispatchConfigPage />} />
-            <Route path="/auto-dispatch"         element={<AutoDispatchQueue />} />
-            <Route path="/carte-analytique"      element={<CarteAnalytique />} />
+            <Route path="/auto-dispatch" element={<AutoDispatchQueue />} />
+            <Route path="/carte-analytique" element={<CarteAnalytique />} />
           </Route>
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
