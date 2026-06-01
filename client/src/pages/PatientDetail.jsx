@@ -3,30 +3,42 @@ import { useParams, useNavigate } from "react-router-dom";
 import { patientService } from "../services/api";
 import StatutBadge from "../components/transport/StatutBadge";
 import ModalNouvellePrescription from "../components/prescription/ModalPrescription";
+import {
+  fmtDateLong as fmtDate,
+  fmtDatetimeLong as fmtDatetime,
+  fmtEuroFixed as fmtEuro,
+} from "../utils/formatters";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-const fmtDate = (d) =>
-  d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-const fmtDatetime = (d) =>
-  d ? new Date(d).toLocaleString("fr-FR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
-const fmtEuro = (n) =>
-  n != null ? `${Number(n).toFixed(2)} €` : "—";
-
-const MOBILITE_LABEL = { ASSIS: "Assis", FAUTEUIL_ROULANT: "Fauteuil roulant", ALLONGE: "Allongé", CIVIERE: "Civière" };
+const MOBILITE_LABEL = {
+  ASSIS: "Assis",
+  FAUTEUIL_ROULANT: "Fauteuil roulant",
+  ALLONGE: "Allongé",
+  CIVIERE: "Civière",
+};
 
 const TABS = [
-  { id: "info",          label: "Informations",  icon: "person"          },
-  { id: "transports",    label: "Transports",    icon: "directions_car"  },
-  { id: "prescriptions", label: "Prescriptions", icon: "description"     },
-  { id: "factures",      label: "Factures",      icon: "receipt_long"    },
-  { id: "consentements", label: "Consentements", icon: "verified_user"   },
-  { id: "rgpd",          label: "RGPD",          icon: "shield"          },
-  { id: "audit",         label: "Audit",         icon: "history"         },
+  { id: "info", label: "Informations", icon: "person" },
+  { id: "transports", label: "Transports", icon: "directions_car" },
+  { id: "prescriptions", label: "Prescriptions", icon: "description" },
+  { id: "factures", label: "Factures", icon: "receipt_long" },
+  { id: "consentements", label: "Consentements", icon: "verified_user" },
+  { id: "rgpd", label: "RGPD", icon: "shield" },
+  { id: "audit", label: "Audit", icon: "history" },
 ];
 
 const Spinner = () => (
   <div className="flex items-center justify-center py-20 text-slate-400 gap-3">
-    <div style={{ width: 22, height: 22, border: "2px solid #e2e8f0", borderTop: "2px solid #1D6EF5", borderRadius: "50%", animation: "spin .7s linear infinite" }} />
+    <div
+      style={{
+        width: 22,
+        height: 22,
+        border: "2px solid #e2e8f0",
+        borderTop: "2px solid #1D6EF5",
+        borderRadius: "50%",
+        animation: "spin .7s linear infinite",
+      }}
+    />
     Chargement…
   </div>
 );
@@ -55,13 +67,17 @@ function SectionCard({ title, icon, children }) {
 function Toast({ msg, type, onClose }) {
   const colors = {
     success: "bg-green-100 text-green-800 border-green-200",
-    error:   "bg-red-100 text-red-800 border-red-200",
+    error: "bg-red-100 text-red-800 border-red-200",
     warning: "bg-amber-100 text-amber-800 border-amber-200",
   };
   return (
-    <div className={`fixed top-4 right-4 z-50 border rounded-xl px-4 py-3 text-sm font-semibold shadow-lg max-w-sm ${colors[type] || colors.success}`}>
+    <div
+      className={`fixed top-4 right-4 z-50 border rounded-xl px-4 py-3 text-sm font-semibold shadow-lg max-w-sm ${colors[type] || colors.success}`}
+    >
       {msg}
-      <button onClick={onClose} className="ml-3 opacity-60 hover:opacity-100">✕</button>
+      <button onClick={onClose} className="ml-3 opacity-60 hover:opacity-100">
+        ✕
+      </button>
     </div>
   );
 }
@@ -71,32 +87,45 @@ function TabInfo({ patient }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <SectionCard title="Identité" icon="badge">
-        <InfoRow label="Numéro patient"  value={patient.numeroPatient} />
-        <InfoRow label="Nom complet"     value={`${patient.nom || ""} ${patient.prenom || ""}`.trim()} />
+        <InfoRow label="Numéro patient" value={patient.numeroPatient} />
+        <InfoRow
+          label="Nom complet"
+          value={`${patient.nom || ""} ${patient.prenom || ""}`.trim()}
+        />
         <InfoRow label="Date de naissance" value={fmtDate(patient.dateNaissance)} />
-        <InfoRow label="Genre"           value={{ M: "Masculin", F: "Féminin", autre: "Autre" }[patient.genre]} />
-        <InfoRow label="Mobilité"        value={MOBILITE_LABEL[patient.mobilite]} />
+        <InfoRow
+          label="Genre"
+          value={{ M: "Masculin", F: "Féminin", autre: "Autre" }[patient.genre]}
+        />
+        <InfoRow label="Mobilité" value={MOBILITE_LABEL[patient.mobilite]} />
       </SectionCard>
 
       <SectionCard title="Contact" icon="contact_phone">
-        <InfoRow label="Téléphone"  value={patient.telephone} />
-        <InfoRow label="Email"      value={patient.email} />
-        <InfoRow label="Adresse"    value={
-          patient.adresse
-            ? [patient.adresse.rue, patient.adresse.codePostal, patient.adresse.ville].filter(Boolean).join(", ")
-            : null
-        } />
+        <InfoRow label="Téléphone" value={patient.telephone} />
+        <InfoRow label="Email" value={patient.email} />
+        <InfoRow
+          label="Adresse"
+          value={
+            patient.adresse
+              ? [patient.adresse.rue, patient.adresse.codePostal, patient.adresse.ville]
+                  .filter(Boolean)
+                  .join(", ")
+              : null
+          }
+        />
       </SectionCard>
 
       <SectionCard title="Informations médicales" icon="local_hospital">
         <InfoRow label="N° Sécurité sociale" value={patient.numeroSecu} />
-        <InfoRow label="Caisse"              value={patient.caisse} />
-        <InfoRow label="Exonération (ALD)"   value={patient.exoneration ? "Oui" : "Non"} />
-        <InfoRow label="Mutuelle"            value={patient.mutuelle} />
+        <InfoRow label="Caisse" value={patient.caisse} />
+        <InfoRow label="Exonération (ALD)" value={patient.exoneration ? "Oui" : "Non"} />
+        <InfoRow label="Mutuelle" value={patient.mutuelle} />
         {patient.antecedents && patient.antecedents !== "*** confidentiel ***" && (
           <div className="mt-3">
             <p className="text-xs text-slate-500 mb-1">Antécédents</p>
-            <p className="text-sm text-slate-700 bg-slate-50 rounded-lg p-2">{patient.antecedents}</p>
+            <p className="text-sm text-slate-700 bg-slate-50 rounded-lg p-2">
+              {patient.antecedents}
+            </p>
           </div>
         )}
         {patient.allergies && (
@@ -108,17 +137,19 @@ function TabInfo({ patient }) {
       </SectionCard>
 
       <SectionCard title="Besoins spécifiques" icon="accessible">
-        <InfoRow label="Oxygène"       value={patient.oxygene      ? "✓ Requis" : "Non"} />
-        <InfoRow label="Brancardage"   value={patient.brancardage  ? "✓ Requis" : "Non"} />
+        <InfoRow label="Oxygène" value={patient.oxygene ? "✓ Requis" : "Non"} />
+        <InfoRow label="Brancardage" value={patient.brancardage ? "✓ Requis" : "Non"} />
         <InfoRow label="Accompagnateur" value={patient.accompagnateur ? "✓ Requis" : "Non"} />
         {patient.contactUrgence?.nom && (
           <>
             <div className="mt-3 mb-1">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Contact d'urgence</p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                Contact d'urgence
+              </p>
             </div>
-            <InfoRow label="Nom"       value={patient.contactUrgence.nom} />
+            <InfoRow label="Nom" value={patient.contactUrgence.nom} />
             <InfoRow label="Téléphone" value={patient.contactUrgence.telephone} />
-            <InfoRow label="Lien"      value={patient.contactUrgence.lien} />
+            <InfoRow label="Lien" value={patient.contactUrgence.lien} />
           </>
         )}
       </SectionCard>
@@ -142,17 +173,22 @@ function TabTransports({ transports, patientId }) {
         </button>
       </div>
       {transports.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 text-sm">Aucun transport enregistré</div>
+        <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 text-sm">
+          Aucun transport enregistré
+        </div>
       ) : (
         <div className="space-y-2">
           {transports.map((t) => (
-            <div key={t._id}
+            <div
+              key={t._id}
               onClick={() => navigate(`/transports/${t._id}`)}
               className="bg-white rounded-xl border border-slate-100 p-4 hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-3"
             >
               <div>
                 <p className="text-sm font-bold text-navy">{t.numero}</p>
-                <p className="text-xs text-slate-500">{t.motif} · {fmtDate(t.dateTransport)} {t.heureRDV || ""}</p>
+                <p className="text-xs text-slate-500">
+                  {t.motif} · {fmtDate(t.dateTransport)} {t.heureRDV || ""}
+                </p>
                 {t.adresseDestination?.ville && (
                   <p className="text-xs text-slate-400 mt-0.5">→ {t.adresseDestination.ville}</p>
                 )}
@@ -171,35 +207,43 @@ function TabPrescriptions({ prescriptions, patient, patientId, onRefresh }) {
   const [showModal, setShowModal] = useState(false);
 
   const STATUT_COLOR = {
-    active:                "bg-green-100 text-green-700",
+    active: "bg-green-100 text-green-700",
     en_attente_validation: "bg-amber-100 text-amber-700",
-    incomplet:             "bg-orange-100 text-orange-700",
-    expiree:               "bg-slate-100 text-slate-500",
-    annulee:               "bg-red-100 text-red-600",
+    incomplet: "bg-orange-100 text-orange-700",
+    expiree: "bg-slate-100 text-slate-500",
+    annulee: "bg-red-100 text-red-600",
     // legacy
     en_attente: "bg-yellow-100 text-yellow-700",
-    validee:    "bg-green-100 text-green-700",
+    validee: "bg-green-100 text-green-700",
     incomplete: "bg-red-100 text-red-700",
   };
 
   const STATUT_LABEL = {
-    active:                "Active",
+    active: "Active",
     en_attente_validation: "À valider",
-    incomplet:             "Incomplet",
-    expiree:               "Expirée",
-    annulee:               "Annulée",
-    en_attente:            "En attente",
-    validee:               "Validée",
-    incomplete:            "Incomplet",
+    incomplet: "Incomplet",
+    expiree: "Expirée",
+    annulee: "Annulée",
+    en_attente: "En attente",
+    validee: "Validée",
+    incomplete: "Incomplet",
   };
 
   return (
     <div>
       {showModal && (
         <ModalNouvellePrescription
-          patientPreset={{ _id: patientId, nom: patient?.nom || "", prenom: patient?.prenom || "", numeroPatient: patient?.numeroPatient || "" }}
+          patientPreset={{
+            _id: patientId,
+            nom: patient?.nom || "",
+            prenom: patient?.prenom || "",
+            numeroPatient: patient?.numeroPatient || "",
+          }}
           onClose={() => setShowModal(false)}
-          onSuccess={() => { setShowModal(false); onRefresh(); }}
+          onSuccess={() => {
+            setShowModal(false);
+            onRefresh();
+          }}
         />
       )}
 
@@ -225,10 +269,14 @@ function TabPrescriptions({ prescriptions, patient, patientId, onRefresh }) {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-bold text-navy">{p.numero || "Sans numéro"}</p>
-                  <p className="text-xs text-slate-500">{p.motif} · {fmtDate(p.dateEmission)}</p>
+                  <p className="text-xs text-slate-500">
+                    {p.motif} · {fmtDate(p.dateEmission)}
+                  </p>
                   {p.medecin?.nom && <p className="text-xs text-slate-400">Dr {p.medecin.nom}</p>}
                 </div>
-                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUT_COLOR[p.statut] || "bg-slate-100 text-slate-500"}`}>
+                <span
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUT_COLOR[p.statut] || "bg-slate-100 text-slate-500"}`}
+                >
                   {STATUT_LABEL[p.statut] || p.statut}
                 </span>
               </div>
@@ -243,17 +291,19 @@ function TabPrescriptions({ prescriptions, patient, patientId, onRefresh }) {
 // ── Onglet Factures ───────────────────────────────────────────────────────────
 function TabFactures({ factures }) {
   const STATUT_COLOR = {
-    brouillon:  "bg-slate-100 text-slate-600",
-    emise:      "bg-blue-100 text-blue-700",
+    brouillon: "bg-slate-100 text-slate-600",
+    emise: "bg-blue-100 text-blue-700",
     en_attente: "bg-yellow-100 text-yellow-700",
-    payee:      "bg-green-100 text-green-700",
-    annulee:    "bg-red-100 text-red-600",
+    payee: "bg-green-100 text-green-700",
+    annulee: "bg-red-100 text-red-600",
   };
   return (
     <div>
       <p className="text-sm text-slate-500 mb-4">{factures.length} facture(s)</p>
       {factures.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 text-sm">Aucune facture</div>
+        <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 text-sm">
+          Aucune facture
+        </div>
       ) : (
         <div className="space-y-2">
           {factures.map((f) => (
@@ -262,11 +312,15 @@ function TabFactures({ factures }) {
                 <div>
                   <p className="text-sm font-bold text-navy">{f.numero}</p>
                   <p className="text-xs text-slate-500">Émise le {fmtDate(f.dateEmission)}</p>
-                  {f.datePaiement && <p className="text-xs text-green-600">Payée le {fmtDate(f.datePaiement)}</p>}
+                  {f.datePaiement && (
+                    <p className="text-xs text-green-600">Payée le {fmtDate(f.datePaiement)}</p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold text-navy font-mono">{fmtEuro(f.montantTotal)}</p>
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUT_COLOR[f.statut] || "bg-slate-100 text-slate-500"}`}>
+                  <span
+                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUT_COLOR[f.statut] || "bg-slate-100 text-slate-500"}`}
+                  >
                     {f.statut}
                   </span>
                 </div>
@@ -292,8 +346,8 @@ function TabConsentements({ patientId, consentements, onRefresh, showToast }) {
       await patientService.updateConsent(patientId, {
         consentType,
         accepted: !current,
-        version:  "1.0",
-        source:   "web",
+        version: "1.0",
+        source: "web",
       });
       showToast("Consentement enregistré", "success");
       onRefresh();
@@ -305,9 +359,24 @@ function TabConsentements({ patientId, consentements, onRefresh, showToast }) {
   };
 
   const CONSENTS = [
-    { key: "data_processing", label: "Traitement des données personnelles", value: gdpr.consentGiven,       icon: "data_usage" },
-    { key: "medical",         label: "Données médicales et de santé",       value: gdpr.medicalDataConsent, icon: "health_and_safety" },
-    { key: "marketing",       label: "Communication et informations",        value: gdpr.marketingConsent,   icon: "mail" },
+    {
+      key: "data_processing",
+      label: "Traitement des données personnelles",
+      value: gdpr.consentGiven,
+      icon: "data_usage",
+    },
+    {
+      key: "medical",
+      label: "Données médicales et de santé",
+      value: gdpr.medicalDataConsent,
+      icon: "health_and_safety",
+    },
+    {
+      key: "marketing",
+      label: "Communication et informations",
+      value: gdpr.marketingConsent,
+      icon: "mail",
+    },
   ];
 
   return (
@@ -315,13 +384,18 @@ function TabConsentements({ patientId, consentements, onRefresh, showToast }) {
       <SectionCard title="État actuel des consentements" icon="verified_user">
         <div className="space-y-3">
           {CONSENTS.map((c) => (
-            <div key={c.key} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+            <div
+              key={c.key}
+              className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0"
+            >
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-slate-400 text-base">{c.icon}</span>
                 <div>
                   <p className="text-sm font-medium text-navy">{c.label}</p>
                   {c.key === "data_processing" && gdpr.consentDate && (
-                    <p className="text-xs text-slate-400">Accepté le {fmtDate(gdpr.consentDate)} · version {gdpr.consentVersion || "—"}</p>
+                    <p className="text-xs text-slate-400">
+                      Accepté le {fmtDate(gdpr.consentDate)} · version {gdpr.consentVersion || "—"}
+                    </p>
                   )}
                 </div>
               </div>
@@ -330,7 +404,10 @@ function TabConsentements({ patientId, consentements, onRefresh, showToast }) {
                 onClick={() => toggle(c.key, c.value)}
                 className={`relative w-11 h-6 rounded-full transition-colors ${c.value ? "bg-green-500" : "bg-slate-200"} disabled:opacity-50`}
               >
-                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${c.value ? "left-5.5" : "left-0.5"}`} style={{ left: c.value ? 22 : 2 }} />
+                <span
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${c.value ? "left-5.5" : "left-0.5"}`}
+                  style={{ left: c.value ? 22 : 2 }}
+                />
               </button>
             </div>
           ))}
@@ -341,13 +418,20 @@ function TabConsentements({ patientId, consentements, onRefresh, showToast }) {
         <SectionCard title="Historique des consentements" icon="history">
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {history.map((h, i) => (
-              <div key={i} className="flex items-start gap-3 py-2 border-b border-slate-50 last:border-0">
-                <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${h.accepted ? "bg-green-500" : "bg-red-400"}`} />
+              <div
+                key={i}
+                className="flex items-start gap-3 py-2 border-b border-slate-50 last:border-0"
+              >
+                <span
+                  className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${h.accepted ? "bg-green-500" : "bg-red-400"}`}
+                />
                 <div>
                   <p className="text-xs font-semibold text-navy">
                     {h.consentType} — {h.accepted ? "Accepté" : "Refusé"}
                   </p>
-                  <p className="text-[10px] text-slate-400">{fmtDatetime(h.changedAt)} · version {h.version || "—"} · {h.source || "—"}</p>
+                  <p className="text-[10px] text-slate-400">
+                    {fmtDatetime(h.changedAt)} · version {h.version || "—"} · {h.source || "—"}
+                  </p>
                 </div>
               </div>
             ))}
@@ -360,10 +444,10 @@ function TabConsentements({ patientId, consentements, onRefresh, showToast }) {
 
 // ── Onglet RGPD ───────────────────────────────────────────────────────────────
 function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
-  const [confirmAnon,    setConfirmAnon]    = useState(false);
-  const [confirmDel,     setConfirmDel]     = useState(false);
-  const [reason,         setReason]         = useState("");
-  const [loading,        setLoading]        = useState("");
+  const [confirmAnon, setConfirmAnon] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [reason, setReason] = useState("");
+  const [loading, setLoading] = useState("");
 
   const gdpr = patient?.gdpr || {};
 
@@ -371,7 +455,9 @@ function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
     setLoading("export");
     try {
       const { data } = await patientService.exportData(patientId);
-      const url  = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+      );
       const link = document.createElement("a");
       link.href = url;
       link.download = `patient-data-${patientId}-${Date.now()}.json`;
@@ -389,7 +475,10 @@ function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
     setLoading("anonymize");
     try {
       await patientService.anonymize(patientId, reason);
-      showToast("Patient anonymisé. Les données de transport et facturation ont été conservées pour raisons légales.", "success");
+      showToast(
+        "Patient anonymisé. Les données de transport et facturation ont été conservées pour raisons légales.",
+        "success",
+      );
       setConfirmAnon(false);
       onRefresh();
     } catch (err) {
@@ -434,10 +523,30 @@ function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
       <SectionCard title="Statut RGPD" icon="shield">
         <div className="grid grid-cols-2 gap-3">
           {[
-            { label: "Anonymisé",            value: gdpr.anonymized,        color: gdpr.anonymized ? "text-red-600" : "text-green-600", date: gdpr.anonymizedAt },
-            { label: "Suppression demandée", value: gdpr.deletionRequested, color: gdpr.deletionRequested ? "text-amber-600" : "text-green-600", date: gdpr.deletionRequestedAt },
-            { label: "Consentement donné",   value: gdpr.consentGiven,      color: gdpr.consentGiven ? "text-green-600" : "text-slate-400",    date: gdpr.consentDate },
-            { label: "Données médicales",    value: gdpr.medicalDataConsent, color: gdpr.medicalDataConsent ? "text-green-600" : "text-slate-400", date: null },
+            {
+              label: "Anonymisé",
+              value: gdpr.anonymized,
+              color: gdpr.anonymized ? "text-red-600" : "text-green-600",
+              date: gdpr.anonymizedAt,
+            },
+            {
+              label: "Suppression demandée",
+              value: gdpr.deletionRequested,
+              color: gdpr.deletionRequested ? "text-amber-600" : "text-green-600",
+              date: gdpr.deletionRequestedAt,
+            },
+            {
+              label: "Consentement donné",
+              value: gdpr.consentGiven,
+              color: gdpr.consentGiven ? "text-green-600" : "text-slate-400",
+              date: gdpr.consentDate,
+            },
+            {
+              label: "Données médicales",
+              value: gdpr.medicalDataConsent,
+              color: gdpr.medicalDataConsent ? "text-green-600" : "text-slate-400",
+              date: null,
+            },
           ].map((s) => (
             <div key={s.label} className="bg-slate-50 rounded-xl p-3">
               <p className="text-xs text-slate-500">{s.label}</p>
@@ -451,7 +560,6 @@ function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
       {/* Actions RGPD */}
       <SectionCard title="Actions RGPD" icon="manage_accounts">
         <div className="space-y-3">
-
           {/* Export */}
           <div className="flex items-center justify-between py-2 border-b border-slate-100">
             <div>
@@ -473,7 +581,9 @@ function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
             <div className="flex items-center justify-between py-2 border-b border-slate-100">
               <div>
                 <p className="text-sm font-semibold text-navy">Demander la suppression (Art. 17)</p>
-                <p className="text-xs text-slate-400">Enregistre une demande à traiter sous 30 jours</p>
+                <p className="text-xs text-slate-400">
+                  Enregistre une demande à traiter sous 30 jours
+                </p>
               </div>
               <button
                 onClick={() => setConfirmDel(true)}
@@ -491,7 +601,9 @@ function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
             <div className="flex items-center justify-between py-2 border-b border-slate-100">
               <div>
                 <p className="text-sm font-semibold text-navy">Annuler la demande de suppression</p>
-                <p className="text-xs text-slate-400">Demandée le {fmtDate(gdpr.deletionRequestedAt)}</p>
+                <p className="text-xs text-slate-400">
+                  Demandée le {fmtDate(gdpr.deletionRequestedAt)}
+                </p>
               </div>
               <button
                 onClick={handleCancelDeletion}
@@ -509,7 +621,9 @@ function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
             <div className="flex items-center justify-between py-2">
               <div>
                 <p className="text-sm font-semibold text-red-700">Anonymiser le patient</p>
-                <p className="text-xs text-slate-400">Action irréversible — données de transport conservées</p>
+                <p className="text-xs text-slate-400">
+                  Action irréversible — données de transport conservées
+                </p>
               </div>
               <button
                 onClick={() => setConfirmAnon(true)}
@@ -527,7 +641,9 @@ function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
               <span className="material-symbols-outlined text-red-500">person_off</span>
               <div>
                 <p className="text-sm font-bold text-red-700">Patient anonymisé</p>
-                <p className="text-xs text-red-500">Le {fmtDate(gdpr.anonymizedAt)} — les transports et factures sont conservés.</p>
+                <p className="text-xs text-red-500">
+                  Le {fmtDate(gdpr.anonymizedAt)} — les transports et factures sont conservés.
+                </p>
               </div>
             </div>
           )}
@@ -545,8 +661,9 @@ function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
               <h3 className="font-bold text-navy text-base">Confirmer l'anonymisation</h3>
             </div>
             <p className="text-sm text-slate-600 mb-4">
-              Cette action anonymisera les données personnelles du patient. Les transports et factures resteront
-              conservés pour raisons légales et statistiques. <strong>Cette action est irréversible.</strong>
+              Cette action anonymisera les données personnelles du patient. Les transports et
+              factures resteront conservés pour raisons légales et statistiques.{" "}
+              <strong>Cette action est irréversible.</strong>
             </p>
             <textarea
               value={reason}
@@ -556,7 +673,12 @@ function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
               className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm mb-4 outline-none focus:border-primary resize-none"
             />
             <div className="flex gap-3">
-              <button onClick={() => setConfirmAnon(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50">Annuler</button>
+              <button
+                onClick={() => setConfirmAnon(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50"
+              >
+                Annuler
+              </button>
               <button
                 onClick={handleAnonymize}
                 disabled={!reason.trim() || loading === "anonymize"}
@@ -575,7 +697,8 @@ function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
             <h3 className="font-bold text-navy text-base mb-3">Demande de suppression (Art. 17)</h3>
             <p className="text-sm text-slate-600 mb-4">
-              Une demande de suppression sera enregistrée. Elle sera traitée sous 30 jours selon les obligations RGPD.
+              Une demande de suppression sera enregistrée. Elle sera traitée sous 30 jours selon les
+              obligations RGPD.
             </p>
             <textarea
               value={reason}
@@ -585,7 +708,12 @@ function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
               className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm mb-4 outline-none focus:border-primary resize-none"
             />
             <div className="flex gap-3">
-              <button onClick={() => setConfirmDel(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50">Annuler</button>
+              <button
+                onClick={() => setConfirmDel(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50"
+              >
+                Annuler
+              </button>
               <button
                 onClick={handleRequestDeletion}
                 disabled={loading === "deletion"}
@@ -605,34 +733,38 @@ function TabRgpd({ patient, patientId, onRefresh, showToast, userRole }) {
 function TabAudit({ patientId }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [erreur,  setErreur]  = useState("");
+  const [erreur, setErreur] = useState("");
 
   useEffect(() => {
-    patientService.getAuditSummary(patientId)
+    patientService
+      .getAuditSummary(patientId)
       .then(({ data }) => setSummary(data))
       .catch(() => setErreur("Accès refusé ou données indisponibles"))
       .finally(() => setLoading(false));
   }, [patientId]);
 
   const ACTION_ICON = {
-    PATIENT_VIEWED:              { icon: "visibility",   color: "text-blue-500"   },
-    PATIENT_EXPORTED:            { icon: "download",     color: "text-purple-500" },
-    PATIENT_ANONYMIZED:          { icon: "person_off",   color: "text-red-500"    },
-    PATIENT_DELETION_REQUESTED:  { icon: "delete",       color: "text-amber-500"  },
-    PATIENT_DELETION_CANCELLED:  { icon: "undo",         color: "text-green-500"  },
-    PATIENT_CONSENT_UPDATED:     { icon: "verified_user",color: "text-teal-500"   },
-    PATIENT_UPDATED:             { icon: "edit",         color: "text-slate-500"  },
+    PATIENT_VIEWED: { icon: "visibility", color: "text-blue-500" },
+    PATIENT_EXPORTED: { icon: "download", color: "text-purple-500" },
+    PATIENT_ANONYMIZED: { icon: "person_off", color: "text-red-500" },
+    PATIENT_DELETION_REQUESTED: { icon: "delete", color: "text-amber-500" },
+    PATIENT_DELETION_CANCELLED: { icon: "undo", color: "text-green-500" },
+    PATIENT_CONSENT_UPDATED: { icon: "verified_user", color: "text-teal-500" },
+    PATIENT_UPDATED: { icon: "edit", color: "text-slate-500" },
   };
 
   if (loading) return <Spinner />;
-  if (erreur)  return <div className="text-center py-12 text-slate-400 text-sm">{erreur}</div>;
+  if (erreur) return <div className="text-center py-12 text-slate-400 text-sm">{erreur}</div>;
 
   return (
     <div className="space-y-4">
       {summary?.stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {Object.entries(summary.stats).map(([action, count]) => (
-            <div key={action} className="bg-white rounded-xl border border-slate-100 p-3 text-center">
+            <div
+              key={action}
+              className="bg-white rounded-xl border border-slate-100 p-3 text-center"
+            >
               <p className="text-xl font-bold text-navy font-mono">{count}</p>
               <p className="text-[10px] text-slate-400 uppercase tracking-wide mt-1">
                 {action.replace(/_/g, " ").replace("PATIENT ", "")}
@@ -650,15 +782,30 @@ function TabAudit({ patientId }) {
             {summary.logs.map((l) => {
               const cfg = ACTION_ICON[l.action] || { icon: "info", color: "text-slate-400" };
               return (
-                <div key={l._id} className="flex items-start gap-3 py-2.5 border-b border-slate-50 last:border-0">
-                  <span className={`material-symbols-outlined text-base flex-shrink-0 ${cfg.color}`}>{cfg.icon}</span>
+                <div
+                  key={l._id}
+                  className="flex items-start gap-3 py-2.5 border-b border-slate-50 last:border-0"
+                >
+                  <span
+                    className={`material-symbols-outlined text-base flex-shrink-0 ${cfg.color}`}
+                  >
+                    {cfg.icon}
+                  </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold text-navy">{l.action.replace(/_/g, " ")}</p>
-                      <p className="text-[10px] text-slate-400 flex-shrink-0">{fmtDatetime(l.createdAt)}</p>
+                      <p className="text-xs font-semibold text-navy">
+                        {l.action.replace(/_/g, " ")}
+                      </p>
+                      <p className="text-[10px] text-slate-400 flex-shrink-0">
+                        {fmtDatetime(l.createdAt)}
+                      </p>
                     </div>
-                    <p className="text-[10px] text-slate-500">{l.utilisateur?.email} · {l.utilisateur?.role}</p>
-                    {l.details?.message && <p className="text-[10px] text-slate-400 italic">{l.details.message}</p>}
+                    <p className="text-[10px] text-slate-500">
+                      {l.utilisateur?.email} · {l.utilisateur?.role}
+                    </p>
+                    {l.details?.message && (
+                      <p className="text-[10px] text-slate-400 italic">{l.details.message}</p>
+                    )}
                   </div>
                 </div>
               );
@@ -674,11 +821,11 @@ function TabAudit({ patientId }) {
 export default function PatientDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [data,    setData]    = useState(null);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [erreur,  setErreur]  = useState("");
-  const [tab,     setTab]     = useState("info");
-  const [toast,   setToast]   = useState(null);
+  const [erreur, setErreur] = useState("");
+  const [tab, setTab] = useState("info");
+  const [toast, setToast] = useState(null);
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -698,27 +845,36 @@ export default function PatientDetail() {
     }
   }, [id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  if (loading) return (
-    <div className="p-7">
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-      <Spinner />
-    </div>
-  );
-
-  if (erreur) return (
-    <div className="p-7">
-      <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-        <span className="material-symbols-outlined text-red-400 text-4xl">error</span>
-        <p className="text-red-700 font-semibold mt-2">{erreur}</p>
-        <button onClick={() => navigate("/patients")} className="mt-4 text-sm text-primary hover:underline">← Retour à la liste</button>
+  if (loading)
+    return (
+      <div className="p-7">
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        <Spinner />
       </div>
-    </div>
-  );
+    );
+
+  if (erreur)
+    return (
+      <div className="p-7">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+          <span className="material-symbols-outlined text-red-400 text-4xl">error</span>
+          <p className="text-red-700 font-semibold mt-2">{erreur}</p>
+          <button
+            onClick={() => navigate("/patients")}
+            className="mt-4 text-sm text-primary hover:underline"
+          >
+            ← Retour à la liste
+          </button>
+        </div>
+      </div>
+    );
 
   const patient = data?.patient;
-  const gdpr    = patient?.gdpr || {};
+  const gdpr = patient?.gdpr || {};
 
   return (
     <div className="p-7 fade-in">
@@ -728,7 +884,10 @@ export default function PatientDetail() {
       {/* En-tête */}
       <div className="flex items-start justify-between mb-6">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate("/patients")} className="text-slate-400 hover:text-slate-600 transition-colors">
+          <button
+            onClick={() => navigate("/patients")}
+            className="text-slate-400 hover:text-slate-600 transition-colors"
+          >
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center font-bold text-primary text-lg">
@@ -740,10 +899,14 @@ export default function PatientDetail() {
                 {patient?.nom} {patient?.prenom}
               </h1>
               {gdpr.anonymized && (
-                <span className="text-xs bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full">ANONYMISÉ</span>
+                <span className="text-xs bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full">
+                  ANONYMISÉ
+                </span>
               )}
               {gdpr.deletionRequested && (
-                <span className="text-xs bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full">SUPPRESSION DEMANDÉE</span>
+                <span className="text-xs bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full">
+                  SUPPRESSION DEMANDÉE
+                </span>
               )}
             </div>
             <p className="text-slate-400 text-sm mt-0.5">
@@ -779,13 +942,35 @@ export default function PatientDetail() {
       </div>
 
       {/* Contenu */}
-      {tab === "info"          && <TabInfo          patient={patient} />}
-      {tab === "transports"    && <TabTransports    transports={data?.transports || []}    patientId={id} />}
-      {tab === "prescriptions" && <TabPrescriptions prescriptions={data?.prescriptions || []} patient={patient} patientId={id} onRefresh={load} />}
-      {tab === "factures"      && <TabFactures      factures={data?.factures || []} />}
-      {tab === "consentements" && <TabConsentements patientId={id} consentements={data?.consentements} onRefresh={load} showToast={showToast} />}
-      {tab === "rgpd"          && <TabRgpd          patient={patient} patientId={id} onRefresh={load} showToast={showToast} userRole={data?.patient ? "admin" : ""} />}
-      {tab === "audit"         && <TabAudit         patientId={id} />}
+      {tab === "info" && <TabInfo patient={patient} />}
+      {tab === "transports" && <TabTransports transports={data?.transports || []} patientId={id} />}
+      {tab === "prescriptions" && (
+        <TabPrescriptions
+          prescriptions={data?.prescriptions || []}
+          patient={patient}
+          patientId={id}
+          onRefresh={load}
+        />
+      )}
+      {tab === "factures" && <TabFactures factures={data?.factures || []} />}
+      {tab === "consentements" && (
+        <TabConsentements
+          patientId={id}
+          consentements={data?.consentements}
+          onRefresh={load}
+          showToast={showToast}
+        />
+      )}
+      {tab === "rgpd" && (
+        <TabRgpd
+          patient={patient}
+          patientId={id}
+          onRefresh={load}
+          showToast={showToast}
+          userRole={data?.patient ? "admin" : ""}
+        />
+      )}
+      {tab === "audit" && <TabAudit patientId={id} />}
     </div>
   );
 }
