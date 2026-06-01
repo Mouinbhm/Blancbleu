@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import api, { factureService, comptabiliteService } from "../services/api";
-import useSocket from "../hooks/useSocket";
 import { FactureRowSkeleton } from "../components/ui/Skeleton";
 import {
   Chart as ChartJS,
@@ -28,11 +27,10 @@ import ModalNouvelleFacture from "./Comptabilite/modals/ModalNouvelleFacture";
 import ModalDetailFacture from "./Comptabilite/modals/ModalDetailFacture";
 import ChargesDetail from "./Comptabilite/components/ChargesDetail";
 import { ToastContainer, ConfirmToast } from "./Comptabilite/components/Toasts";
-import {
-  downloadBlob,
-  downloadCsvBlob,
-  downloadCsvString,
-} from "./Comptabilite/utils/downloadHelpers";
+import { downloadCsvBlob, downloadCsvString } from "./Comptabilite/utils/downloadHelpers";
+import { useFactures } from "./Comptabilite/hooks/useFactures";
+import { useComptabilite } from "./Comptabilite/hooks/useComptabilite";
+import { useFactureMutations } from "./Comptabilite/hooks/useFactureMutations";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend);
 
@@ -42,10 +40,7 @@ export default function Factures() {
   const [moisActuel, setMoisActuel] = useState(now.getMonth() + 1);
   const [anneeActuelle, setAnneeActuelle] = useState(now.getFullYear());
 
-  // Factures existantes
-  const [factures, setFactures] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // UI factures (filtres + état des modals/actions)
   const [search, setSearch] = useState("");
   const [filterStatut, setFilterStatut] = useState("");
   const [factureImprimer, setFactureImprimer] = useState(null);
@@ -55,91 +50,28 @@ export default function Factures() {
   const [toasts, setToasts] = useState([]);
   const [confirmPay, setConfirmPay] = useState(null);
 
-  // Comptabilité
-  const [compta, setCompta] = useState(null);
-  const [comptaLoading, setComptaLoading] = useState(true);
-
   const addToast = useCallback((message, type = "success") => {
     const id = Date.now();
     setToasts((t) => [...t, { id, message, type }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
   }, []);
 
-  const reloadFactures = useCallback(() => {
-    const params = { limit: 100 };
-    if (filterStatut) params.statut = filterStatut;
-    Promise.all([factureService.getAll(params), factureService.getStats()])
-      .then(([f, s]) => {
-        setFactures(f.data.factures || []);
-        setStats(s.data);
-      })
-      .catch(() => {});
-  }, [filterStatut]);
+  // ── Données (hooks dédiés) ───────────────────────────────────────────────────
+  const { factures, setFactures, stats, loading, reloadFactures } = useFactures(
+    filterStatut,
+    addToast,
+  );
+  const { compta, setCompta, comptaLoading } = useComptabilite(anneeActuelle, moisActuel);
 
-  // ── Socket : mise à jour temps réel quand une facture est payée ────────────
-  const { subscribe } = useSocket();
-  useEffect(() => {
-    const unsub = subscribe("facture:updated", (data) => {
-      setFactures((prev) =>
-        prev.map((f) =>
-          f._id === data._id
-            ? {
-                ...f,
-                statut: data.statut,
-                datePaiement: data.datePaiement,
-                modePaiement: data.modePaiement,
-                referenceExterne: data.referenceExterne,
-              }
-            : f,
-        ),
-      );
-      addToast(`Facture ${data.numero} payée en ligne par le patient`);
+  const { handleStatut, handleDelete, handleDownloadPdf, handleDownloadReceipt } =
+    useFactureMutations({
+      factures,
+      setFactures,
+      reloadFactures,
+      addToast,
+      setActionId,
+      setConfirmPay,
     });
-    return unsub;
-  }, [subscribe, addToast]);
-
-  // ── Chargement factures ─────────────────────────────────────────────────────
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    const params = { limit: 100 };
-    if (filterStatut) params.statut = filterStatut;
-
-    Promise.all([factureService.getAll(params), factureService.getStats()])
-      .then(([f, s]) => {
-        if (cancelled) return;
-        setFactures(f.data.factures || []);
-        setStats(s.data);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [filterStatut]);
-
-  // ── Chargement comptabilité ─────────────────────────────────────────────────
-  useEffect(() => {
-    let cancelled = false;
-    setComptaLoading(true);
-    api
-      .get("/comptabilite/dashboard", { params: { annee: anneeActuelle, mois: moisActuel } })
-      .then(({ data }) => {
-        if (!cancelled) setCompta(data);
-      })
-      .catch(() => {
-        if (!cancelled) setCompta(null);
-      })
-      .finally(() => {
-        if (!cancelled) setComptaLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [moisActuel, anneeActuelle]);
 
   // ── Filtrage ────────────────────────────────────────────────────────────────
   const filtered = factures.filter((f) => {
@@ -152,60 +84,6 @@ export default function Factures() {
       patientNom(f).toLowerCase().includes(q)
     );
   });
-
-  // ── Actions factures ────────────────────────────────────────────────────────
-  const handleStatut = async (id, statut) => {
-    setActionId(id);
-    setConfirmPay(null);
-    try {
-      const { data } = await factureService.updateStatut(id, statut);
-      setFactures((prev) => prev.map((f) => (f._id === id ? data.facture : f)));
-      addToast(`Facture marquée ${STATUT_STYLE[statut]?.label || statut}`);
-    } catch {
-      addToast("Erreur mise à jour statut.", "error");
-    } finally {
-      setActionId(null);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    const facture = factures.find((f) => f._id === id);
-    const label = facture?.numero ? `la facture ${facture.numero}` : "cette facture";
-    if (
-      !window.confirm(`Êtes-vous sûr de vouloir annuler ${label} ?\nCette action est irréversible.`)
-    )
-      return;
-    try {
-      await factureService.delete(id);
-      reloadFactures();
-      addToast("Facture annulée.", "warning");
-    } catch (err) {
-      const msg = err?.response?.data?.message || "Erreur lors de l'annulation.";
-      addToast(msg, "error");
-    }
-  };
-
-  // ── PDF facture / reçu ──────────────────────────────────────────────────────
-  const handleDownloadPdf = async (factureId, numero) => {
-    try {
-      await downloadBlob(factureService.downloadPdf(factureId), `facture-${numero}.pdf`);
-      addToast("PDF facture téléchargé");
-    } catch (err) {
-      addToast(err?.response?.data?.message || "Erreur téléchargement PDF", "error");
-    }
-  };
-
-  const handleDownloadReceipt = async (factureId, numero) => {
-    try {
-      await downloadBlob(factureService.downloadReceipt(factureId), `recu-${numero}.pdf`);
-      addToast("PDF reçu téléchargé");
-    } catch (err) {
-      addToast(
-        err?.response?.data?.message || "Reçu disponible uniquement après paiement",
-        "error",
-      );
-    }
-  };
 
   // ── Export comptable (backend CSV) ──────────────────────────────────────────
   const handleRecalculateAmounts = async () => {
