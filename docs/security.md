@@ -29,13 +29,13 @@ Politique de sécurité applicative : auth, secrets, audit, dépendances, divulg
 
 ### Rôles
 
-| Rôle | Périmètre |
-|---|---|
-| `admin` | Tout — gestion users, config IA, reset password |
-| `dispatcher` | CRUD transports, dispatch, assignation véhicules |
-| `superviseur` | Lecture + validation, analytics |
-| `comptable` | Factures, paiements Stripe |
-| `patient` | Ses propres transports / prescriptions / factures |
+| Rôle          | Périmètre                                         |
+| ------------- | ------------------------------------------------- |
+| `admin`       | Tout — gestion users, config IA, reset password   |
+| `dispatcher`  | CRUD transports, dispatch, assignation véhicules  |
+| `superviseur` | Lecture + validation, analytics                   |
+| `comptable`   | Factures, paiements Stripe                        |
+| `patient`     | Ses propres transports / prescriptions / factures |
 
 Enforcement : middleware `authorize(...roles)` dans `middleware/auth.js`.
 
@@ -76,13 +76,13 @@ node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
 
 ## 3. Chiffrement
 
-| Donnée | Chiffrement |
-|---|---|
-| Mots de passe | bcryptjs, cost 10 |
-| Données patient sensibles (NIR, numéro de sécu) | AES-256-GCM via `utils/encryption.js` |
-| 2FA TOTP secret | chiffré en base |
-| Cookies session | signés (JWT) + httpOnly + Secure en prod |
-| TLS | délégué au reverse proxy (à configurer en amont — non fourni dans la stack) |
+| Donnée                                          | Chiffrement                                                                 |
+| ----------------------------------------------- | --------------------------------------------------------------------------- |
+| Mots de passe                                   | bcryptjs, cost 10                                                           |
+| Données patient sensibles (NIR, numéro de sécu) | AES-256-GCM via `utils/encryption.js`                                       |
+| 2FA TOTP secret                                 | chiffré en base                                                             |
+| Cookies session                                 | signés (JWT) + httpOnly + Secure en prod                                    |
+| TLS                                             | délégué au reverse proxy (à configurer en amont — non fourni dans la stack) |
 
 ---
 
@@ -93,6 +93,35 @@ node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
 - **Cookies** : `httpOnly`, `Secure` en prod, `SameSite=Lax` par défaut.
 - **Nginx (client)** : `X-Content-Type-Options nosniff`, `X-Frame-Options SAMEORIGIN`,
   `Referrer-Policy no-referrer`, `server_tokens off`.
+
+---
+
+## 4b. Uploads & antivirus (ClamAV)
+
+Les fichiers uploadés (PMT, signatures, avatars, documents personnel) sont
+scannés par **ClamAV** avant traitement.
+
+- **Démon** : service docker `clamav` (image `clamav/clamav:stable`), clamd en
+  TCP sur `clamav:3310`. Base de signatures persistée dans le volume
+  `clamav_db`, rafraîchie par freshclam (1er démarrage long, ~200 Mo).
+- **Middleware** : `server/middleware/antivirus.js` → `scanUpload`, placé
+  **après** multer sur toutes les routes d'upload (prescriptions, transports
+  PMT/signature, ai PMT, personnel avatar/documents, patient prescriptions).
+  Gère disque (`.path`) et mémoire (`.buffer` via `scanStream`).
+- **Fichier infecté** → suppression immédiate + `400 { code: "FILE_INFECTED",
+viruses }`. Tous les fichiers de la requête sont supprimés, pas seulement
+  l'infecté.
+- **Configuration** (`.env`) :
+  - `CLAMAV_ENABLED` — `true` par défaut en prod, `false` sinon (dev/test sans
+    démon). Mettre `false` en dev local si pas de ClamAV.
+  - `CLAMAV_HOST` / `CLAMAV_PORT` — défaut `clamav` / `3310`.
+  - `CLAMAV_FAIL_OPEN` — si le démon est injoignable : `false` (défaut) =
+    **fail-closed** (upload refusé `503`), `true` = fail-open (laisser passer
+    avec log d'alerte). En prod, garder `false`.
+- **Test** : `__tests__/integration/antivirus.test.js` couvre le passe-through
+  (désactivé / sans fichier). Le test de détection EICAR est opt-in via
+  `RUN_CLAMAV_LIVE=true` (nécessite un démon joignable) — signature standard
+  `EICAR-STANDARD-ANTIVIRUS-TEST-FILE`.
 
 ---
 
@@ -123,9 +152,9 @@ node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
 
 ### Vulnérabilités acceptées (à supprimer dès que résolues)
 
-| CVE | Package | Sévérité | Justification | Date revue |
-|---|---|---|---|---|
-| _aucune actuellement_ | | | | |
+| CVE                   | Package | Sévérité | Justification | Date revue |
+| --------------------- | ------- | -------- | ------------- | ---------- |
+| _aucune actuellement_ |         |          |               |            |
 
 ---
 
@@ -143,23 +172,24 @@ node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
 
 ## 8. Endpoints exposés vs internes
 
-| Endpoint | Accès | Protection |
-|---|---|---|
-| `/api/auth/*` (login, refresh, logout, forgot-password) | Public | Rate limit |
-| `/api/health` | Public | — |
-| `/api/health/readiness` | Public (k8s readiness probe) | — |
-| `/metrics` | Public-route mais token requis | Header `X-Metrics-Token` |
-| `/api/docs` (Swagger UI) | Public en dev, désactivé en prod sauf `SWAGGER_IN_PROD=true` | — |
-| Routes `ai/training-data`, `ai/model/retrain` | Service-to-service | Header `X-Service-Token` |
-| Tout le reste | JWT requis | `protect` middleware |
+| Endpoint                                                | Accès                                                        | Protection               |
+| ------------------------------------------------------- | ------------------------------------------------------------ | ------------------------ |
+| `/api/auth/*` (login, refresh, logout, forgot-password) | Public                                                       | Rate limit               |
+| `/api/health`                                           | Public                                                       | —                        |
+| `/api/health/readiness`                                 | Public (k8s readiness probe)                                 | —                        |
+| `/metrics`                                              | Public-route mais token requis                               | Header `X-Metrics-Token` |
+| `/api/docs` (Swagger UI)                                | Public en dev, désactivé en prod sauf `SWAGGER_IN_PROD=true` | —                        |
+| Routes `ai/training-data`, `ai/model/retrain`           | Service-to-service                                           | Header `X-Service-Token` |
+| Tout le reste                                           | JWT requis                                                   | `protect` middleware     |
 
 ---
 
 ## 9. Divulgation responsable
 
 Pour signaler une vulnérabilité :
-- Email : `security@blancbleu.fr` *(à configurer)*
-- PGP key : *(à publier)*
+
+- Email : `security@blancbleu.fr` _(à configurer)_
+- PGP key : _(à publier)_
 - Délai de réponse cible : 48 h ouvrées.
 - Politique : pas de bug bounty, mais hall of fame possible.
 

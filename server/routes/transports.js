@@ -7,6 +7,7 @@ const router = express.Router();
 const { protect, authorize } = require("../middleware/auth");
 const validate = require("../middleware/validate");
 const { uploadPmt, uploadSignature } = require("../middleware/upload");
+const { scanUpload } = require("../middleware/antivirus");
 const { createTransportSchema, updateTransportSchema } = require("../validators/schemas");
 const ctrl = require("../controllers/transport");
 
@@ -450,10 +451,10 @@ router.get("/:id/timeline", protect, ctrl.getTimeline);
 
 // ── PART B : Signature patient ────────────────────────────────────────────────
 // Accepte soit un fichier image (champ "signature"), soit signatureBase64 dans le body
-router.post("/:id/signature", protect, multerWrap(uploadSignature), ctrl.addSignature);
+router.post("/:id/signature", protect, multerWrap(uploadSignature), scanUpload, ctrl.addSignature);
 
 // ── PART C : Documents PMT ───────────────────────────────────────────────────
-router.post("/:id/pmt", protect, multerWrap(uploadPmt), ctrl.uploadPmt);
+router.post("/:id/pmt", protect, multerWrap(uploadPmt), scanUpload, ctrl.uploadPmt);
 router.get("/:id/pmt", protect, ctrl.getPmt);
 router.delete(
   "/:id/pmt/:docId",
