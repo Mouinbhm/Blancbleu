@@ -2,9 +2,10 @@
  * UrssafCard — bloc déclaration URSSAF du dashboard comptabilité.
  * Extrait de ComptabiliteDashboard (<300 LOC). Rendu identique.
  */
+import { memo } from "react";
 import { fmtEur } from "../../../utils/formatters";
 
-export default function UrssafCard({ compta, moisNomActuel, anneeActuelle, onExportDSN }) {
+function UrssafCard({ compta, moisNomActuel, anneeActuelle, onExportDSN }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4">
       <div className="flex items-center gap-2 mb-4">
@@ -77,3 +78,5 @@ export default function UrssafCard({ compta, moisNomActuel, anneeActuelle, onExp
     </div>
   );
 }
+
+export default memo(UrssafCard);

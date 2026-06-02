@@ -2,7 +2,9 @@
  * ComptabiliteHeader — titre + barre de boutons d'export du dashboard.
  * Extrait du monolithe Factures.jsx (rendu identique).
  */
-export default function ComptabiliteHeader({
+import { memo } from "react";
+
+function ComptabiliteHeader({
   showRecalculate,
   onExportCsv,
   onExportInvoicesCsv,
@@ -65,3 +67,5 @@ export default function ComptabiliteHeader({
     </div>
   );
 }
+
+export default memo(ComptabiliteHeader);

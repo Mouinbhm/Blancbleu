@@ -1,10 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, lazy, Suspense } from "react";
 import api, { factureService, comptabiliteService } from "../../services/api";
 import { patientNom } from "./utils/factureMappers";
-
-import ModalImpression from "./modals/ModalImpression";
-import ModalNouvelleFacture from "./modals/ModalNouvelleFacture";
-import ModalDetailFacture from "./modals/ModalDetailFacture";
 import { ToastContainer, ConfirmToast } from "./components/Toasts";
 import FactureFilters from "./components/FactureFilters";
 import FactureTable from "./components/FactureTable";
@@ -16,6 +12,11 @@ import { exportFacturesCsv, exportDsnCsv, exportRapportCsv } from "./utils/factu
 import { useFactures } from "./hooks/useFactures";
 import { useComptabilite } from "./hooks/useComptabilite";
 import { useFactureMutations } from "./hooks/useFactureMutations";
+
+// Modals chargées à la demande (split de bundle — non rendues au montage).
+const ModalImpression = lazy(() => import("./modals/ModalImpression"));
+const ModalNouvelleFacture = lazy(() => import("./modals/ModalNouvelleFacture"));
+const ModalDetailFacture = lazy(() => import("./modals/ModalDetailFacture"));
 
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function Factures() {
@@ -135,34 +136,37 @@ export default function Factures() {
           onCancel={() => setConfirmPay(null)}
         />
       )}
-      {modalNouvelle && (
-        <ModalNouvelleFacture
-          onClose={() => setModalNouvelle(false)}
-          onCreated={(num) => {
-            setModalNouvelle(false);
-            addToast(`Facture ${num} créée avec succès`);
-            reloadFactures();
-          }}
-        />
-      )}
-      {factureDetail && (
-        <ModalDetailFacture
-          facture={factureDetail}
-          onClose={() => setFactureDetail(null)}
-          onUpdated={(type, num) => {
-            setFactureDetail(null);
-            addToast(
-              type === "annulee" ? `Facture ${num} annulée` : `Facture ${num} mise à jour`,
-              type === "annulee" ? "warning" : "success",
-            );
-            reloadFactures();
-          }}
-        />
-      )}
-
-      {factureImprimer && (
-        <ModalImpression facture={factureImprimer} onClose={() => setFactureImprimer(null)} />
-      )}
+      {/* Modals lazy-loadées : Suspense fallback null (overlay instantané géré
+          par la modal elle-même au chargement). */}
+      <Suspense fallback={null}>
+        {modalNouvelle && (
+          <ModalNouvelleFacture
+            onClose={() => setModalNouvelle(false)}
+            onCreated={(num) => {
+              setModalNouvelle(false);
+              addToast(`Facture ${num} créée avec succès`);
+              reloadFactures();
+            }}
+          />
+        )}
+        {factureDetail && (
+          <ModalDetailFacture
+            facture={factureDetail}
+            onClose={() => setFactureDetail(null)}
+            onUpdated={(type, num) => {
+              setFactureDetail(null);
+              addToast(
+                type === "annulee" ? `Facture ${num} annulée` : `Facture ${num} mise à jour`,
+                type === "annulee" ? "warning" : "success",
+              );
+              reloadFactures();
+            }}
+          />
+        )}
+        {factureImprimer && (
+          <ModalImpression facture={factureImprimer} onClose={() => setFactureImprimer(null)} />
+        )}
+      </Suspense>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <ComptabiliteHeader
