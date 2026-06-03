@@ -44,7 +44,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  // Refresh 60s (ex-setInterval loadData) sur chaque source ; prédiction 5 min.
+  // Rafraîchissement périodique 60s sur chaque source ; prédiction toutes les 5 min.
   const {
     data: kpis,
     isLoading: kpisLoading,
