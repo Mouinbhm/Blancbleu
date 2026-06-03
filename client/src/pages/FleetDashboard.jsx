@@ -1,7 +1,9 @@
 // Fichier : client/src/pages/FleetDashboard.jsx
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { vehicleService } from "../services/api";
+import { useFleetDashboard, useVehicleAvailability } from "../hooks/queries/useVehicles";
 import {
   fmtDateLong as fmtDate,
   fmtDatetimeShort as fmtDatetime,
@@ -156,20 +158,15 @@ function FuelBar({ level }) {
 // ─── Modal missions véhicule ─────────────────────────────────────────────────
 
 function MissionsModal({ vehicle, onClose }) {
-  const [missions, setMissions] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!vehicle) return;
-    setLoading(true);
-    vehicleService
-      .getVehicleMissions(vehicle.vehicleId, { page, limit: 15 })
-      .then(({ data }) => setMissions(data))
-      .catch(() => setMissions({ missions: [], pagination: null }))
-      .finally(() => setLoading(false));
-  }, [vehicle, page]);
+  const { data: missions, isLoading: loading } = useQuery({
+    queryKey: ["vehicles", "missions", vehicle?.vehicleId, page],
+    queryFn: () =>
+      vehicleService.getVehicleMissions(vehicle.vehicleId, { page, limit: 15 }).then((r) => r.data),
+    enabled: !!vehicle,
+  });
 
   if (!vehicle) return null;
 
@@ -300,55 +297,30 @@ export default function FleetDashboard() {
   const navigate = useNavigate();
 
   // ── État global ──────────────────────────────────────────────────────────────
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [period, setPeriod] = useState("month");
   const [typeFilter, setTypeFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("overview");
 
   // ── Disponibilité par créneau ────────────────────────────────────────────────
   const [availDate, setAvailDate] = useState(new Date().toISOString().split("T")[0]);
-  const [availability, setAvailability] = useState(null);
-  const [availLoading, setAvailLoading] = useState(false);
 
   // ── Modal missions ───────────────────────────────────────────────────────────
   const [selectedVehicle, setSelectedVehicle] = useState(null);
 
   // ── Chargement dashboard ─────────────────────────────────────────────────────
-  const loadDashboard = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data } = await vehicleService.getFleetDashboard({ period });
-      setStats(data);
-    } catch {
-      setError("Impossible de charger le tableau de bord flotte.");
-    } finally {
-      setLoading(false);
-    }
-  }, [period]);
+  const {
+    data: stats,
+    isLoading: loading,
+    isError,
+    refetch: refetchDashboard,
+  } = useFleetDashboard({ period });
+  const error = isError ? "Impossible de charger le tableau de bord flotte." : null;
 
-  useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
-
-  // ── Chargement disponibilité ──────────────────────────────────────────────────
-  const loadAvailability = useCallback(async () => {
-    setAvailLoading(true);
-    try {
-      const { data } = await vehicleService.getVehicleAvailability(availDate);
-      setAvailability(data?.slots || []);
-    } catch {
-      setAvailability([]);
-    } finally {
-      setAvailLoading(false);
-    }
-  }, [availDate]);
-
-  useEffect(() => {
-    if (activeTab === "availability") loadAvailability();
-  }, [activeTab, availDate, loadAvailability]);
+  // ── Disponibilité — query activée uniquement sur l'onglet dédié ───────────────
+  const { data: availData, isFetching: availLoading } = useVehicleAvailability(
+    activeTab === "availability" ? availDate : null,
+  );
+  const availability = availData?.slots || null;
 
   // ── Données filtrées ──────────────────────────────────────────────────────────
   const vehicleSummaries = (stats?.vehicleSummaries || []).filter(
@@ -386,7 +358,7 @@ export default function FleetDashboard() {
         </span>
         <p className="text-slate-500 text-sm mb-4">{error}</p>
         <button
-          onClick={loadDashboard}
+          onClick={() => refetchDashboard()}
           className="text-primary font-semibold hover:underline text-sm"
         >
           Réessayer
@@ -454,7 +426,7 @@ export default function FleetDashboard() {
               ))}
             </select>
             <button
-              onClick={loadDashboard}
+              onClick={() => refetchDashboard()}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold"
             >
               <span className="material-symbols-outlined text-base">refresh</span>
