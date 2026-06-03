@@ -1,10 +1,11 @@
 // Fichier : client/src/pages/Flotte.jsx
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import VehicleCard from "../components/vehicle/VehicleCard";
 import VehicleDetailPanel from "../components/vehicle/VehicleDetailPanel";
 import { vehicleService, equipementService, maintenanceService } from "../services/api";
-import useSocket from "../hooks/useSocket";
+import { useVehicles, vehicleKeys } from "../hooks/queries/useVehicles";
 
 // ── Styles partagés dans le modal ─────────────────────────────────────────────
 const inputCls =
@@ -24,9 +25,7 @@ function Field({ label, error, children }) {
 
 function SectionTitle({ children }) {
   return (
-    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
-      {children}
-    </p>
+    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">{children}</p>
   );
 }
 
@@ -45,15 +44,21 @@ function Divider({ label }) {
 function Counter({ value, onChange, min = 0, max = 10 }) {
   return (
     <div className="flex items-center gap-2 justify-center">
-      <button type="button"
+      <button
+        type="button"
         onClick={() => onChange(Math.max(min, value - 1))}
         className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-bold text-lg"
-      >−</button>
+      >
+        −
+      </button>
       <span className="w-8 text-center font-mono font-bold text-navy">{value}</span>
-      <button type="button"
+      <button
+        type="button"
         onClick={() => onChange(Math.min(max, value + 1))}
         className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-bold text-lg"
-      >+</button>
+      >
+        +
+      </button>
     </div>
   );
 }
@@ -61,27 +66,27 @@ function Counter({ value, onChange, min = 0, max = 10 }) {
 // ── Onglets ───────────────────────────────────────────────────────────────────
 const TABS = [
   { icon: "🚐", label: "Identification" },
-  { icon: "⛽", label: "Motorisation"   },
-  { icon: "📊", label: "Kilométrage"    },
-  { icon: "🏥", label: "Équipements"    },
-  { icon: "📍", label: "Localisation"   },
+  { icon: "⛽", label: "Motorisation" },
+  { icon: "📊", label: "Kilométrage" },
+  { icon: "🏥", label: "Équipements" },
+  { icon: "📍", label: "Localisation" },
 ];
 
 const ENERGIES = [
-  { v: "Diesel",     emoji: "🛢️", label: "Diesel"     },
-  { v: "Essence",    emoji: "⛽", label: "Essence"    },
-  { v: "Hybride",    emoji: "🔋", label: "Hybride"    },
+  { v: "Diesel", emoji: "🛢️", label: "Diesel" },
+  { v: "Essence", emoji: "⛽", label: "Essence" },
+  { v: "Hybride", emoji: "🔋", label: "Hybride" },
   { v: "Electrique", emoji: "⚡", label: "Électrique" },
-  { v: "GPL",        emoji: "🌿", label: "GPL"        },
-  { v: "Hydrogène",  emoji: "💧", label: "Hydrogène"  },
+  { v: "GPL", emoji: "🌿", label: "GPL" },
+  { v: "Hydrogène", emoji: "💧", label: "Hydrogène" },
 ];
 
 const EQUIPEMENTS_LIST = [
-  { key: "oxygene",       emoji: "🫁", label: "Oxygène"    },
+  { key: "oxygene", emoji: "🫁", label: "Oxygène" },
   { key: "fauteuilRampe", emoji: "♿", label: "Fauteuil/rampe" },
-  { key: "brancard",      emoji: "🛏️", label: "Brancard"   },
-  { key: "dae",           emoji: "💓", label: "DAE"        },
-  { key: "aspirateur",    emoji: "🌀", label: "Aspirateur" },
+  { key: "brancard", emoji: "🛏️", label: "Brancard" },
+  { key: "dae", emoji: "💓", label: "DAE" },
+  { key: "aspirateur", emoji: "🌀", label: "Aspirateur" },
   { key: "climatisation", emoji: "❄️", label: "Climatisation" },
 ];
 
@@ -90,7 +95,8 @@ function Tab1({ form, set, errors }) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <Field label="Immatriculation *" error={errors.immatriculation}>
-          <input type="text"
+          <input
+            type="text"
             value={form.immatriculation}
             onChange={(e) => set("immatriculation", e.target.value.toUpperCase())}
             className={`${inputCls}${errors.immatriculation ? " border-red-300" : ""}`}
@@ -98,7 +104,11 @@ function Tab1({ form, set, errors }) {
           />
         </Field>
         <Field label="Type *" error={errors.type}>
-          <select value={form.type} onChange={(e) => set("type", e.target.value)} className={inputCls}>
+          <select
+            value={form.type}
+            onChange={(e) => set("type", e.target.value)}
+            className={inputCls}
+          >
             <option value="VSL">VSL</option>
             <option value="AMBULANCE">Ambulance</option>
             <option value="TPMR">TPMR</option>
@@ -106,7 +116,8 @@ function Tab1({ form, set, errors }) {
         </Field>
       </div>
       <Field label="Nom / Désignation *" error={errors.nom}>
-        <input type="text"
+        <input
+          type="text"
           value={form.nom}
           onChange={(e) => set("nom", e.target.value)}
           className={`${inputCls}${errors.nom ? " border-red-300" : ""}`}
@@ -115,25 +126,48 @@ function Tab1({ form, set, errors }) {
       </Field>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Marque">
-          <input type="text" value={form.marque} onChange={(e) => set("marque", e.target.value)} className={inputCls} placeholder="Citroën" />
+          <input
+            type="text"
+            value={form.marque}
+            onChange={(e) => set("marque", e.target.value)}
+            className={inputCls}
+            placeholder="Citroën"
+          />
         </Field>
         <Field label="Modèle">
-          <input type="text" value={form.modele} onChange={(e) => set("modele", e.target.value)} className={inputCls} placeholder="Jumpy" />
+          <input
+            type="text"
+            value={form.modele}
+            onChange={(e) => set("modele", e.target.value)}
+            className={inputCls}
+            placeholder="Jumpy"
+          />
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Année">
-          <input type="number" value={form.annee} min={2000} max={2030}
+          <input
+            type="number"
+            value={form.annee}
+            min={2000}
+            max={2030}
             onChange={(e) => set("annee", parseInt(e.target.value) || new Date().getFullYear())}
             className={inputCls}
           />
         </Field>
         <Field label="Couleur">
-          <input type="text" value={form.couleur} onChange={(e) => set("couleur", e.target.value)} className={inputCls} placeholder="Blanc" />
+          <input
+            type="text"
+            value={form.couleur}
+            onChange={(e) => set("couleur", e.target.value)}
+            className={inputCls}
+            placeholder="Blanc"
+          />
         </Field>
       </div>
       <Field label="Numéro de série (VIN)">
-        <input type="text"
+        <input
+          type="text"
           value={form.numeroSerie}
           onChange={(e) => set("numeroSerie", e.target.value.toUpperCase())}
           className={inputCls}
@@ -151,7 +185,9 @@ function Tab2({ form, set }) {
       <SectionTitle>Type d'énergie</SectionTitle>
       <div className="grid grid-cols-3 gap-2">
         {ENERGIES.map((e) => (
-          <button key={e.v} type="button"
+          <button
+            key={e.v}
+            type="button"
             onClick={() => set("typeEnergie", e.v)}
             className={`py-3 rounded-xl border-2 text-sm font-semibold transition-all flex flex-col items-center gap-1.5 ${
               form.typeEnergie === e.v
@@ -166,17 +202,27 @@ function Tab2({ form, set }) {
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Consommation (L/100 km)">
-          <input type="number" step="0.1" min="0" max="30"
+          <input
+            type="number"
+            step="0.1"
+            min="0"
+            max="30"
             value={form.consommationL100}
-            onChange={(e) => set("consommationL100", e.target.value === "" ? "" : parseFloat(e.target.value))}
+            onChange={(e) =>
+              set("consommationL100", e.target.value === "" ? "" : parseFloat(e.target.value))
+            }
             className={inputCls}
             placeholder="7.5"
           />
         </Field>
         <Field label="Puissance (CV)">
-          <input type="number" min="0"
+          <input
+            type="number"
+            min="0"
             value={form.puissanceCv}
-            onChange={(e) => set("puissanceCv", e.target.value === "" ? "" : parseInt(e.target.value))}
+            onChange={(e) =>
+              set("puissanceCv", e.target.value === "" ? "" : parseInt(e.target.value))
+            }
             className={inputCls}
             placeholder="120"
           />
@@ -184,9 +230,13 @@ function Tab2({ form, set }) {
       </div>
       {showAutonomie && (
         <Field label="Autonomie (km)">
-          <input type="number" min="0"
+          <input
+            type="number"
+            min="0"
             value={form.autonomieKm}
-            onChange={(e) => set("autonomieKm", e.target.value === "" ? "" : parseInt(e.target.value))}
+            onChange={(e) =>
+              set("autonomieKm", e.target.value === "" ? "" : parseInt(e.target.value))
+            }
             className={inputCls}
             placeholder="450"
           />
@@ -201,33 +251,55 @@ function Tab3({ form, setNested }) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <Field label="Kilométrage actuel (km)">
-          <input type="number" min="0"
+          <input
+            type="number"
+            min="0"
             value={form.kilometrage.actuel}
             onChange={(e) => setNested("kilometrage", "actuel", parseInt(e.target.value) || 0)}
             className={inputCls}
           />
         </Field>
         <Field label="Dernier entretien (km)">
-          <input type="number" min="0"
+          <input
+            type="number"
+            min="0"
             value={form.kilometrage.dernierControle}
-            onChange={(e) => setNested("kilometrage", "dernierControle", parseInt(e.target.value) || 0)}
+            onChange={(e) =>
+              setNested("kilometrage", "dernierControle", parseInt(e.target.value) || 0)
+            }
             className={inputCls}
           />
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Prochain vidange (km)">
-          <input type="number" min="0"
+          <input
+            type="number"
+            min="0"
             value={form.kilometrage.prochainVidange}
-            onChange={(e) => setNested("kilometrage", "prochainVidange", e.target.value === "" ? "" : parseInt(e.target.value))}
+            onChange={(e) =>
+              setNested(
+                "kilometrage",
+                "prochainVidange",
+                e.target.value === "" ? "" : parseInt(e.target.value),
+              )
+            }
             className={inputCls}
             placeholder="48 000"
           />
         </Field>
         <Field label="Prochain CT (km)">
-          <input type="number" min="0"
+          <input
+            type="number"
+            min="0"
             value={form.kilometrage.prochainControle}
-            onChange={(e) => setNested("kilometrage", "prochainControle", e.target.value === "" ? "" : parseInt(e.target.value))}
+            onChange={(e) =>
+              setNested(
+                "kilometrage",
+                "prochainControle",
+                e.target.value === "" ? "" : parseInt(e.target.value),
+              )
+            }
             className={inputCls}
             placeholder="50 000"
           />
@@ -237,7 +309,8 @@ function Tab3({ form, setNested }) {
       <Divider label="Contrôle technique" />
       <div className="grid grid-cols-2 gap-4">
         <Field label="Date d'expiration">
-          <input type="date"
+          <input
+            type="date"
             value={form.controleTechnique.dateExpiration}
             onChange={(e) => setNested("controleTechnique", "dateExpiration", e.target.value)}
             className={inputCls}
@@ -245,7 +318,8 @@ function Tab3({ form, setNested }) {
         </Field>
         <div className="flex items-center" style={{ paddingTop: 26 }}>
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox"
+            <input
+              type="checkbox"
               checked={form.controleTechnique.rappel30j}
               onChange={(e) => setNested("controleTechnique", "rappel30j", e.target.checked)}
               className="w-4 h-4 accent-primary"
@@ -258,7 +332,8 @@ function Tab3({ form, setNested }) {
       <Divider label="Assurance" />
       <div className="grid grid-cols-2 gap-4">
         <Field label="Compagnie">
-          <input type="text"
+          <input
+            type="text"
             value={form.assurance.compagnie}
             onChange={(e) => setNested("assurance", "compagnie", e.target.value)}
             className={inputCls}
@@ -266,7 +341,8 @@ function Tab3({ form, setNested }) {
           />
         </Field>
         <Field label="N° Police">
-          <input type="text"
+          <input
+            type="text"
             value={form.assurance.numeroPolice}
             onChange={(e) => setNested("assurance", "numeroPolice", e.target.value)}
             className={inputCls}
@@ -276,7 +352,8 @@ function Tab3({ form, setNested }) {
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Date d'expiration">
-          <input type="date"
+          <input
+            type="date"
             value={form.assurance.dateExpiration}
             onChange={(e) => setNested("assurance", "dateExpiration", e.target.value)}
             className={inputCls}
@@ -284,7 +361,8 @@ function Tab3({ form, setNested }) {
         </Field>
         <div className="flex items-center" style={{ paddingTop: 26 }}>
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox"
+            <input
+              type="checkbox"
               checked={form.assurance.rappel30j}
               onChange={(e) => setNested("assurance", "rappel30j", e.target.checked)}
               className="w-4 h-4 accent-primary"
@@ -304,14 +382,19 @@ function Tab3({ form, setNested }) {
           >
             <option value="">Sélectionner...</option>
             {["Crit'Air 1", "Crit'Air 2", "Crit'Air 3", "Non classé"].map((c) => (
-              <option key={c} value={c}>{c}</option>
+              <option key={c} value={c}>
+                {c}
+              </option>
             ))}
           </select>
         </Field>
         <Field label="Date d'expiration">
-          <input type="date"
+          <input
+            type="date"
             value={form.vignetteControlePollution.dateExpiration}
-            onChange={(e) => setNested("vignetteControlePollution", "dateExpiration", e.target.value)}
+            onChange={(e) =>
+              setNested("vignetteControlePollution", "dateExpiration", e.target.value)
+            }
             className={inputCls}
           />
         </Field>
@@ -326,7 +409,9 @@ function Tab4({ form, setNested }) {
       <SectionTitle>Équipements médicaux</SectionTitle>
       <div className="grid grid-cols-3 gap-3">
         {EQUIPEMENTS_LIST.map((eq) => (
-          <button key={eq.key} type="button"
+          <button
+            key={eq.key}
+            type="button"
             onClick={() => setNested("equipements", eq.key, !form.equipements[eq.key])}
             className={`py-4 rounded-xl border-2 text-sm font-semibold transition-all flex flex-col items-center gap-2 ${
               form.equipements[eq.key]
@@ -343,12 +428,14 @@ function Tab4({ form, setNested }) {
       <Divider label="Capacité" />
       <div className="grid grid-cols-3 gap-4">
         {[
-          { key: "placesAssises",  label: "Places assises", min: 1, max: 6 },
-          { key: "placesFauteuil", label: "Fauteuils",      min: 0, max: 2 },
-          { key: "placesBrancard", label: "Brancards",      min: 0, max: 1 },
+          { key: "placesAssises", label: "Places assises", min: 1, max: 6 },
+          { key: "placesFauteuil", label: "Fauteuils", min: 0, max: 2 },
+          { key: "placesBrancard", label: "Brancards", min: 0, max: 1 },
         ].map(({ key, label, min, max }) => (
           <div key={key} className="text-center">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">{label}</p>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+              {label}
+            </p>
             <Counter
               value={form.capacite[key]}
               min={min}
@@ -368,23 +455,33 @@ function Tab5({ form, set, setNested, onUseGaragePos }) {
       <SectionTitle>Position actuelle du véhicule</SectionTitle>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Latitude">
-          <input type="number" step="0.0001"
+          <input
+            type="number"
+            step="0.0001"
             value={form.position.lat}
-            onChange={(e) => setNested("position", "lat", e.target.value === "" ? "" : parseFloat(e.target.value))}
+            onChange={(e) =>
+              setNested("position", "lat", e.target.value === "" ? "" : parseFloat(e.target.value))
+            }
             className={inputCls}
             placeholder="43.7102"
           />
         </Field>
         <Field label="Longitude">
-          <input type="number" step="0.0001"
+          <input
+            type="number"
+            step="0.0001"
             value={form.position.lng}
-            onChange={(e) => setNested("position", "lng", e.target.value === "" ? "" : parseFloat(e.target.value))}
+            onChange={(e) =>
+              setNested("position", "lng", e.target.value === "" ? "" : parseFloat(e.target.value))
+            }
             className={inputCls}
             placeholder="7.2620"
           />
         </Field>
       </div>
-      <button type="button" onClick={onUseGaragePos}
+      <button
+        type="button"
+        onClick={onUseGaragePos}
         className="flex items-center gap-2 text-xs text-primary font-semibold hover:underline"
       >
         <span className="material-symbols-outlined text-sm">location_on</span>
@@ -394,14 +491,16 @@ function Tab5({ form, set, setNested, onUseGaragePos }) {
       <Divider label="Garage d'attache" />
       <div className="grid grid-cols-2 gap-4">
         <Field label="Nom du garage">
-          <input type="text"
+          <input
+            type="text"
             value={form.garage.nom}
             onChange={(e) => setNested("garage", "nom", e.target.value)}
             className={inputCls}
           />
         </Field>
         <Field label="Adresse">
-          <input type="text"
+          <input
+            type="text"
             value={form.garage.adresse}
             onChange={(e) => setNested("garage", "adresse", e.target.value)}
             className={inputCls}
@@ -412,16 +511,32 @@ function Tab5({ form, set, setNested, onUseGaragePos }) {
       <Divider label="Statut initial" />
       <div className="grid grid-cols-3 gap-2">
         {[
-          { v: "Disponible",   label: "Disponible",   cls: "border-green-300 bg-green-50 text-green-700"   },
-          { v: "Maintenance",  label: "Maintenance",  cls: "border-yellow-300 bg-yellow-50 text-yellow-700" },
-          { v: "Hors service", label: "Hors service", cls: "border-red-300 bg-red-50 text-red-700"         },
+          {
+            v: "Disponible",
+            label: "Disponible",
+            cls: "border-green-300 bg-green-50 text-green-700",
+          },
+          {
+            v: "Maintenance",
+            label: "Maintenance",
+            cls: "border-yellow-300 bg-yellow-50 text-yellow-700",
+          },
+          {
+            v: "Hors service",
+            label: "Hors service",
+            cls: "border-red-300 bg-red-50 text-red-700",
+          },
         ].map((s) => (
-          <label key={s.v}
+          <label
+            key={s.v}
             className={`py-3 rounded-xl border-2 text-sm font-semibold text-center cursor-pointer transition-all ${
               form.statut === s.v ? s.cls : "border-slate-200 text-slate-400 hover:border-slate-300"
             }`}
           >
-            <input type="radio" name="statut" value={s.v}
+            <input
+              type="radio"
+              name="statut"
+              value={s.v}
               checked={form.statut === s.v}
               onChange={() => set("statut", s.v)}
               className="sr-only"
@@ -455,25 +570,33 @@ function ModalNouveauVehicule({ onClose, onCreated }) {
   const [form, setForm] = useState({
     // Onglet 1
     immatriculation: "",
-    nom:             "",
-    type:            "VSL",
-    marque:          "",
-    modele:          "",
-    annee:           new Date().getFullYear(),
-    couleur:         "",
-    numeroSerie:     "",
+    nom: "",
+    type: "VSL",
+    marque: "",
+    modele: "",
+    annee: new Date().getFullYear(),
+    couleur: "",
+    numeroSerie: "",
     // Onglet 2
-    typeEnergie:      "Diesel",
+    typeEnergie: "Diesel",
     consommationL100: "",
-    autonomieKm:      "",
-    puissanceCv:      "",
+    autonomieKm: "",
+    puissanceCv: "",
     // Onglet 3
     kilometrage: { actuel: 0, dernierControle: 0, prochainVidange: "", prochainControle: "" },
     controleTechnique: { dateExpiration: "", rappel30j: true },
     assurance: { compagnie: "", numeroPolice: "", dateExpiration: "", rappel30j: true },
     vignetteControlePollution: { categorie: "", dateExpiration: "" },
     // Onglet 4
-    equipements: { oxygene: false, fauteuilRampe: false, brancard: false, dae: false, aspirateur: false, chauffage: false, climatisation: false },
+    equipements: {
+      oxygene: false,
+      fauteuilRampe: false,
+      brancard: false,
+      dae: false,
+      aspirateur: false,
+      chauffage: false,
+      climatisation: false,
+    },
     capacite: { placesAssises: 1, placesFauteuil: 0, placesBrancard: 0 },
     // Onglet 5
     position: { lat: "", lng: "" },
@@ -483,20 +606,22 @@ function ModalNouveauVehicule({ onClose, onCreated }) {
   });
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
-  const setNested = (key, sub, val) =>
-    setForm((f) => ({ ...f, [key]: { ...f[key], [sub]: val } }));
+  const setNested = (key, sub, val) => setForm((f) => ({ ...f, [key]: { ...f[key], [sub]: val } }));
 
   const validateTab1 = () => {
     const errs = {};
     if (!form.immatriculation.trim()) errs.immatriculation = "Obligatoire";
-    if (!form.nom.trim())             errs.nom = "Obligatoire";
+    if (!form.nom.trim()) errs.nom = "Obligatoire";
     return errs;
   };
 
   const goTo = (next) => {
     if (next > activeTab && activeTab === 0) {
       const errs = validateTab1();
-      if (Object.keys(errs).length) { setErrors(errs); return; }
+      if (Object.keys(errs).length) {
+        setErrors(errs);
+        return;
+      }
       setErrors({});
     }
     setVisited((v) => new Set([...v, next]));
@@ -505,36 +630,42 @@ function ModalNouveauVehicule({ onClose, onCreated }) {
 
   const handleSubmit = async () => {
     const errs = validateTab1();
-    if (Object.keys(errs).length) { setErrors(errs); setActiveTab(0); return; }
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      setActiveTab(0);
+      return;
+    }
 
     // Nettoyer les chaînes vides → undefined pour les champs numériques optionnels
     const payload = {
       ...form,
       consommationL100: form.consommationL100 !== "" ? form.consommationL100 : undefined,
-      autonomieKm:      form.autonomieKm      !== "" ? form.autonomieKm      : undefined,
-      puissanceCv:      form.puissanceCv      !== "" ? form.puissanceCv      : undefined,
+      autonomieKm: form.autonomieKm !== "" ? form.autonomieKm : undefined,
+      puissanceCv: form.puissanceCv !== "" ? form.puissanceCv : undefined,
       kilometrage: {
-        actuel:          form.kilometrage.actuel || 0,
+        actuel: form.kilometrage.actuel || 0,
         dernierControle: form.kilometrage.dernierControle || 0,
-        prochainVidange: form.kilometrage.prochainVidange !== "" ? form.kilometrage.prochainVidange : undefined,
-        prochainControle:form.kilometrage.prochainControle !== "" ? form.kilometrage.prochainControle : undefined,
+        prochainVidange:
+          form.kilometrage.prochainVidange !== "" ? form.kilometrage.prochainVidange : undefined,
+        prochainControle:
+          form.kilometrage.prochainControle !== "" ? form.kilometrage.prochainControle : undefined,
       },
       controleTechnique: {
         dateExpiration: form.controleTechnique.dateExpiration || undefined,
-        rappel30j:      form.controleTechnique.rappel30j,
+        rappel30j: form.controleTechnique.rappel30j,
       },
       assurance: {
         ...form.assurance,
         dateExpiration: form.assurance.dateExpiration || undefined,
       },
       vignetteControlePollution: {
-        categorie:      form.vignetteControlePollution.categorie      || undefined,
+        categorie: form.vignetteControlePollution.categorie || undefined,
         dateExpiration: form.vignetteControlePollution.dateExpiration || undefined,
       },
       position: {
-        lat:    form.position.lat !== "" ? form.position.lat : undefined,
-        lng:    form.position.lng !== "" ? form.position.lng : undefined,
-        adresse:"",
+        lat: form.position.lat !== "" ? form.position.lat : undefined,
+        lng: form.position.lng !== "" ? form.position.lng : undefined,
+        adresse: "",
       },
     };
 
@@ -564,9 +695,7 @@ function ModalNouveauVehicule({ onClose, onCreated }) {
         {/* ── Header fixe ───────────────────────────────────────────────── */}
         <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
           <div className="flex items-center justify-between mb-5">
-            <h3 className="font-brand font-bold text-navy text-base">
-              Nouveau véhicule
-            </h3>
+            <h3 className="font-brand font-bold text-navy text-base">Nouveau véhicule</h3>
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
               <span className="material-symbols-outlined">close</span>
             </button>
@@ -578,26 +707,32 @@ function ModalNouveauVehicule({ onClose, onCreated }) {
               <div key={i} className="flex items-center flex-1 min-w-0">
                 <button
                   type="button"
-                  onClick={() => (visited.has(i) || i <= activeTab) ? goTo(i) : undefined}
+                  onClick={() => (visited.has(i) || i <= activeTab ? goTo(i) : undefined)}
                   className="flex flex-col items-center gap-1.5 flex-shrink-0"
                 >
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
-                    i === activeTab
-                      ? "bg-primary border-primary text-white"
-                      : visited.has(i)
-                        ? "bg-blue-50 border-primary text-primary"
-                        : "bg-white border-slate-200 text-slate-400"
-                  }`}>
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
+                      i === activeTab
+                        ? "bg-primary border-primary text-white"
+                        : visited.has(i)
+                          ? "bg-blue-50 border-primary text-primary"
+                          : "bg-white border-slate-200 text-slate-400"
+                    }`}
+                  >
                     {i + 1}
                   </div>
-                  <span className={`text-[10px] font-semibold leading-none text-center whitespace-nowrap ${
-                    i === activeTab ? "text-primary" : "text-slate-400"
-                  }`}>
+                  <span
+                    className={`text-[10px] font-semibold leading-none text-center whitespace-nowrap ${
+                      i === activeTab ? "text-primary" : "text-slate-400"
+                    }`}
+                  >
                     {t.label}
                   </span>
                 </button>
                 {i < TABS.length - 1 && (
-                  <div className={`flex-1 h-0.5 mx-1 mb-4 ${i < activeTab ? "bg-primary" : "bg-slate-200"}`} />
+                  <div
+                    className={`flex-1 h-0.5 mx-1 mb-4 ${i < activeTab ? "bg-primary" : "bg-slate-200"}`}
+                  />
                 )}
               </div>
             ))}
@@ -610,7 +745,9 @@ function ModalNouveauVehicule({ onClose, onCreated }) {
           {activeTab === 1 && <Tab2 form={form} set={set} />}
           {activeTab === 2 && <Tab3 form={form} setNested={setNested} />}
           {activeTab === 3 && <Tab4 form={form} setNested={setNested} />}
-          {activeTab === 4 && <Tab5 form={form} set={set} setNested={setNested} onUseGaragePos={useGaragePos} />}
+          {activeTab === 4 && (
+            <Tab5 form={form} set={set} setNested={setNested} onUseGaragePos={useGaragePos} />
+          )}
           {errors.submit && (
             <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-4">
               {errors.submit}
@@ -670,11 +807,11 @@ function ModalNouveauVehicule({ onClose, onCreated }) {
 }
 
 const FILTRES_STATUT = [
-  { value: "",            label: "Tous"         },
-  { value: "Disponible",  label: "Disponibles"  },
-  { value: "En service",  label: "En service"   },
-  { value: "Maintenance", label: "Maintenance"  },
-  { value: "Hors service",label: "Hors service" },
+  { value: "", label: "Tous" },
+  { value: "Disponible", label: "Disponibles" },
+  { value: "En service", label: "En service" },
+  { value: "Maintenance", label: "Maintenance" },
+  { value: "Hors service", label: "Hors service" },
 ];
 
 const FILTRES_TYPE = [
@@ -702,76 +839,78 @@ const Spinner = () => (
 
 export default function Flotte() {
   const navigate = useNavigate();
-  const [vehicles,             setVehicles]             = useState([]);
-  const [loading,              setLoading]              = useState(true);
-  const [filtreStatut,         setFiltreStatut]         = useState("");
-  const [filtreType,           setFiltreType]           = useState("");
-  const [showModal,            setShowModal]            = useState(false);
-  const [vehiculeSelectionne,  setVehiculeSelectionne]  = useState(null);
-  const [initialTab,           setInitialTab]           = useState("info");
-  const [equipStats,           setEquipStats]           = useState({});
-  const [maintStats,           setMaintStats]           = useState({});
+  const qc = useQueryClient();
+  const [filtreStatut, setFiltreStatut] = useState("");
+  const [filtreType, setFiltreType] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [vehiculeSelectionne, setVehiculeSelectionne] = useState(null);
+  const [initialTab, setInitialTab] = useState("info");
 
-  const { subscribe } = useSocket();
+  const { data: vehiclesData, isLoading: loading } = useVehicles();
+  const vehicles = vehiclesData || [];
 
-  const loadData = useCallback(async () => {
-    try {
-      const [vehRes, equipRes, maintRes] = await Promise.all([
-        vehicleService.getAll(),
-        equipementService.getAll({ limit: 500 }),
-        maintenanceService.getAll({ limit: 500 }),
-      ]);
+  // Équipements & maintenances : agrégés en stats par véhicule (badges des
+  // cartes). Données secondaires → useQuery inline ; la maj temps réel passe
+  // par l'invalidation de vehicleKeys dans useSocketSync.
+  const { data: equipList = [] } = useQuery({
+    queryKey: ["equipements", "list", { limit: 500 }],
+    queryFn: () =>
+      equipementService.getAll({ limit: 500 }).then((r) => {
+        const d = r.data;
+        return Array.isArray(d) ? d : d?.data || d?.equipements || [];
+      }),
+  });
+  const { data: maintList = [] } = useQuery({
+    queryKey: ["maintenances", "list", { limit: 500 }],
+    queryFn: () =>
+      maintenanceService.getAll({ limit: 500 }).then((r) => {
+        const d = r.data;
+        return Array.isArray(d) ? d : d?.data || d?.maintenances || [];
+      }),
+  });
 
-      const payload = vehRes.data;
-      const list = Array.isArray(payload) ? payload : payload?.data || payload?.vehicles || [];
-      setVehicles(list);
+  const equipStats = useMemo(() => {
+    const eqMap = {};
+    equipList.forEach((eq) => {
+      const vid = eq.uniteAssignee?._id || eq.uniteAssignee;
+      if (!vid) return;
+      if (!eqMap[vid]) eqMap[vid] = { count: 0, hasPanne: false };
+      eqMap[vid].count++;
+      if (eq.etat === "en-panne") eqMap[vid].hasPanne = true;
+    });
+    return eqMap;
+  }, [equipList]);
 
-      const equipList = Array.isArray(equipRes.data) ? equipRes.data : equipRes.data?.data || equipRes.data?.equipements || [];
-      const maintList = Array.isArray(maintRes.data) ? maintRes.data : maintRes.data?.data || maintRes.data?.maintenances || [];
+  const maintStats = useMemo(() => {
+    const mMap = {};
+    maintList.forEach((m) => {
+      const vid = m.unite?._id || m.unite;
+      if (!vid) return;
+      if (!mMap[vid]) mMap[vid] = { count: 0, hasPlanified: false };
+      mMap[vid].count++;
+      if (m.statut === "planifié") mMap[vid].hasPlanified = true;
+    });
+    return mMap;
+  }, [maintList]);
 
-      const eqMap = {};
-      equipList.forEach((eq) => {
-        const vid = eq.uniteAssignee?._id || eq.uniteAssignee;
-        if (!vid) return;
-        if (!eqMap[vid]) eqMap[vid] = { count: 0, hasPanne: false };
-        eqMap[vid].count++;
-        if (eq.etat === "en-panne") eqMap[vid].hasPanne = true;
-      });
-
-      const mMap = {};
-      maintList.forEach((m) => {
-        const vid = m.unite?._id || m.unite;
-        if (!vid) return;
-        if (!mMap[vid]) mMap[vid] = { count: 0, hasPlanified: false };
-        mMap[vid].count++;
-        if (m.statut === "planifié") mMap[vid].hasPlanified = true;
-      });
-
-      setEquipStats(eqMap);
-      setMaintStats(mMap);
-    } catch {
-      /* silencieux */
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
-
-  useEffect(() => {
-    const u1 = subscribe("unit:location_updated", () => loadData());
-    const u2 = subscribe("shift:started", () => loadData());
-    const u3 = subscribe("shift:ended",   () => loadData());
-    return () => { u1(); u2(); u3(); };
-  }, [subscribe, loadData]);
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: vehicleKeys.all });
+    qc.invalidateQueries({ queryKey: ["equipements"] });
+    qc.invalidateQueries({ queryKey: ["maintenances"] });
+  };
 
   // Normalize legacy lowercase/underscore status to canonical French values
   const normalizeStatut = (s) => {
-    const m = { "disponible": "Disponible", "en_mission": "En service", "maintenance": "Maintenance", "hors_service": "Hors service" };
+    const m = {
+      disponible: "Disponible",
+      en_mission: "En service",
+      maintenance: "Maintenance",
+      hors_service: "Hors service",
+    };
     return m[s] ?? s;
   };
-  const isDisponible  = (s) => normalizeStatut(s) === "Disponible";
-  const isEnService   = (s) => normalizeStatut(s) === "En service";
+  const isDisponible = (s) => normalizeStatut(s) === "Disponible";
+  const isEnService = (s) => normalizeStatut(s) === "En service";
   const isMaintenance = (s) => normalizeStatut(s) === "Maintenance";
 
   const vehiclesFiltres = vehicles.filter((v) => {
@@ -781,7 +920,7 @@ export default function Flotte() {
   });
 
   const disponibles = vehicles.filter((v) => isDisponible(v.statut)).length;
-  const enMission   = vehicles.filter((v) => isEnService(v.statut)).length;
+  const enMission = vehicles.filter((v) => isEnService(v.statut)).length;
   const maintenance = vehicles.filter((v) => isMaintenance(v.statut)).length;
 
   return (
@@ -839,13 +978,8 @@ export default function Flotte() {
             bg: "bg-yellow-50",
           },
         ].map((k) => (
-          <div
-            key={k.label}
-            className={`${k.bg} rounded-xl p-4 text-center border border-white`}
-          >
-            <p className={`text-2xl font-mono font-bold ${k.color}`}>
-              {k.value}
-            </p>
+          <div key={k.label} className={`${k.bg} rounded-xl p-4 text-center border border-white`}>
+            <p className={`text-2xl font-mono font-bold ${k.color}`}>{k.value}</p>
             <p className="text-xs text-slate-500 mt-1">{k.label}</p>
           </div>
         ))}
@@ -888,15 +1022,10 @@ export default function Flotte() {
         <Spinner />
       ) : vehiclesFiltres.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
-          <span
-            className="material-symbols-outlined text-slate-300"
-            style={{ fontSize: 56 }}
-          >
+          <span className="material-symbols-outlined text-slate-300" style={{ fontSize: 56 }}>
             airport_shuttle
           </span>
-          <p className="text-slate-400 text-sm mt-3">
-            Aucun véhicule correspondant aux filtres
-          </p>
+          <p className="text-slate-400 text-sm mt-3">Aucun véhicule correspondant aux filtres</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -906,9 +1035,18 @@ export default function Flotte() {
               vehicle={v}
               equipStats={equipStats[v._id]}
               maintStats={maintStats[v._id]}
-              onClick={() => { setInitialTab("info"); setVehiculeSelectionne(v); }}
-              onEquipClick={() => { setInitialTab("equip"); setVehiculeSelectionne(v); }}
-              onMaintClick={() => { setInitialTab("maint"); setVehiculeSelectionne(v); }}
+              onClick={() => {
+                setInitialTab("info");
+                setVehiculeSelectionne(v);
+              }}
+              onEquipClick={() => {
+                setInitialTab("equip");
+                setVehiculeSelectionne(v);
+              }}
+              onMaintClick={() => {
+                setInitialTab("maint");
+                setVehiculeSelectionne(v);
+              }}
             />
           ))}
         </div>
@@ -919,7 +1057,7 @@ export default function Flotte() {
           onClose={() => setShowModal(false)}
           onCreated={() => {
             setShowModal(false);
-            loadData();
+            refresh();
           }}
         />
       )}
@@ -930,11 +1068,8 @@ export default function Flotte() {
           initialTab={initialTab}
           onClose={() => setVehiculeSelectionne(null)}
           onUpdate={(updated) => {
-            setVehicles((prev) =>
-              prev.map((v) => v._id === updated._id ? updated : v)
-            );
             setVehiculeSelectionne(updated);
-            loadData();
+            refresh();
           }}
         />
       )}

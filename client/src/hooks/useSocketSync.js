@@ -65,6 +65,17 @@ export function useSocketSync() {
       qc.invalidateQueries({ queryKey: patientKeys.all });
     };
 
+    // Activité flotte (position d'unité) → rafraîchit la flotte.
+    const onVehicleActivity = () => {
+      qc.invalidateQueries({ queryKey: vehicleKeys.all });
+    };
+
+    // Shift démarré/terminé → impacte la disponibilité flotte ET les KPI.
+    const onShiftChange = () => {
+      qc.invalidateQueries({ queryKey: vehicleKeys.all });
+      qc.invalidateQueries({ queryKey: analyticsKeys.all });
+    };
+
     // Sprint M2 — Events canoniques uniquement. Anciens noms supprimés.
     socket.on(SOCKET_EVENTS.TRANSPORT_CREATED, onTransportCreated);
     socket.on(SOCKET_EVENTS.TRANSPORT_STATUS, onTransportStatut);
@@ -75,6 +86,9 @@ export function useSocketSync() {
     socket.on(SOCKET_EVENTS.STATS_UPDATE, onStatsUpdate);
     socket.on("facture:updated", onFactureUpdated);
     socket.on("patient:created", onPatientCreated);
+    socket.on("unit:location_updated", onVehicleActivity);
+    socket.on("shift:started", onShiftChange);
+    socket.on("shift:ended", onShiftChange);
 
     return () => {
       socket.off(SOCKET_EVENTS.TRANSPORT_CREATED, onTransportCreated);
@@ -86,6 +100,9 @@ export function useSocketSync() {
       socket.off(SOCKET_EVENTS.STATS_UPDATE, onStatsUpdate);
       socket.off("facture:updated", onFactureUpdated);
       socket.off("patient:created", onPatientCreated);
+      socket.off("unit:location_updated", onVehicleActivity);
+      socket.off("shift:started", onShiftChange);
+      socket.off("shift:ended", onShiftChange);
     };
   }, [qc]);
 }
