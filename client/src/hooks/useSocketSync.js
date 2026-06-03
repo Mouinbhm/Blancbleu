@@ -1,10 +1,11 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { getSocket }     from "../services/socketClient";
+import { getSocket } from "../services/socketClient";
 import { transportKeys } from "./queries/useTransports";
-import { vehicleKeys }   from "./queries/useVehicles";
+import { vehicleKeys } from "./queries/useVehicles";
 import { analyticsKeys } from "./queries/useAnalytics";
-import SOCKET_EVENTS    from "../lib/socketEvents";
+import { factureKeys } from "./queries/useFactures";
+import SOCKET_EVENTS from "../lib/socketEvents";
 
 /**
  * Branche les événements Socket.IO sur l'invalidation React Query.
@@ -52,23 +53,31 @@ export function useSocketSync() {
       qc.invalidateQueries({ queryKey: analyticsKeys.all });
     };
 
+    // Facture payée en ligne par le patient → la liste/les stats factures se
+    // rafraîchissent. Le toast reste géré côté page Comptabilité.
+    const onFactureUpdated = () => {
+      qc.invalidateQueries({ queryKey: factureKeys.all });
+    };
+
     // Sprint M2 — Events canoniques uniquement. Anciens noms supprimés.
-    socket.on(SOCKET_EVENTS.TRANSPORT_CREATED,  onTransportCreated);
-    socket.on(SOCKET_EVENTS.TRANSPORT_STATUS,   onTransportStatut);
-    socket.on(SOCKET_EVENTS.VEHICLE_POSITION,   onVehiculePosition);
-    socket.on(SOCKET_EVENTS.VEHICLE_STATUS,     onVehiculeStatut);
-    socket.on("vehicule:statut",                onVehiculeStatut); // legacy compat (emit non encore migré)
-    socket.on("vehicule:assigne",               onVehiculeStatut); // legacy compat
-    socket.on(SOCKET_EVENTS.STATS_UPDATE,       onStatsUpdate);
+    socket.on(SOCKET_EVENTS.TRANSPORT_CREATED, onTransportCreated);
+    socket.on(SOCKET_EVENTS.TRANSPORT_STATUS, onTransportStatut);
+    socket.on(SOCKET_EVENTS.VEHICLE_POSITION, onVehiculePosition);
+    socket.on(SOCKET_EVENTS.VEHICLE_STATUS, onVehiculeStatut);
+    socket.on("vehicule:statut", onVehiculeStatut); // legacy compat (emit non encore migré)
+    socket.on("vehicule:assigne", onVehiculeStatut); // legacy compat
+    socket.on(SOCKET_EVENTS.STATS_UPDATE, onStatsUpdate);
+    socket.on("facture:updated", onFactureUpdated);
 
     return () => {
-      socket.off(SOCKET_EVENTS.TRANSPORT_CREATED,  onTransportCreated);
-      socket.off(SOCKET_EVENTS.TRANSPORT_STATUS,   onTransportStatut);
-      socket.off(SOCKET_EVENTS.VEHICLE_POSITION,   onVehiculePosition);
-      socket.off(SOCKET_EVENTS.VEHICLE_STATUS,     onVehiculeStatut);
-      socket.off("vehicule:statut",                onVehiculeStatut);
-      socket.off("vehicule:assigne",               onVehiculeStatut);
-      socket.off(SOCKET_EVENTS.STATS_UPDATE,       onStatsUpdate);
+      socket.off(SOCKET_EVENTS.TRANSPORT_CREATED, onTransportCreated);
+      socket.off(SOCKET_EVENTS.TRANSPORT_STATUS, onTransportStatut);
+      socket.off(SOCKET_EVENTS.VEHICLE_POSITION, onVehiculePosition);
+      socket.off(SOCKET_EVENTS.VEHICLE_STATUS, onVehiculeStatut);
+      socket.off("vehicule:statut", onVehiculeStatut);
+      socket.off("vehicule:assigne", onVehiculeStatut);
+      socket.off(SOCKET_EVENTS.STATS_UPDATE, onStatsUpdate);
+      socket.off("facture:updated", onFactureUpdated);
     };
   }, [qc]);
 }

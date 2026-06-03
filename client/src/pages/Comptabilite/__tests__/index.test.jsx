@@ -1,25 +1,29 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // API mockée : la page charge factures+stats (factureService) et le dashboard
-// compta (api.get). On renvoie des réponses minimales.
+// compta (comptabiliteService.getDashboard) via React Query.
 const mockGetAll = jest.fn();
 const mockGetStats = jest.fn();
-const mockApiGet = jest.fn();
+const mockGetDashboard = jest.fn();
 
 jest.mock("../../../services/api", () => ({
   __esModule: true,
-  default: { get: (...a) => mockApiGet(...a) },
   factureService: {
     getAll: (...a) => mockGetAll(...a),
     getStats: (...a) => mockGetStats(...a),
   },
-  comptabiliteService: { exportInvoicesCsv: jest.fn(), exportPaymentsCsv: jest.fn() },
+  comptabiliteService: {
+    getDashboard: (...a) => mockGetDashboard(...a),
+    exportInvoicesCsv: jest.fn(),
+    exportPaymentsCsv: jest.fn(),
+  },
 }));
 
 beforeEach(() => {
   mockGetAll.mockResolvedValue({ data: { factures: [] } });
   mockGetStats.mockResolvedValue({ data: { total: 0, parStatut: {} } });
-  mockApiGet.mockResolvedValue({ data: null });
+  mockGetDashboard.mockResolvedValue({ data: null });
 });
 
 jest.mock("../../../hooks/useSocket", () => ({
@@ -36,9 +40,18 @@ jest.mock("react-chartjs-2", () => ({
 // eslint-disable-next-line import/first
 import Comptabilite from "../index";
 
+function renderPage() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <Comptabilite />
+    </QueryClientProvider>,
+  );
+}
+
 describe("Comptabilite (page) — smoke", () => {
   test("se monte et affiche le titre + le sous-titre factures", async () => {
-    render(<Comptabilite />);
+    renderPage();
     // Titre dashboard
     expect(screen.getByRole("heading", { name: "Comptabilité" })).toBeInTheDocument();
     // Sous-section factures
@@ -48,7 +61,7 @@ describe("Comptabilite (page) — smoke", () => {
   });
 
   test("état vide → message « Aucune facture trouvée »", async () => {
-    render(<Comptabilite />);
+    renderPage();
     expect(await screen.findByText("Aucune facture trouvée")).toBeInTheDocument();
   });
 });
