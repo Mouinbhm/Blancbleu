@@ -13,6 +13,21 @@ const logger = require("../utils/logger");
 
 const CURRENCY = (process.env.STRIPE_CURRENCY || "eur").toLowerCase();
 
+// Garde-fou démarrage : en production, un Stripe configuré (clé secrète posée)
+// SANS webhook secret est une mauvaise configuration — tous les webhooks seront
+// refusés (fail-closed, cf. constructWebhookEvent) et les factures ne passeront
+// jamais en "payée" via le webhook. On loggue un warning explicite au boot.
+if (
+  process.env.NODE_ENV === "production" &&
+  process.env.STRIPE_SECRET_KEY &&
+  !process.env.STRIPE_WEBHOOK_SECRET
+) {
+  logger.warn(
+    "[stripe] STRIPE_SECRET_KEY défini mais STRIPE_WEBHOOK_SECRET manquant — " +
+      "tous les webhooks Stripe seront refusés (fail-closed). Configurez le secret du webhook.",
+  );
+}
+
 // ─── PaymentIntent ────────────────────────────────────────────────────────────
 
 /**
@@ -156,12 +171,17 @@ async function createRefund(invoiceId, amount, reason, user) {
 /**
  * Vérifie la signature Stripe et retourne l'event parsé.
  * rawBody doit être le Buffer brut (express.raw()).
+ *
+ * FAIL-CLOSED : sans STRIPE_WEBHOOK_SECRET configuré, on REFUSE le webhook
+ * au lieu de parser un body non signé. Le webhook est public — accepter un
+ * event non vérifié permettrait à un attaquant de forger un
+ * `payment_intent.succeeded` et de marquer n'importe quelle facture payée.
+ * Le controller transforme ce throw en HTTP 400 (cf. paymentController).
  */
 function constructWebhookEvent(rawBody, signature) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret) {
-    logger.warn("[stripe/webhook] STRIPE_WEBHOOK_SECRET non configuré — signature ignorée");
-    return JSON.parse(rawBody.toString());
+    throw new Error("STRIPE_WEBHOOK_SECRET manquant — webhook refusé");
   }
   return stripe.webhooks.constructEvent(rawBody, signature, secret);
 }
