@@ -1,4 +1,5 @@
 import { renderHook, act } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const mockUpdateStatut = jest.fn();
 const mockDelete = jest.fn();
@@ -21,17 +22,22 @@ jest.mock("../utils/downloadHelpers", () => ({
 // eslint-disable-next-line import/first
 import { useFactureMutations } from "../hooks/useFactureMutations";
 
+function makeWrapper() {
+  const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+  return function Wrapper({ children }) {
+    return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  };
+}
+
 function setup(overrides = {}) {
   const deps = {
     factures: [{ _id: "1", numero: "FAC-1", statut: "brouillon" }],
-    setFactures: jest.fn(),
-    reloadFactures: jest.fn(),
     addToast: jest.fn(),
     setActionId: jest.fn(),
     setConfirmPay: jest.fn(),
     ...overrides,
   };
-  const { result } = renderHook(() => useFactureMutations(deps));
+  const { result } = renderHook(() => useFactureMutations(deps), { wrapper: makeWrapper() });
   return { result, deps };
 }
 
@@ -41,7 +47,7 @@ describe("useFactureMutations", () => {
     mockDelete.mockReset();
   });
 
-  test("handleStatut met à jour la facture localement + toast", async () => {
+  test("handleStatut appelle la mutation + toast + reset actionId", async () => {
     mockUpdateStatut.mockResolvedValue({ data: { facture: { _id: "1", statut: "emise" } } });
     const { result, deps } = setup();
 
@@ -50,7 +56,6 @@ describe("useFactureMutations", () => {
     });
 
     expect(mockUpdateStatut).toHaveBeenCalledWith("1", "emise");
-    expect(deps.setFactures).toHaveBeenCalled();
     expect(deps.addToast).toHaveBeenCalled();
     expect(deps.setActionId).toHaveBeenCalledWith(null); // finally
   });
@@ -64,7 +69,7 @@ describe("useFactureMutations", () => {
     expect(deps.addToast).toHaveBeenCalledWith(expect.stringMatching(/erreur/i), "error");
   });
 
-  test("handleDelete : confirmé → delete + reload", async () => {
+  test("handleDelete : confirmé → delete + toast", async () => {
     jest.spyOn(window, "confirm").mockReturnValue(true);
     mockDelete.mockResolvedValue({});
     const { result, deps } = setup();
@@ -74,7 +79,7 @@ describe("useFactureMutations", () => {
     });
 
     expect(mockDelete).toHaveBeenCalledWith("1");
-    expect(deps.reloadFactures).toHaveBeenCalled();
+    expect(deps.addToast).toHaveBeenCalledWith(expect.any(String), "warning");
     window.confirm.mockRestore();
   });
 
@@ -85,7 +90,7 @@ describe("useFactureMutations", () => {
       await result.current.handleDelete("1");
     });
     expect(mockDelete).not.toHaveBeenCalled();
-    expect(deps.reloadFactures).not.toHaveBeenCalled();
+    expect(deps.addToast).not.toHaveBeenCalled();
     window.confirm.mockRestore();
   });
 });
