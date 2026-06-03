@@ -132,6 +132,12 @@ services:
       # account côté hôte et set FIREBASE_SERVICE_ACCOUNT (3 formats acceptés
       # — JSON inline / base64 / chemin de fichier). Cf. docs/push-notifications.md.
       FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
+      # Stripe — paiement des factures patient. STRIPE_WEBHOOK_SECRET est requis
+      # pour que la vérification de signature passe (fail-closed côté serveur) ;
+      # vide par défaut → les webhooks sont refusés et un warning est loggué au
+      # boot. Renseigner les deux dans .env pour activer le paiement.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
     ports:
       - "5000:5000"
     healthcheck:

@@ -124,6 +124,7 @@ jobs:
         env:
           JWT_SECRET: test-secret-ci-blancbleu
           NODE_ENV: test
+          STRIPE_WEBHOOK_SECRET: whsec_test_ci_blancbleu
         run: npm run test:unit
 
       - name: Integration tests
@@ -131,6 +132,7 @@ jobs:
         env:
           JWT_SECRET: test-secret-ci-blancbleu
           NODE_ENV: test
+          STRIPE_WEBHOOK_SECRET: whsec_test_ci_blancbleu
         run: npm run test:integration
 
       - name: Coverage report (gate à 60% — TODO monter à 80% progressivement)
@@ -138,6 +140,7 @@ jobs:
         env:
           JWT_SECRET: test-secret-ci-blancbleu
           NODE_ENV: test
+          STRIPE_WEBHOOK_SECRET: whsec_test_ci_blancbleu
         run: npm run test:coverage
 
       - name: Upload coverage report

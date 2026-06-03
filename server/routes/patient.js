@@ -21,7 +21,8 @@ const {
   emitPrescriptionCreated,
   emitFactureUpdated,
 } = require("../services/socketService");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const stripePaymentService = require("../services/stripePaymentService");
+const invoiceService = require("../services/invoiceService");
 
 // ── Multer — prescription file uploads ───────────────────────────────────────
 const _uploadDir = path.join(__dirname, "..", "uploads", "prescriptions");
@@ -653,30 +654,16 @@ router.post("/factures/:id/paiement-intent", authPatient, async (req, res) => {
     if (facture.statut === "payee") return res.status(400).json({ message: "Facture déjà payée" });
     if (facture.statut === "annulee") return res.status(400).json({ message: "Facture annulée" });
 
-    const montantPatient = facture.montantPatient || facture.montantTotal;
-    if (!montantPatient || montantPatient <= 0)
-      return res.status(400).json({ message: "Montant invalide" });
-
-    // Stripe attend les montants en centimes (entier)
-    const amount = Math.round(montantPatient * 100);
-
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount,
-      currency: "eur",
-      automatic_payment_methods: { enabled: true },
-      metadata: {
-        factureId: facture._id.toString(),
-        factureNumero: facture.numero,
-        patientEmail: req.user.email,
-      },
+    // La garde d'accès (findOne filtré ci-dessus) reste la barrière d'ownership.
+    // La création du PaymentIntent est déléguée au service Stripe centralisé :
+    // source unique pour metadata + transition de statut + paymentStatus +
+    // historique, identique au chemin staff. Réponse mobile inchangée
+    // (clientSecret, paymentIntentId, amount, currency).
+    const result = await stripePaymentService.createPaymentIntent(facture._id, {
+      email: req.user.email,
     });
 
-    res.json({
-      clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id,
-      amount: montantPatient,
-      currency: "EUR",
-    });
+    res.json(result);
   } catch (err) {
     logger.error("[patient/paiement-intent]", { err: err.message });
     res.status(500).json({ message: safeMsg(err) });
@@ -692,7 +679,7 @@ router.post("/factures/:id/confirmer-paiement", authPatient, async (req, res) =>
     if (!paymentIntentId) return res.status(400).json({ message: "paymentIntentId requis" });
 
     // Vérification côté Stripe (source de vérité)
-    const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+    const pi = await stripePaymentService.confirmPaymentIntent(paymentIntentId);
     if (pi.status !== "succeeded") {
       return res.status(400).json({ message: `Paiement non confirmé (statut: ${pi.status})` });
     }
@@ -700,23 +687,24 @@ router.post("/factures/:id/confirmer-paiement", authPatient, async (req, res) =>
       return res.status(400).json({ message: "PaymentIntent ne correspond pas à cette facture" });
     }
 
+    // Garde d'accès : la facture doit appartenir à ce patient (filtre ownership).
     const factureFilter = await buildFactureFilter(req.user._id, req.user.email);
     if (!factureFilter) return res.status(404).json({ message: "Facture introuvable" });
 
-    const facture = await Facture.findOneAndUpdate(
-      { _id: req.params.id, ...factureFilter, statut: { $ne: "payee" } },
-      {
-        statut: "payee",
-        datePaiement: new Date(),
-        modePaiement: "cb",
-        referenceExterne: paymentIntentId,
-      },
-      { new: true },
-    );
-    if (!facture) return res.status(404).json({ message: "Facture introuvable ou déjà payée" });
+    const facture = await Facture.findOne({ _id: req.params.id, ...factureFilter });
+    if (!facture) return res.status(404).json({ message: "Facture introuvable" });
+    if (facture.statut === "payee")
+      return res.status(404).json({ message: "Facture introuvable ou déjà payée" });
 
-    emitFactureUpdated(facture);
-    res.json({ message: "Paiement confirmé", facture });
+    // Marquage payé via la source de vérité unique (statut + paymentStatus +
+    // sous-document payment + historique), partagée avec le webhook Stripe.
+    const updated = await invoiceService.markInvoicePaid(facture._id, {
+      stripePaymentIntentId: pi.id,
+      paidAt: new Date(),
+    });
+
+    emitFactureUpdated(updated);
+    res.json({ message: "Paiement confirmé", facture: updated });
   } catch (err) {
     logger.error("[patient/confirmer-paiement]", { err: err.message });
     res.status(500).json({ message: safeMsg(err) });
