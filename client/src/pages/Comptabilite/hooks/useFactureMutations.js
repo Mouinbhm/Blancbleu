@@ -1,34 +1,30 @@
 import { factureService } from "../../../services/api";
+import { useFactureMutation } from "../../../hooks/queries/useFactures";
 import { STATUT_STYLE } from "../utils/factureConstants";
 import { downloadBlob } from "../utils/downloadHelpers";
 
 /**
  * Actions de mutation sur les factures (statut, annulation, PDF, reçu).
- * Logique identique au monolithe — on injecte les setters/utilitaires d'état
- * dont les handlers ont besoin pour rester découplés de l'orchestrateur.
+ *
+ * Les mutations de données passent par `useFactureMutation()` (React Query) qui
+ * invalide déjà `factureKeys` → la liste + les stats se rafraîchissent seules.
+ * On ne garde ici que l'orchestration UI (toasts, spinner d'action, confirm,
+ * téléchargements de blobs).
  *
  * @param {object} deps
- * @param {Array}  deps.factures
- * @param {Function} deps.setFactures
- * @param {Function} deps.reloadFactures
+ * @param {Array}  deps.factures      - pour retrouver le numéro à l'annulation
  * @param {Function} deps.addToast
  * @param {Function} deps.setActionId
  * @param {Function} deps.setConfirmPay
  */
-export function useFactureMutations({
-  factures,
-  setFactures,
-  reloadFactures,
-  addToast,
-  setActionId,
-  setConfirmPay,
-}) {
+export function useFactureMutations({ factures, addToast, setActionId, setConfirmPay }) {
+  const { updateStatut, remove } = useFactureMutation();
+
   const handleStatut = async (id, statut) => {
     setActionId(id);
     setConfirmPay(null);
     try {
-      const { data } = await factureService.updateStatut(id, statut);
-      setFactures((prev) => prev.map((f) => (f._id === id ? data.facture : f)));
+      await updateStatut.mutateAsync({ id, statut });
       addToast(`Facture marquée ${STATUT_STYLE[statut]?.label || statut}`);
     } catch {
       addToast("Erreur mise à jour statut.", "error");
@@ -45,8 +41,7 @@ export function useFactureMutations({
     )
       return;
     try {
-      await factureService.delete(id);
-      reloadFactures();
+      await remove.mutateAsync(id);
       addToast("Facture annulée.", "warning");
     } catch (err) {
       const msg = err?.response?.data?.message || "Erreur lors de l'annulation.";

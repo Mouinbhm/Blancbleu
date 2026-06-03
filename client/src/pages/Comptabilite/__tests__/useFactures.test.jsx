@@ -1,79 +1,58 @@
-import { renderHook, waitFor, act } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const mockGetAll = jest.fn();
 const mockGetStats = jest.fn();
-let socketHandler = null;
-const mockUnsub = jest.fn();
 
 jest.mock("../../../services/api", () => ({
   factureService: {
     getAll: (...a) => mockGetAll(...a),
     getStats: (...a) => mockGetStats(...a),
   },
+  comptabiliteService: { getDashboard: jest.fn() },
 }));
 
-jest.mock("../../../hooks/useSocket", () => ({
-  __esModule: true,
-  default: () => ({
-    subscribe: (event, cb) => {
-      socketHandler = cb;
-      return mockUnsub;
-    },
-  }),
-}));
-
+// Source unique React Query (l'ancien hook local Comptabilite a été supprimé).
 // eslint-disable-next-line import/first
-import { useFactures } from "../hooks/useFactures";
+import { useFactures, useFactureStats } from "../../../hooks/queries/useFactures";
 
-describe("useFactures", () => {
+function makeWrapper() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return function Wrapper({ children }) {
+    return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  };
+}
+
+describe("queries/useFactures", () => {
   beforeEach(() => {
     mockGetAll.mockReset();
     mockGetStats.mockReset();
-    socketHandler = null;
   });
 
-  test("charge factures + stats au montage", async () => {
+  test("charge la liste des factures", async () => {
     mockGetAll.mockResolvedValue({ data: { factures: [{ _id: "1" }] } });
-    mockGetStats.mockResolvedValue({ data: { total: 1 } });
-
-    const { result } = renderHook(() => useFactures("", jest.fn()));
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    expect(result.current.factures).toEqual([{ _id: "1" }]);
-    expect(result.current.stats).toEqual({ total: 1 });
+    const { result } = renderHook(() => useFactures({ limit: 100 }), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ factures: [{ _id: "1" }] });
   });
 
   test("passe le filtre statut en query", async () => {
     mockGetAll.mockResolvedValue({ data: { factures: [] } });
-    mockGetStats.mockResolvedValue({ data: {} });
-
-    renderHook(() => useFactures("payee", jest.fn()));
+    renderHook(() => useFactures({ limit: 100, statut: "payee" }), { wrapper: makeWrapper() });
     await waitFor(() => expect(mockGetAll).toHaveBeenCalled());
     expect(mockGetAll).toHaveBeenCalledWith({ limit: 100, statut: "payee" });
   });
 
-  test("erreur API → loading retombe à false sans crash", async () => {
-    mockGetAll.mockRejectedValue(new Error("boom"));
-    mockGetStats.mockRejectedValue(new Error("boom"));
-
-    const { result } = renderHook(() => useFactures("", jest.fn()));
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.factures).toEqual([]);
+  test("useFactureStats charge les stats", async () => {
+    mockGetStats.mockResolvedValue({ data: { total: 1 } });
+    const { result } = renderHook(() => useFactureStats(), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ total: 1 });
   });
 
-  test("socket facture:updated patche la facture + notifie", async () => {
-    mockGetAll.mockResolvedValue({ data: { factures: [{ _id: "1", statut: "emise" }] } });
-    mockGetStats.mockResolvedValue({ data: {} });
-    const addToast = jest.fn();
-
-    const { result } = renderHook(() => useFactures("", addToast));
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    act(() => {
-      socketHandler({ _id: "1", numero: "FAC-1", statut: "payee", datePaiement: "2026-05-24" });
-    });
-
-    expect(result.current.factures[0].statut).toBe("payee");
-    expect(addToast).toHaveBeenCalledWith(expect.stringContaining("FAC-1"));
+  test("erreur API → isError (pas de crash, état visible)", async () => {
+    mockGetAll.mockRejectedValue(new Error("boom"));
+    const { result } = renderHook(() => useFactures({}), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.isError).toBe(true));
   });
 });

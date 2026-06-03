@@ -1,10 +1,12 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { getSocket }     from "../services/socketClient";
+import { getSocket } from "../services/socketClient";
 import { transportKeys } from "./queries/useTransports";
-import { vehicleKeys }   from "./queries/useVehicles";
+import { vehicleKeys } from "./queries/useVehicles";
 import { analyticsKeys } from "./queries/useAnalytics";
-import SOCKET_EVENTS    from "../lib/socketEvents";
+import { factureKeys } from "./queries/useFactures";
+import { patientKeys } from "./queries/usePatients";
+import SOCKET_EVENTS from "../lib/socketEvents";
 
 /**
  * Branche les événements Socket.IO sur l'invalidation React Query.
@@ -52,23 +54,57 @@ export function useSocketSync() {
       qc.invalidateQueries({ queryKey: analyticsKeys.all });
     };
 
+    // Facture payée en ligne par le patient → la liste/les stats factures se
+    // rafraîchissent. Le toast reste géré côté page Comptabilité.
+    const onFactureUpdated = () => {
+      qc.invalidateQueries({ queryKey: factureKeys.all });
+    };
+
+    // Nouveau patient créé via l'app mobile → rafraîchit liste + stats patients.
+    const onPatientCreated = () => {
+      qc.invalidateQueries({ queryKey: patientKeys.all });
+    };
+
+    // Activité flotte (position d'unité) → rafraîchit la flotte.
+    const onVehicleActivity = () => {
+      qc.invalidateQueries({ queryKey: vehicleKeys.all });
+    };
+
+    // Shift démarré/terminé → impacte la disponibilité flotte, les KPI et la
+    // liste des shifts du jour (dashboard).
+    const onShiftChange = () => {
+      qc.invalidateQueries({ queryKey: vehicleKeys.all });
+      qc.invalidateQueries({ queryKey: analyticsKeys.all });
+      qc.invalidateQueries({ queryKey: ["shifts"] });
+    };
+
     // Sprint M2 — Events canoniques uniquement. Anciens noms supprimés.
-    socket.on(SOCKET_EVENTS.TRANSPORT_CREATED,  onTransportCreated);
-    socket.on(SOCKET_EVENTS.TRANSPORT_STATUS,   onTransportStatut);
-    socket.on(SOCKET_EVENTS.VEHICLE_POSITION,   onVehiculePosition);
-    socket.on(SOCKET_EVENTS.VEHICLE_STATUS,     onVehiculeStatut);
-    socket.on("vehicule:statut",                onVehiculeStatut); // legacy compat (emit non encore migré)
-    socket.on("vehicule:assigne",               onVehiculeStatut); // legacy compat
-    socket.on(SOCKET_EVENTS.STATS_UPDATE,       onStatsUpdate);
+    socket.on(SOCKET_EVENTS.TRANSPORT_CREATED, onTransportCreated);
+    socket.on(SOCKET_EVENTS.TRANSPORT_STATUS, onTransportStatut);
+    socket.on(SOCKET_EVENTS.VEHICLE_POSITION, onVehiculePosition);
+    socket.on(SOCKET_EVENTS.VEHICLE_STATUS, onVehiculeStatut);
+    socket.on("vehicule:statut", onVehiculeStatut); // legacy compat (emit non encore migré)
+    socket.on("vehicule:assigne", onVehiculeStatut); // legacy compat
+    socket.on(SOCKET_EVENTS.STATS_UPDATE, onStatsUpdate);
+    socket.on("facture:updated", onFactureUpdated);
+    socket.on("patient:created", onPatientCreated);
+    socket.on("unit:location_updated", onVehicleActivity);
+    socket.on("shift:started", onShiftChange);
+    socket.on("shift:ended", onShiftChange);
 
     return () => {
-      socket.off(SOCKET_EVENTS.TRANSPORT_CREATED,  onTransportCreated);
-      socket.off(SOCKET_EVENTS.TRANSPORT_STATUS,   onTransportStatut);
-      socket.off(SOCKET_EVENTS.VEHICLE_POSITION,   onVehiculePosition);
-      socket.off(SOCKET_EVENTS.VEHICLE_STATUS,     onVehiculeStatut);
-      socket.off("vehicule:statut",                onVehiculeStatut);
-      socket.off("vehicule:assigne",               onVehiculeStatut);
-      socket.off(SOCKET_EVENTS.STATS_UPDATE,       onStatsUpdate);
+      socket.off(SOCKET_EVENTS.TRANSPORT_CREATED, onTransportCreated);
+      socket.off(SOCKET_EVENTS.TRANSPORT_STATUS, onTransportStatut);
+      socket.off(SOCKET_EVENTS.VEHICLE_POSITION, onVehiculePosition);
+      socket.off(SOCKET_EVENTS.VEHICLE_STATUS, onVehiculeStatut);
+      socket.off("vehicule:statut", onVehiculeStatut);
+      socket.off("vehicule:assigne", onVehiculeStatut);
+      socket.off(SOCKET_EVENTS.STATS_UPDATE, onStatsUpdate);
+      socket.off("facture:updated", onFactureUpdated);
+      socket.off("patient:created", onPatientCreated);
+      socket.off("unit:location_updated", onVehicleActivity);
+      socket.off("shift:started", onShiftChange);
+      socket.off("shift:ended", onShiftChange);
     };
   }, [qc]);
 }

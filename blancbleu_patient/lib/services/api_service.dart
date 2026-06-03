@@ -1,13 +1,26 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:bb_core/bb_core.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/network/socket_manager.dart';
+import '../main.dart' show BlancBleuApp;
+import '../screens/login_screen.dart';
 
+/// Sprint M3 — la plomberie HTTP (bearer + refresh single-flight + mapping des
+/// erreurs en exceptions typées) vit désormais dans bb_core/DioClient. Ce
+/// service ne garde que le wiring patient (base URL, clés, refresh path, socket
+/// reauth, logout) et les méthodes de domaine.
+///
+/// Contrat public INCHANGÉ : les méthodes retournent les mêmes shapes et lèvent
+/// toujours `Exception('<message serveur>')` pour les erreurs métier (les écrans
+/// qui affichent `e.toString()` restent valides). SEULE l'expiration de session
+/// passe d'un `Exception('SESSION_EXPIRED')` (string) à une `AuthException`
+/// typée de bb_core.
 class ApiService {
   // API_BASE_URL must be set in .env (see .env.example).
   // Fallback: Android emulator → 10.0.2.2, physical device → LAN IP, prod → https://
@@ -19,57 +32,74 @@ class ApiService {
   static const String _refreshKey = 'bb_refresh';
   static const String _patientKey = 'bb_patient';
 
-  static const _secure = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  static final SecureStorageWrapper _secure = SecureStorageWrapper();
+
+  static final TokenManager _tokens = TokenManager(
+    storage:    _secure,
+    accessKey:  _tokenKey,
+    refreshKey: _refreshKey,
   );
 
-  // Single-flight refresh : si N requêtes échouent en 401 en parallèle, un
-  // SEUL appel /refresh est lancé, les autres attendent ce Completer.
-  static Completer<bool>? _refreshCompleter;
+  // Lazy (static final) : le DioClient n'est construit qu'au premier appel
+  // réseau, donc dotenv est déjà chargé (main()) et les tests qui n'atteignent
+  // pas le réseau ne le déclenchent pas.
+  static final DioClient _client = DioClient(
+    baseUrl:          _base,
+    tokens:           _tokens,
+    refreshPath:      '/refresh', // → POST $_base/refresh (inchangé)
+    connectTimeout:   _timeout,
+    receiveTimeout:   _timeout,
+    onRefreshSuccess: () async => SocketManager.instance.reauthenticate(),
+    onAuthFailed:     _onAuthFailed,
+    forbiddenTriggersLogout: false, // patient : 403 = message, PAS de logout
+    spkiSha256PinsBase64: const [],
+  );
+
+  static Dio get _dio => _client.dio;
 
   // ── Token / session ────────────────────────────────────────────────────────
 
   static Future<void> saveToken(String t) =>
-      _secure.write(key: _tokenKey, value: t);
+      _tokens.saveTokens(access: t);
 
   static Future<String?> getToken() =>
-      _secure.read(key: _tokenKey);
-
-  static Future<void> _saveRefresh(String t) =>
-      _secure.write(key: _refreshKey, value: t);
-
-  static Future<String?> _getRefresh() =>
-      _secure.read(key: _refreshKey);
+      _tokens.getAccessToken();
 
   static Future<void> clearSession() async {
-    await _secure.delete(key: _tokenKey);
-    await _secure.delete(key: _refreshKey);
-    await _secure.delete(key: _patientKey);
+    await _tokens.clear(); // bb_token + bb_refresh
+    await _secure.delete(_patientKey);
     // Sprint M5 — efface aussi le legacy SharedPreferences (cas d'utilisateur
     // qui upgrade depuis une version pre-M5 où le profil était stocké en clair).
     final p = await SharedPreferences.getInstance();
     p.remove(_patientKey);
   }
 
+  /// Logout centralisé (DioClient.onAuthFailed) sur échec de refresh / 401 final.
+  /// Purge la session puis navigue vers Login via le navigator global. Les
+  /// écrans n'ont plus qu'à `catch (AuthException)` et s'arrêter.
+  static Future<void> _onAuthFailed() async {
+    await clearSession();
+    final nav = BlancBleuApp.navigatorKey.currentState;
+    nav?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
+    );
+  }
+
   /// Sprint M1 — Valide la session au démarrage.
-  /// Avant : retournait simplement `(token != null)` → l'écran d'accueil
-  /// s'affichait avec un token expiré, puis 401 sur le premier appel.
-  /// Maintenant : tente un appel léger authentifié (GET /me) qui passe par
-  /// `_request` et déclenche le refresh transparent si nécessaire. Si le
-  /// refresh échoue → clearSession + false.
+  /// Tente un appel léger authentifié (GET /me) qui déclenche le refresh
+  /// transparent si nécessaire. Si le refresh échoue → `AuthException` (la
+  /// session est déjà purgée par onAuthFailed) → false. Erreur réseau → on
+  /// garde la session optimiste (true), l'utilisateur retentera.
   static Future<bool> isLoggedIn() async {
     final token = await getToken();
     if (token == null) return false;
     try {
-      await getMesDonnees(); // 401 → _request tente refresh → si KO throw
+      await getMesDonnees(); // 401 → refresh transparent → si KO → AuthException
       return true;
-    } catch (e) {
-      final msg = e.toString();
-      if (msg.contains('SESSION_EXPIRED')) {
-        // Refresh KO (déjà clearSession dans _request) → repli login.
-        return false;
-      }
-      // Erreur réseau : on garde la session optimiste, l'utilisateur retentera.
+    } on AuthException {
+      return false;
+    } catch (_) {
       return true;
     }
   }
@@ -79,12 +109,12 @@ class ApiService {
   /// SharedPreferences (clair) vers secure_storage (chiffré AES côté Android,
   /// Keychain côté iOS). Migration douce automatique au prochain getCachedPatient.
   static Future<void> savePatient(Map<String, dynamic> patient) async {
-    await _secure.write(key: _patientKey, value: jsonEncode(patient));
+    await _secure.write(_patientKey, jsonEncode(patient));
   }
 
   static Future<Map<String, dynamic>?> getCachedPatient() async {
     // Sprint M5 — lecture secure storage en priorité.
-    final s = await _secure.read(key: _patientKey);
+    final s = await _secure.read(_patientKey);
     if (s != null) {
       try { return jsonDecode(s) as Map<String, dynamic>; }
       catch (_) { return null; }
@@ -97,7 +127,7 @@ class ApiService {
     if (legacy != null) {
       try {
         final decoded = jsonDecode(legacy) as Map<String, dynamic>;
-        await _secure.write(key: _patientKey, value: legacy);
+        await _secure.write(_patientKey, legacy);
         await p.remove(_patientKey);
         return decoded;
       } catch (_) {
@@ -109,105 +139,42 @@ class ApiService {
     return null;
   }
 
-  // ── Headers ────────────────────────────────────────────────────────────────
-
-  static Future<Map<String, String>> _headers() async {
-    final token = await getToken();
-    return {
-      'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
-    };
-  }
-
-  static Map<String, dynamic> _parse(http.Response res) {
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    if (res.statusCode == 401) throw Exception('SESSION_EXPIRED');
-    if (res.statusCode >= 400) throw Exception(data['message'] ?? 'Erreur serveur');
-    return data;
-  }
-
-  // ── Refresh single-flight ─────────────────────────────────────────────────
-  static Future<bool> _ensureRefreshed() async {
-    if (_refreshCompleter != null) return _refreshCompleter!.future;
-    final c = Completer<bool>();
-    _refreshCompleter = c;
-    try {
-      final raw = await _getRefresh();
-      if (raw == null || raw.isEmpty) {
-        c.complete(false);
-        return false;
-      }
-      final res = await http.post(
-        Uri.parse('$_base/refresh'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'refreshToken': raw}),
-      ).timeout(_timeout, onTimeout: () => http.Response('', 408));
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final newAccess  = data['accessToken'] as String?;
-        final newRefresh = data['refreshToken'] as String?;
-        if (newAccess != null && newAccess.isNotEmpty) {
-          await saveToken(newAccess);
-          if (newRefresh != null && newRefresh.isNotEmpty) {
-            await _saveRefresh(newRefresh);
-          }
-          // Sprint M2 — propage le nouveau token au socket pour eviter
-          // une deconnexion silencieuse au prochain handshake serveur.
-          SocketManager.instance.reauthenticate();
-          c.complete(true);
-          return true;
-        }
-      }
-      c.complete(false);
-      return false;
-    } catch (_) {
-      c.complete(false);
-      return false;
-    } finally {
-      _refreshCompleter = null;
-    }
-  }
-
-  /// Enveloppe un appel http qui peut retourner 401. Si 401, tente UN refresh
-  /// (single-flight) puis rejoue la requête une fois. Si le refresh échoue ou
-  /// si le retry est encore 401 → clearSession + throw SESSION_EXPIRED.
-  ///
-  /// Le closure `makeRequest` est rappelé tel quel pour le retry — il doit donc
-  /// lire le token au moment de l'appel (via _headers()), pas en amont.
-  static Future<http.Response> _request(
-    Future<http.Response> Function() makeRequest,
+  // ── Helper réseau ────────────────────────────────────────────────────────
+  //
+  // Exécute un appel Dio et reconvertit les erreurs vers le contrat historique :
+  //   - AuthException (401 final / refresh KO) → rethrow tel quel (typé)
+  //   - toute autre BbException (4xx/5xx/réseau/403) → Exception('<message>')
+  // Ainsi les écrans qui affichent `e.toString().replaceFirst('Exception: ','')`
+  // continuent d'afficher le message serveur exact, et seuls les écrans auth
+  // catchent `AuthException`.
+  static Future<Response<dynamic>> _send(
+    Future<Response<dynamic>> Function() call,
   ) async {
-    var res = await makeRequest();
-    if (res.statusCode != 401) return res;
-
-    final ok = await _ensureRefreshed();
-    if (!ok) {
-      await clearSession();
-      throw Exception('SESSION_EXPIRED');
+    try {
+      return await call();
+    } on DioException catch (e) {
+      final err = e.error;
+      if (err is AuthException) throw err;
+      if (err is BbException) throw Exception(err.message);
+      throw Exception(e.message ?? 'Serveur inaccessible.');
     }
-    res = await makeRequest();
-    if (res.statusCode == 401) {
-      // Le refresh a abouti mais le serveur refuse toujours → session morte.
-      await clearSession();
-      throw Exception('SESSION_EXPIRED');
-    }
-    return res;
   }
+
+  static Map<String, dynamic> _asMap(Response<dynamic> res) =>
+      (res.data as Map).cast<String, dynamic>();
 
   // ── Auth ───────────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> login(String email, String password) async {
-    final res = await http.post(
-      Uri.parse('$_base/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email, 'password': password}),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible. Vérifiez votre connexion.'));
-    final data = _parse(res);
-    await saveToken(data['accessToken'] as String);
-    final refresh = data['refreshToken'] as String?;
-    if (refresh != null && refresh.isNotEmpty) {
-      await _saveRefresh(refresh);
-    }
+    final res = await _send(() => _dio.post(
+      '$_base/login',
+      data: {'email': email, 'password': password},
+    ));
+    final data = _asMap(res);
+    await _tokens.saveTokens(
+      access:  data['accessToken'] as String,
+      refresh: data['refreshToken'] as String?,
+    );
     await savePatient(data['patient'] as Map<String, dynamic>);
     return data;
   }
@@ -224,10 +191,9 @@ class ApiService {
     String? dateNaissance,
     Map<String, dynamic> contactUrgence = const {},
   }) async {
-    final res = await http.post(
-      Uri.parse('$_base/register'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
+    final res = await _send(() => _dio.post(
+      '$_base/register',
+      data: {
         'prenom':         prenom,
         'nom':            nom.toUpperCase(),
         'email':          email.toLowerCase().trim(),
@@ -238,14 +204,13 @@ class ApiService {
         'medecin':        medecin,
         if (dateNaissance != null) 'dateNaissance': dateNaissance,
         'contactUrgence': contactUrgence,
-      }),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible. Vérifiez votre connexion.'));
-    final data = _parse(res);
-    await saveToken(data['accessToken'] as String);
-    final refresh = data['refreshToken'] as String?;
-    if (refresh != null && refresh.isNotEmpty) {
-      await _saveRefresh(refresh);
-    }
+      },
+    ));
+    final data = _asMap(res);
+    await _tokens.saveTokens(
+      access:  data['accessToken'] as String,
+      refresh: data['refreshToken'] as String?,
+    );
     await savePatient(data['patient'] as Map<String, dynamic>);
     return data;
   }
@@ -253,49 +218,37 @@ class ApiService {
   // ── Dashboard ──────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> getDashboard() async {
-    final res = await _request(() async => http.get(
-      Uri.parse('$_base/dashboard'),
-      headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
-    return _parse(res);
+    final res = await _send(() => _dio.get('$_base/dashboard'));
+    return _asMap(res);
   }
 
   // ── Transports ─────────────────────────────────────────────────────────────
 
   static Future<List<dynamic>> getTransports({String? statut}) async {
-    var url = '$_base/transports';
-    if (statut != null) url += '?statut=$statut';
-    final res = await _request(() async => http.get(Uri.parse(url), headers: await _headers())
-        .timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
-    return _parse(res)['transports'] as List<dynamic>;
+    final res = await _send(() => _dio.get(
+      '$_base/transports',
+      queryParameters: {if (statut != null) 'statut': statut},
+    ));
+    return _asMap(res)['transports'] as List<dynamic>;
   }
 
   static Future<Map<String, dynamic>> createTransport(Map<String, dynamic> body) async {
-    final res = await http.post(
-      Uri.parse('$_base/transports'),
-      headers: await _headers(),
-      body: jsonEncode(body),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    return _parse(res);
+    final res = await _send(() => _dio.post('$_base/transports', data: body));
+    return _asMap(res);
   }
 
   // ── Profil ─────────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> updateProfil(Map<String, dynamic> body) async {
-    final res = await http.put(
-      Uri.parse('$_base/profil'),
-      headers: await _headers(),
-      body: jsonEncode(body),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    return _parse(res);
+    final res = await _send(() => _dio.put('$_base/profil', data: body));
+    return _asMap(res);
   }
 
   // ── Logout ─────────────────────────────────────────────────────────────────
 
   static Future<void> logout() async {
     try {
-      await http.post(Uri.parse('$_base/logout'), headers: await _headers())
-          .timeout(_timeout);
+      await _dio.post('$_base/logout');
     } catch (_) {}
     await clearSession();
   }
@@ -303,62 +256,44 @@ class ApiService {
   // ── Transport par id ───────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> getTransportById(String id) async {
-    final res = await _request(() async => http.get(
-      Uri.parse('$_base/transports/$id'),
-      headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
-    return _parse(res)['transport'] as Map<String, dynamic>;
+    final res = await _send(() => _dio.get('$_base/transports/$id'));
+    return _asMap(res)['transport'] as Map<String, dynamic>;
   }
 
   // ── Tracking ───────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> getTracking(String id) async {
-    final res = await _request(() async => http.get(
-      Uri.parse('$_base/transports/$id/tracking'),
-      headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
-    return _parse(res);
+    final res = await _send(() => _dio.get('$_base/transports/$id/tracking'));
+    return _asMap(res);
   }
 
   // ── Factures ───────────────────────────────────────────────────────────────
 
   static Future<List<dynamic>> getFactures() async {
-    final res = await _request(() async => http.get(
-      Uri.parse('$_base/factures'),
-      headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
-    return _parse(res)['factures'] as List<dynamic>;
+    final res = await _send(() => _dio.get('$_base/factures'));
+    return _asMap(res)['factures'] as List<dynamic>;
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> getStats() async {
-    final res = await http.get(
-      Uri.parse('$_base/stats'),
-      headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    return _parse(res);
+    final res = await _send(() => _dio.get('$_base/stats'));
+    return _asMap(res);
   }
 
   // ── Prescriptions ──────────────────────────────────────────────────────────
 
   static Future<List<dynamic>> getPrescriptions() async {
-    final res = await http.get(
-      Uri.parse('$_base/prescriptions'),
-      headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    return _parse(res)['prescriptions'] as List<dynamic>;
+    final res = await _send(() => _dio.get('$_base/prescriptions'));
+    return _asMap(res)['prescriptions'] as List<dynamic>;
   }
 
   // ── Paiement Stripe ────────────────────────────────────────────────────────
 
   /// Crée un PaymentIntent via la route patient existante (rétrocompatible).
   static Future<Map<String, dynamic>> createPaymentIntent(String factureId) async {
-    final res = await http.post(
-      Uri.parse('$_base/factures/$factureId/paiement-intent'),
-      headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    return _parse(res);
+    final res = await _send(() => _dio.post('$_base/factures/$factureId/paiement-intent'));
+    return _asMap(res);
   }
 
   /// Confirme le paiement (fallback si le webhook n'a pas encore mis à jour la facture).
@@ -367,47 +302,58 @@ class ApiService {
     String factureId,
     String paymentIntentId,
   ) async {
-    final res = await http.post(
-      Uri.parse('$_base/factures/$factureId/confirmer-paiement'),
-      headers: await _headers(),
-      body: jsonEncode({'paymentIntentId': paymentIntentId}),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    return _parse(res);
+    final res = await _send(() => _dio.post(
+      '$_base/factures/$factureId/confirmer-paiement',
+      data: {'paymentIntentId': paymentIntentId},
+    ));
+    return _asMap(res);
   }
 
   /// Télécharge le PDF d'une facture (retourne les bytes du fichier).
   static Future<List<int>> downloadFacturePdf(String factureId) async {
-    final token = await getToken();
     // Appel direct vers l'API principale (pas la route patient)
     final baseApi = dotenv.env['API_BASE_URL_MAIN'] ??
         (dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:5000/api/patient')
             .replaceAll('/api/patient', '/api');
-    final res = await http.get(
-      Uri.parse('$baseApi/factures/$factureId/pdf'),
-      headers: {
-        'Authorization': 'Bearer ${token ?? ''}',
-      },
-    ).timeout(const Duration(seconds: 30),
-        onTimeout: () => throw Exception('Téléchargement timeout.'));
-    if (res.statusCode >= 400) throw Exception('Téléchargement impossible');
-    return res.bodyBytes;
+    return _downloadBytes(
+      '$baseApi/factures/$factureId/pdf',
+      errorMessage: 'Téléchargement impossible',
+    );
   }
 
   /// Télécharge le PDF du reçu de paiement (disponible seulement si payée).
   static Future<List<int>> downloadReceiptPdf(String factureId) async {
-    final token = await getToken();
     final baseApi = dotenv.env['API_BASE_URL_MAIN'] ??
         (dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:5000/api/patient')
             .replaceAll('/api/patient', '/api');
-    final res = await http.get(
-      Uri.parse('$baseApi/factures/$factureId/receipt'),
-      headers: {
-        'Authorization': 'Bearer ${token ?? ''}',
-      },
-    ).timeout(const Duration(seconds: 30),
-        onTimeout: () => throw Exception('Téléchargement timeout.'));
-    if (res.statusCode >= 400) throw Exception('Reçu disponible uniquement après paiement');
-    return res.bodyBytes;
+    return _downloadBytes(
+      '$baseApi/factures/$factureId/receipt',
+      errorMessage: 'Reçu disponible uniquement après paiement',
+    );
+  }
+
+  /// Téléchargement binaire 30s. `validateStatus: true` ⇒ aucune réponse n'est
+  /// une "erreur" Dio, donc l'intercepteur de refresh ne se déclenche pas (le
+  /// comportement historique : ces appels ne rafraîchissaient pas le token), et
+  /// on reproduit les messages exacts via le check de status manuel.
+  static Future<List<int>> _downloadBytes(
+    String url, {
+    required String errorMessage,
+  }) async {
+    try {
+      final res = await _dio.get<List<int>>(
+        url,
+        options: Options(
+          responseType:   ResponseType.bytes,
+          receiveTimeout: const Duration(seconds: 30),
+          validateStatus: (_) => true,
+        ),
+      );
+      if ((res.statusCode ?? 0) >= 400) throw Exception(errorMessage);
+      return res.data ?? <int>[];
+    } on DioException {
+      throw Exception('Téléchargement timeout.');
+    }
   }
 
   // ── Prescriptions (upload) ─────────────────────────────────────────────────
@@ -416,36 +362,28 @@ class ApiService {
     Map<String, dynamic> body, {
     File? fichier,
   }) async {
-    final token = await getToken();
-    final uri = Uri.parse('$_base/prescriptions');
-    final request = http.MultipartRequest('POST', uri);
-
-    if (token != null) request.headers['Authorization'] = 'Bearer $token';
-
-    final fields = <String, String>{
+    final formMap = <String, dynamic>{
       'motif':                    body['motif']?.toString() ?? '',
       'dateEmission':             body['dateEmission']?.toString() ?? '',
       'etablissementDestination': body['etablissementDestination']?.toString() ?? '',
       'notes':                    body['notes']?.toString() ?? '',
       'medecin':                  jsonEncode(body['medecin'] ?? {}),
     };
-    request.fields.addAll(fields);
-
     if (fichier != null) {
-      request.files.add(await http.MultipartFile.fromPath(
-        'fichier',
+      formMap['fichier'] = await MultipartFile.fromFile(
         fichier.path,
         filename: fichier.path.split('/').last.split('\\').last,
-      ));
+      );
     }
-
-    final streamed = await request.send()
-        .timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    final res = await http.Response.fromStream(streamed);
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    if (res.statusCode == 401) throw Exception('SESSION_EXPIRED');
-    if (res.statusCode >= 400) throw Exception(data['message'] ?? 'Erreur serveur');
-    return data;
+    final formData = FormData.fromMap(formMap);
+    // multipart = stream à usage unique → on désactive le retry après 401 pour
+    // éviter de rejouer un corps déjà finalisé (cf. DioClient.skipRefreshExtra).
+    final res = await _send(() => _dio.post(
+      '$_base/prescriptions',
+      data: formData,
+      options: Options(extra: {DioClient.skipRefreshExtra: true}),
+    ));
+    return _asMap(res);
   }
 
   // ── Notifications persistées ───────────────────────────────────────────────
@@ -459,48 +397,38 @@ class ApiService {
     int limit = 20,
     bool? read,
   }) async {
-    var url = '$_notifBase?page=$page&limit=$limit';
-    if (read != null) url += '&read=$read';
-    final res = await _request(() async => http.get(Uri.parse(url), headers: await _headers())
-        .timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
-    return _parse(res);
+    final res = await _send(() => _dio.get(
+      _notifBase,
+      queryParameters: {
+        'page':  page,
+        'limit': limit,
+        if (read != null) 'read': read,
+      },
+    ));
+    return _asMap(res);
   }
 
   /// Nombre de notifications non lues.
   static Future<int> getUnreadNotificationCount() async {
-    final res = await http.get(
-      Uri.parse('$_notifBase/unread-count'),
-      headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    final data = _parse(res);
-    return (data['count'] as num?)?.toInt() ?? 0;
+    final res = await _send(() => _dio.get('$_notifBase/unread-count'));
+    return (_asMap(res)['count'] as num?)?.toInt() ?? 0;
   }
 
   /// Marquer une notification comme lue.
   static Future<void> markNotificationAsRead(String notifId) async {
-    await http.patch(
-      Uri.parse('$_notifBase/$notifId/read'),
-      headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
+    await _send(() => _dio.patch('$_notifBase/$notifId/read'));
   }
 
   /// Marquer toutes les notifications comme lues.
   static Future<void> markAllNotificationsAsRead() async {
-    await http.patch(
-      Uri.parse('$_notifBase/read-all'),
-      headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
+    await _send(() => _dio.patch('$_notifBase/read-all'));
   }
 
   // ── FCM Push notifications ─────────────────────────────────────────────────
 
   static Future<void> registerFcmToken(String token) async {
     try {
-      await http.post(
-        Uri.parse('$_base/fcm-token'),
-        headers: await _headers(),
-        body: jsonEncode({'token': token}),
-      ).timeout(_timeout);
+      await _dio.post('$_base/fcm-token', data: {'token': token});
     } catch (_) {
       // Non-bloquant — push notifs optionnelles
     }
@@ -510,10 +438,7 @@ class ApiService {
   /// Best-effort : ne crashe pas si endpoint KO.
   static Future<void> deleteFcmToken() async {
     try {
-      await http.delete(
-        Uri.parse('$_base/fcm-token'),
-        headers: await _headers(),
-      ).timeout(_timeout);
+      await _dio.delete('$_base/fcm-token');
     } catch (_) { /* non-bloquant */ }
   }
 
@@ -523,27 +448,17 @@ class ApiService {
       _base.replaceFirst('/api/patient', '/api/auth');
 
   static Future<void> forgotPassword(String email) async {
-    final res = await http.post(
-      Uri.parse('$_authBase/forgot-password'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email}),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    if (res.statusCode >= 400) {
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      throw Exception(data['message'] ?? 'Erreur serveur');
-    }
+    await _send(() => _dio.post(
+      '$_authBase/forgot-password',
+      data: {'email': email},
+    ));
   }
 
   static Future<void> resetPassword(String token, String newPassword) async {
-    final res = await http.post(
-      Uri.parse('$_authBase/reset-password'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'token': token, 'password': newPassword}),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    if (res.statusCode >= 400) {
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      throw Exception(data['message'] ?? 'Erreur serveur');
-    }
+    await _send(() => _dio.post(
+      '$_authBase/reset-password',
+      data: {'token': token, 'password': newPassword},
+    ));
   }
 
   // ── RGPD ───────────────────────────────────────────────────────────────────
@@ -551,31 +466,14 @@ class ApiService {
   // GET /api/gdpr/export — droit à la portabilité (Art. 20)
   static Future<Map<String, dynamic>> exportGdprData() async {
     final base = _base.replaceFirst('/api/patient', '/api');
-    final res = await http.get(
-      Uri.parse('$base/gdpr/export'),
-      headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    if (res.statusCode == 401) throw Exception('SESSION_EXPIRED');
-    if (res.statusCode >= 400) {
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      throw Exception(data['message'] ?? 'Erreur serveur');
-    }
-    return jsonDecode(res.body) as Map<String, dynamic>;
+    final res = await _send(() => _dio.get('$base/gdpr/export'));
+    return _asMap(res);
   }
 
   // DELETE /api/gdpr/me — droit à l'effacement (Art. 17)
   static Future<void> deleteAccount(String password) async {
     final base = _base.replaceFirst('/api/patient', '/api');
-    final res = await http.delete(
-      Uri.parse('$base/gdpr/me'),
-      headers: await _headers(),
-      body: jsonEncode({'password': password}),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    if (res.statusCode == 401) throw Exception('SESSION_EXPIRED');
-    if (res.statusCode >= 400) {
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      throw Exception(data['message'] ?? 'Erreur serveur');
-    }
+    await _send(() => _dio.delete('$base/gdpr/me', data: {'password': password}));
     await clearSession();
   }
 
@@ -583,15 +481,8 @@ class ApiService {
 
   // GET /api/patient/me — récupère le profil avec les champs RGPD
   static Future<Map<String, dynamic>> getMesDonnees() async {
-    final res = await _request(() async => http.get(
-      Uri.parse('$_base/me'),
-      headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.')));
-    if (res.statusCode >= 400) {
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      throw Exception(data['message'] ?? 'Erreur serveur');
-    }
-    return jsonDecode(res.body) as Map<String, dynamic>;
+    final res = await _send(() => _dio.get('$_base/me'));
+    return _asMap(res);
   }
 
   // POST /api/patient/consent — mettre à jour un consentement
@@ -601,50 +492,26 @@ class ApiService {
     String version = '1.0',
     String source  = 'mobile',
   }) async {
-    final res = await http.post(
-      Uri.parse('$_base/consent'),
-      headers: await _headers(),
-      body: jsonEncode({
+    final res = await _send(() => _dio.post(
+      '$_base/consent',
+      data: {
         'consentType': consentType,
         'accepted':    accepted,
         'version':     version,
         'source':      source,
-      }),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    if (res.statusCode == 401) throw Exception('SESSION_EXPIRED');
-    if (res.statusCode >= 400) {
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      throw Exception(data['message'] ?? 'Erreur lors de la mise à jour du consentement');
-    }
-    return jsonDecode(res.body) as Map<String, dynamic>;
+      },
+    ));
+    return _asMap(res);
   }
 
   // GET /api/patient/consent-history — historique des consentements
   static Future<List<dynamic>> getHistoriqueConsentements() async {
-    final res = await http.get(
-      Uri.parse('$_base/consent-history'),
-      headers: await _headers(),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    if (res.statusCode == 401) throw Exception('SESSION_EXPIRED');
-    if (res.statusCode >= 400) {
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      throw Exception(data['message'] ?? 'Erreur serveur');
-    }
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    return (data['consentHistory'] as List<dynamic>?) ?? [];
+    final res = await _send(() => _dio.get('$_base/consent-history'));
+    return (_asMap(res)['consentHistory'] as List<dynamic>?) ?? [];
   }
 
   // POST /api/patient/request-deletion — demander la suppression (Art. 17)
   static Future<void> demanderSuppression(String raison) async {
-    final res = await http.post(
-      Uri.parse('$_base/request-deletion'),
-      headers: await _headers(),
-      body: jsonEncode({'reason': raison}),
-    ).timeout(_timeout, onTimeout: () => throw Exception('Serveur inaccessible.'));
-    if (res.statusCode == 401) throw Exception('SESSION_EXPIRED');
-    if (res.statusCode >= 400) {
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      throw Exception(data['message'] ?? 'Erreur lors de la demande');
-    }
+    await _send(() => _dio.post('$_base/request-deletion', data: {'reason': raison}));
   }
 }
