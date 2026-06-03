@@ -70,10 +70,12 @@ export function useSocketSync() {
       qc.invalidateQueries({ queryKey: vehicleKeys.all });
     };
 
-    // Shift démarré/terminé → impacte la disponibilité flotte ET les KPI.
+    // Shift démarré/terminé → impacte la disponibilité flotte, les KPI et la
+    // liste des shifts du jour (dashboard).
     const onShiftChange = () => {
       qc.invalidateQueries({ queryKey: vehicleKeys.all });
       qc.invalidateQueries({ queryKey: analyticsKeys.all });
+      qc.invalidateQueries({ queryKey: ["shifts"] });
     };
 
     // Sprint M2 — Events canoniques uniquement. Anciens noms supprimés.
