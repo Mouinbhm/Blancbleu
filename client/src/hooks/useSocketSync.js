@@ -5,6 +5,7 @@ import { transportKeys } from "./queries/useTransports";
 import { vehicleKeys } from "./queries/useVehicles";
 import { analyticsKeys } from "./queries/useAnalytics";
 import { factureKeys } from "./queries/useFactures";
+import { patientKeys } from "./queries/usePatients";
 import SOCKET_EVENTS from "../lib/socketEvents";
 
 /**
@@ -59,6 +60,11 @@ export function useSocketSync() {
       qc.invalidateQueries({ queryKey: factureKeys.all });
     };
 
+    // Nouveau patient créé via l'app mobile → rafraîchit liste + stats patients.
+    const onPatientCreated = () => {
+      qc.invalidateQueries({ queryKey: patientKeys.all });
+    };
+
     // Sprint M2 — Events canoniques uniquement. Anciens noms supprimés.
     socket.on(SOCKET_EVENTS.TRANSPORT_CREATED, onTransportCreated);
     socket.on(SOCKET_EVENTS.TRANSPORT_STATUS, onTransportStatut);
@@ -68,6 +74,7 @@ export function useSocketSync() {
     socket.on("vehicule:assigne", onVehiculeStatut); // legacy compat
     socket.on(SOCKET_EVENTS.STATS_UPDATE, onStatsUpdate);
     socket.on("facture:updated", onFactureUpdated);
+    socket.on("patient:created", onPatientCreated);
 
     return () => {
       socket.off(SOCKET_EVENTS.TRANSPORT_CREATED, onTransportCreated);
@@ -78,6 +85,7 @@ export function useSocketSync() {
       socket.off("vehicule:assigne", onVehiculeStatut);
       socket.off(SOCKET_EVENTS.STATS_UPDATE, onStatsUpdate);
       socket.off("facture:updated", onFactureUpdated);
+      socket.off("patient:created", onPatientCreated);
     };
   }, [qc]);
 }
