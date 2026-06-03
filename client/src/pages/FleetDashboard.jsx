@@ -161,12 +161,15 @@ function MissionsModal({ vehicle, onClose }) {
   const [page, setPage] = useState(1);
   const navigate = useNavigate();
 
-  const { data: missions, isLoading: loading } = useQuery({
+  const { data: missionsData, isLoading: loading } = useQuery({
     queryKey: ["vehicles", "missions", vehicle?.vehicleId, page],
     queryFn: () =>
       vehicleService.getVehicleMissions(vehicle.vehicleId, { page, limit: 15 }).then((r) => r.data),
     enabled: !!vehicle,
   });
+  // Fallback sûr : en cas d'erreur (missionsData undefined) on affiche
+  // « Aucune mission » plutôt qu'une modale vide.
+  const missions = missionsData ?? { missions: [], pagination: null };
 
   if (!vehicle) return null;
 

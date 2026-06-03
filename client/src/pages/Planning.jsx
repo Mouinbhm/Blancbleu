@@ -83,10 +83,11 @@ export default function Planning() {
   });
   const [jourSelectionne, setJourSelectionne] = useState(null);
 
-  const { data: planningData, isFetching: loading } = usePlanningMensuel(
-    moisActuel.getFullYear(),
-    moisActuel.getMonth(),
-  );
+  const {
+    data: planningData,
+    isFetching: loading,
+    isError,
+  } = usePlanningMensuel(moisActuel.getFullYear(), moisActuel.getMonth());
   const transports = useMemo(() => {
     const data = planningData;
     return Array.isArray(data) ? data : data?.transports || data?.data || [];
@@ -238,6 +239,30 @@ export default function Planning() {
           </button>
         </div>
       </div>
+
+      {/* ── Bannière d'erreur réseau ────────────────────────────────────── */}
+      {isError && (
+        <div
+          style={{
+            background: "#FEF2F2",
+            border: "1px solid #FECACA",
+            color: "#B91C1C",
+            borderRadius: 10,
+            padding: "10px 14px",
+            marginBottom: 16,
+            fontSize: 13,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexShrink: 0,
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+            error
+          </span>
+          Impossible de charger le planning du mois — vérifiez votre connexion.
+        </div>
+      )}
 
       {/* ── GRILLE ──────────────────────────────────────────────────────── */}
       <div

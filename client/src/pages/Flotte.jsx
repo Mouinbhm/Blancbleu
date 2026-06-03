@@ -846,7 +846,7 @@ export default function Flotte() {
   const [vehiculeSelectionne, setVehiculeSelectionne] = useState(null);
   const [initialTab, setInitialTab] = useState("info");
 
-  const { data: vehiclesData, isLoading: loading } = useVehicles();
+  const { data: vehiclesData, isLoading: loading, isError } = useVehicles();
   const vehicles = vehiclesData || [];
 
   // Équipements & maintenances : agrégés en stats par véhicule (badges des
@@ -1020,6 +1020,19 @@ export default function Flotte() {
       {/* Grille véhicules */}
       {loading ? (
         <Spinner />
+      ) : isError ? (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-16 text-center">
+          <span className="material-symbols-outlined text-red-400" style={{ fontSize: 56 }}>
+            error_outline
+          </span>
+          <p className="text-red-700 text-sm mt-3">Impossible de charger la flotte.</p>
+          <button
+            onClick={refresh}
+            className="mt-3 text-primary font-semibold text-sm hover:underline"
+          >
+            Réessayer
+          </button>
+        </div>
       ) : vehiclesFiltres.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
           <span className="material-symbols-outlined text-slate-300" style={{ fontSize: 56 }}>
