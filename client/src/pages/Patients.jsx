@@ -1,8 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import StatutBadge from "../components/transport/StatutBadge";
 import { patientService } from "../services/api";
-import { getOrCreateSocket } from "../services/socketService";
+import {
+  usePatients,
+  usePatient,
+  usePatientStats,
+  patientKeys,
+} from "../hooks/queries/usePatients";
 import { PatientRowSkeleton, Skeleton, SkeletonList } from "../components/ui/Skeleton";
 
 const MOBILITE_LABEL = {
@@ -208,54 +214,33 @@ function ModalNouveauPatient({ onClose, onSuccess }) {
 // ── Composant principal ────────────────────────────────────────────────────────
 export default function Patients() {
   const navigate = useNavigate();
-  const [patients, setPatients] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [erreur, setErreur] = useState(null);
+  const qc = useQueryClient();
   const [recherche, setRecherche] = useState("");
+  const [debouncedRecherche, setDebouncedRecherche] = useState("");
   const [patientSelectionne, setPatientSelectionne] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setErreur(null);
-    try {
-      const [patientsRes, statsRes] = await Promise.all([
-        patientService.getAll({ limit: 200, recherche: recherche || undefined }),
-        patientService.getStats(),
-      ]);
-      setPatients(patientsRes.data?.patients || []);
-      setStats(statsRes.data);
-    } catch {
-      setErreur("Impossible de charger les patients.");
-    } finally {
-      setLoading(false);
-    }
+  // Debounce 300ms de la recherche avant de déclencher la query.
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedRecherche(recherche), 300);
+    return () => clearTimeout(timer);
   }, [recherche]);
 
-  useEffect(() => {
-    const timer = setTimeout(loadData, 300); // debounce recherche
-    return () => clearTimeout(timer);
-  }, [loadData]);
+  const {
+    data: patientsData,
+    isLoading: loading,
+    isError,
+  } = usePatients({ limit: 200, recherche: debouncedRecherche || undefined });
+  const patients = patientsData?.patients || [];
+  const { data: stats } = usePatientStats();
+  const erreur = isError ? "Impossible de charger les patients." : null;
 
-  // Mise à jour temps réel : nouveau patient créé via l'app mobile
-  useEffect(() => {
-    const socket = getOrCreateSocket();
-    if (!socket) return;
-    const handler = (data) => {
-      setPatients((prev) => {
-        if (prev.some((p) => p._id === data._id)) return prev;
-        return [data, ...prev];
-      });
-      setStats((s) => (s ? { ...s, total: s.total + 1, actifs: s.actifs + 1 } : s));
-    };
-    socket.on("patient:created", handler);
-    return () => socket.off("patient:created", handler);
-  }, []);
+  // La maj temps réel (patient:created via l'app mobile) est centralisée dans
+  // useSocketSync (invalidation de patientKeys) — pas d'abonnement local ici.
 
   const handlePatientCreated = (newPatient) => {
     setShowModal(false);
-    setPatients((prev) => [newPatient, ...prev]);
+    qc.invalidateQueries({ queryKey: patientKeys.all });
     setPatientSelectionne(newPatient);
   };
 
@@ -417,11 +402,7 @@ export default function Patients() {
                 </p>
               </div>
             ) : (
-              <PatientDetail
-                patient={patientSelectionne}
-                onNavigate={navigate}
-                onEdit={() => loadData()}
-              />
+              <PatientDetail patient={patientSelectionne} onNavigate={navigate} />
             )}
           </div>
         </div>
@@ -431,18 +412,8 @@ export default function Patients() {
 }
 
 // ── Fiche détail patient ───────────────────────────────────────────────────────
-function PatientDetail({ patient, onNavigate, onEdit }) {
-  const [detail, setDetail] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(true);
-    patientService
-      .getOne(patient._id)
-      .then(({ data }) => setDetail(data))
-      .catch(() => setDetail(null))
-      .finally(() => setLoading(false));
-  }, [patient._id]);
+function PatientDetail({ patient, onNavigate }) {
+  const { data: detail, isLoading: loading } = usePatient(patient._id);
 
   if (loading)
     return (
