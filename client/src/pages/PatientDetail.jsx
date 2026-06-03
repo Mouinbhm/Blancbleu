@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { patientService } from "../services/api";
+import { usePatientFullProfile, patientKeys } from "../hooks/queries/usePatients";
 import StatutBadge from "../components/transport/StatutBadge";
 import ModalNouvellePrescription from "../components/prescription/ModalPrescription";
 import {
@@ -821,9 +823,7 @@ function TabAudit({ patientId }) {
 export default function PatientDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [erreur, setErreur] = useState("");
+  const qc = useQueryClient();
   const [tab, setTab] = useState("info");
   const [toast, setToast] = useState(null);
 
@@ -832,22 +832,13 @@ export default function PatientDetail() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setErreur("");
-    try {
-      const { data: res } = await patientService.getFullProfile(id);
-      setData(res);
-    } catch (err) {
-      setErreur(err.response?.data?.message || "Erreur lors du chargement du dossier patient");
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  const { data, isLoading: loading, error } = usePatientFullProfile(id);
+  const erreur = error
+    ? error.response?.data?.message || "Erreur lors du chargement du dossier patient"
+    : "";
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // onRefresh des onglets (consentement, RGPD, nouvelle prescription) → refetch.
+  const load = () => qc.invalidateQueries({ queryKey: patientKeys.fullProfile(id) });
 
   if (loading)
     return (
