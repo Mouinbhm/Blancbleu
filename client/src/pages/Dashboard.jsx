@@ -1,6 +1,7 @@
 // Fichier : client/src/pages/Dashboard.jsx
-import { useState, useEffect, useCallback, lazy, Suspense } from "react";
+import { lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import KpiCard from "../components/ui/KpiCard";
 import {
   TransportCardSkeleton,
@@ -8,9 +9,17 @@ import {
   SkeletonList,
 } from "../components/ui/Skeleton";
 import TransportCard from "../components/transport/TransportCard";
-import { analyticsService, vehicleService, transportService, shiftService } from "../services/api";
-import useSocket from "../hooks/useSocket";
+import { shiftService } from "../services/api";
+import {
+  useAnalyticsDashboard,
+  usePredictionFlotte,
+  analyticsKeys,
+} from "../hooks/queries/useAnalytics";
+import { useVehicles, vehicleKeys } from "../hooks/queries/useVehicles";
+import { useTransports, transportKeys } from "../hooks/queries/useTransports";
 import DemoControls from "../components/ui/DemoControls";
+
+const ACTIVE_STATUTS = ["EN_ROUTE_TO_PICKUP", "ARRIVED_AT_PICKUP", "PATIENT_ON_BOARD", "ASSIGNED"];
 
 const HeatmapFlotte = lazy(() => import("../components/dashboard/HeatmapFlotte"));
 const AlertesFlotte = lazy(() => import("../components/dashboard/AlertesFlotte"));
@@ -33,86 +42,50 @@ const Spinner = () => (
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [kpis, setKpis] = useState(null);
-  const [transportsActifs, setTransportsActifs] = useState([]);
-  const [vehicles, setVehicles] = useState([]);
-  const [activeShifts, setActiveShifts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [erreur, setErreur] = useState(null);
-  const [prediction, setPrediction] = useState(null);
+  const qc = useQueryClient();
 
-  const { connected, subscribe } = useSocket();
+  // Refresh 60s (ex-setInterval loadData) sur chaque source ; prédiction 5 min.
+  const {
+    data: kpis,
+    isLoading: kpisLoading,
+    isError,
+  } = useAnalyticsDashboard({
+    refetchInterval: 60_000,
+  });
+  const { data: vehiclesData, isLoading: vehLoading } = useVehicles(undefined, {
+    refetchInterval: 60_000,
+  });
+  const vehicles = Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [];
 
-  const loadData = useCallback(async () => {
-    try {
-      setErreur(null);
-      const [dashRes, vehiclesRes, transRes, shiftsRes] = await Promise.all([
-        analyticsService.dashboard().catch(() => ({ data: null })),
-        vehicleService.getAll().catch(() => ({ data: [] })),
-        transportService
-          .getAll({
-            statut: [
-              "EN_ROUTE_TO_PICKUP",
-              "ARRIVED_AT_PICKUP",
-              "PATIENT_ON_BOARD",
-              "ASSIGNED",
-            ].join(","),
-            limit: 10,
-          })
-          .catch(() => ({ data: { transports: [] } })),
-        shiftService.getToday().catch(() => ({ data: { shifts: [] } })),
-      ]);
+  const { data: transportsData, isLoading: transLoading } = useTransports(
+    { statut: ACTIVE_STATUTS.join(","), limit: 10 },
+    { refetchInterval: 60_000 },
+  );
+  const transportsActifs = Array.isArray(transportsData)
+    ? transportsData
+    : transportsData?.transports || transportsData?.data || [];
 
-      setKpis(dashRes.data);
-      setActiveShifts(shiftsRes.data?.shifts || []);
-      const vehData = vehiclesRes.data;
-      setVehicles(Array.isArray(vehData) ? vehData : vehData?.vehicles || []);
-      const tData = transRes.data;
-      setTransportsActifs(Array.isArray(tData) ? tData : tData?.transports || tData?.data || []);
-    } catch (err) {
-      setErreur("Impossible de charger les données du tableau de bord.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data: shiftsData, isLoading: shiftsLoading } = useQuery({
+    queryKey: ["shifts", "today"],
+    queryFn: () => shiftService.getToday().then((r) => r.data),
+    refetchInterval: 60_000,
+  });
+  const activeShifts = shiftsData?.shifts || [];
 
-  const loadPrediction = useCallback(async () => {
-    try {
-      const res = await analyticsService.predictionFlotte(7);
-      setPrediction(res.data);
-    } catch {
-      // Prédiction non critique — silence si indisponible (ex: rôle insuffisant)
-    }
-  }, []);
+  // Prédiction flotte 7 jours — moins volatile (5 min), non critique (rôle).
+  const { data: prediction } = usePredictionFlotte(7, { refetchInterval: 5 * 60_000 });
 
-  useEffect(() => {
-    loadData();
-    loadPrediction();
-  }, [loadData, loadPrediction]);
+  const loading = kpisLoading || vehLoading || transLoading || shiftsLoading;
+  const erreur = isError ? "Impossible de charger les données du tableau de bord." : null;
 
-  // Refresh général 60s
-  useEffect(() => {
-    const iv = setInterval(loadData, 60000);
-    return () => clearInterval(iv);
-  }, [loadData]);
-
-  // Refresh prédiction 5 min (données moins volatiles)
-  useEffect(() => {
-    const iv = setInterval(loadPrediction, 5 * 60 * 1000);
-    return () => clearInterval(iv);
-  }, [loadPrediction]);
-
-  // Temps réel : statut mis à jour (Sprint M2 — event unique transport:status)
-  useEffect(() => {
-    const u1 = subscribe("transport:status", () => loadData());
-    const u3 = subscribe("shift:started", () => loadData());
-    const u4 = subscribe("shift:ended", () => loadData());
-    return () => {
-      u1();
-      u3();
-      u4();
-    };
-  }, [subscribe, loadData]);
+  // La maj temps réel (transport:status, shift:started/ended) est centralisée
+  // dans useSocketSync ; pour les actions locales on invalide les mêmes clés.
+  const refreshAll = () => {
+    qc.invalidateQueries({ queryKey: analyticsKeys.all });
+    qc.invalidateQueries({ queryKey: vehicleKeys.all });
+    qc.invalidateQueries({ queryKey: transportKeys.all });
+    qc.invalidateQueries({ queryKey: ["shifts"] });
+  };
 
   const disponibles = vehicles.filter((v) => v.statut === "Disponible").length;
   const enMission = vehicles.filter((v) => v.statut === "En service").length;
@@ -136,12 +109,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <DemoControls
-            onSuccess={() => {
-              loadData();
-              loadPrediction();
-            }}
-          />
+          <DemoControls onSuccess={refreshAll} />
           <button
             onClick={() => navigate("/transports/new")}
             className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-md shadow-primary/20"
@@ -334,7 +302,7 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-3">
               {transportsActifs.map((t) => (
-                <TransportCard key={t._id} transport={t} onRefresh={loadData} />
+                <TransportCard key={t._id} transport={t} onRefresh={refreshAll} />
               ))}
             </div>
           )}

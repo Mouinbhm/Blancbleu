@@ -2,49 +2,50 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { transportService } from "../../services/api";
 
 export const transportKeys = {
-  all:      ["transports"],
-  list:     (filters) => ["transports", "list", filters || {}],
-  detail:   (id)      => ["transports", "detail", id],
-  timeline: (id)      => ["transports", "timeline", id],
-  pmt:      (id)      => ["transports", "pmt", id],
-  stats:    ()        => ["transports", "stats"],
+  all: ["transports"],
+  list: (filters) => ["transports", "list", filters || {}],
+  detail: (id) => ["transports", "detail", id],
+  timeline: (id) => ["transports", "timeline", id],
+  pmt: (id) => ["transports", "pmt", id],
+  stats: () => ["transports", "stats"],
 };
 
-export function useTransports(filters) {
+export function useTransports(filters, options = {}) {
   return useQuery({
     queryKey: transportKeys.list(filters),
     queryFn: () => transportService.getAll(filters).then((r) => r.data),
+    ...options,
   });
 }
 
 export function useTransport(id) {
   return useQuery({
     queryKey: transportKeys.detail(id),
-    queryFn:  () => transportService.getOne(id).then((r) => r.data),
-    enabled:  !!id,
+    queryFn: () => transportService.getOne(id).then((r) => r.data),
+    enabled: !!id,
   });
 }
 
 export function useTransportTimeline(id) {
   return useQuery({
     queryKey: transportKeys.timeline(id),
-    queryFn:  () => transportService.getTimeline(id).then((r) => r.data),
-    enabled:  !!id,
+    queryFn: () => transportService.getTimeline(id).then((r) => r.data),
+    enabled: !!id,
   });
 }
 
 export function useTransportPmt(id) {
   return useQuery({
     queryKey: transportKeys.pmt(id),
-    queryFn:  () => transportService.getPmt(id).then((r) => r.data),
-    enabled:  !!id,
+    queryFn: () => transportService.getPmt(id).then((r) => r.data),
+    enabled: !!id,
   });
 }
 
 export function useTransportStats() {
   return useQuery({
     queryKey: transportKeys.stats(),
-    queryFn:  () => transportService.getStats().then((r) => r.data),
+    queryFn: () => transportService.getStats().then((r) => r.data),
   });
 }
 
