@@ -24,22 +24,6 @@ const ACTIVE_STATUTS = ["EN_ROUTE_TO_PICKUP", "ARRIVED_AT_PICKUP", "PATIENT_ON_B
 const HeatmapFlotte = lazy(() => import("../components/dashboard/HeatmapFlotte"));
 const AlertesFlotte = lazy(() => import("../components/dashboard/AlertesFlotte"));
 
-const Spinner = () => (
-  <div className="flex items-center justify-center py-12 text-slate-400 gap-3">
-    <div
-      style={{
-        width: 20,
-        height: 20,
-        border: "2px solid #e2e8f0",
-        borderTop: "2px solid #1D6EF5",
-        borderRadius: "50%",
-        animation: "spin .7s linear infinite",
-      }}
-    />
-    Chargement…
-  </div>
-);
-
 export default function Dashboard() {
   const navigate = useNavigate();
   const qc = useQueryClient();

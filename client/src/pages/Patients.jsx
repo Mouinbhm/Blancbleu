@@ -30,22 +30,6 @@ const fmtDate = (d) =>
     ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
     : "—";
 
-const Spinner = () => (
-  <div className="flex items-center justify-center py-16 text-slate-400 gap-3">
-    <div
-      style={{
-        width: 20,
-        height: 20,
-        border: "2px solid #e2e8f0",
-        borderTop: "2px solid #1D6EF5",
-        borderRadius: "50%",
-        animation: "spin .7s linear infinite",
-      }}
-    />
-    Chargement…
-  </div>
-);
-
 // ── Modale de création rapide patient ─────────────────────────────────────────
 function ModalNouveauPatient({ onClose, onSuccess }) {
   const [form, setForm] = useState({
