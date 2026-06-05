@@ -4,7 +4,7 @@
 ///   - models     (typed freezed)
 ///   - errors     (sealed BbException)
 ///   - events     (socket event constants — mirror of server/sockets/events.js)
-///   - network    (DioClient, TokenManager, SocketManagerBase, errorMapper)
+///   - network    (DioClient, TokenManager, errorMapper)
 ///   - storage    (SecureStorageWrapper)
 ///   - push       (PushService — Firebase Cloud Messaging, M4)
 ///
@@ -56,7 +56,6 @@ export 'src/storage/secure_storage_wrapper.dart';
 export 'src/network/token_manager.dart';
 export 'src/network/error_mapper.dart';
 export 'src/network/dio_client.dart';
-export 'src/network/socket_manager_base.dart';
 export 'src/network/ssl_pinning.dart';
 
 // permissions — rationale dialogs (Sprint M6)
