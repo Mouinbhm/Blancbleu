@@ -28,8 +28,7 @@
       "./jest.setup.js"
     ],
     "testPathIgnorePatterns": [
-      "/node_modules/",
-      "/_deprecated/"
+      "/node_modules/"
     ],
     "coverageDirectory": "coverage",
     "collectCoverageFrom": [
