@@ -1,16 +1,16 @@
 /**
  * One-shot fix: link TRS-20260506-0001 to the active shift
  * whose vehicle matches the transport's assigned vehicle.
- * Run: node server/fix-transport.js
+ * Run: node server/scripts/fix-transport.js
  */
 const mongoose = require("mongoose");
-const path     = require("path");
-require("dotenv").config({ path: path.join(__dirname, ".env") });
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "../.env") });
 
-const Transport  = require("./models/Transport");
-const DriverShift = require("./models/DriverShift");
-require("./models/Personnel");
-require("./models/Vehicle");
+const Transport = require("../models/Transport");
+const DriverShift = require("../models/DriverShift");
+require("../models/Personnel");
+require("../models/Vehicle");
 
 async function main() {
   await mongoose.connect(process.env.MONGO_URI);
@@ -36,7 +36,9 @@ async function main() {
   const shift = await DriverShift.findOne({
     vehicleId: transport.vehicule,
     status: "ACTIVE",
-  }).populate("personnelId", "prenom nom").populate("vehicleId", "immatriculation");
+  })
+    .populate("personnelId", "prenom nom")
+    .populate("vehicleId", "immatriculation");
 
   if (!shift) {
     console.log("❌ Aucun shift ACTIVE trouvé pour ce véhicule.");
@@ -47,7 +49,9 @@ async function main() {
       .sort({ startTime: -1 })
       .limit(10);
     all.forEach((s) =>
-      console.log(`  [${s.status}] ${s.vehicleId?.immatriculation ?? s.vehicleId} — ${s.personnelId?.prenom} ${s.personnelId?.nom} — ${s._id}`)
+      console.log(
+        `  [${s.status}] ${s.vehicleId?.immatriculation ?? s.vehicleId} — ${s.personnelId?.prenom} ${s.personnelId?.nom} — ${s._id}`,
+      ),
     );
     process.exit(1);
   }
@@ -56,7 +60,7 @@ async function main() {
   console.log(`  Chauffeur : ${shift.personnelId?.prenom} ${shift.personnelId?.nom}`);
   console.log(`  Véhicule  : ${shift.vehicleId?.immatriculation}`);
 
-  transport.shiftId   = shift._id;
+  transport.shiftId = shift._id;
   transport.chauffeur = shift.personnelId._id ?? shift.personnelId;
   await transport.save();
 

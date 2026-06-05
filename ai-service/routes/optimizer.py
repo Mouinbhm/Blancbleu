@@ -12,9 +12,8 @@ Endpoints :
 
 import json
 import logging
-import os
 from datetime import datetime, timezone
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from schemas.optimizer_schemas import TransportInput, OptimisationInput
 
@@ -22,14 +21,8 @@ router = APIRouter()
 logger = logging.getLogger("blancbleu.ai.optimizer.route")
 
 
-def _service_token_guard(x_service_token: str | None) -> None:
-    """Garde service-to-service. Rejette si AI_SERVICE_TOKEN n'est pas fourni
-    OU ne matche pas celui configuré côté Python."""
-    expected = os.getenv("AI_SERVICE_TOKEN")
-    if not expected:
-        raise HTTPException(status_code=503, detail="AI_SERVICE_TOKEN non configuré côté IA")
-    if not x_service_token or x_service_token != expected:
-        raise HTTPException(status_code=401, detail="Service token invalide ou manquant")
+# Garde service-to-service : appliquée globalement au router via la dépendance
+# require_service_token dans main.py (plus de contrôle manuel par handler).
 
 
 def _train_status_default() -> dict:
@@ -195,10 +188,7 @@ async def trigger_retrain(
     request: Request,
     background_tasks: BackgroundTasks,
     since: str | None = None,
-    x_service_token: str | None = Header(default=None, alias="X-Service-Token"),
 ):
-    _service_token_guard(x_service_token)
-
     status = getattr(request.app.state, "train_status", _train_status_default())
     if status.get("status") == "running":
         return {"status": "already_running", "started_at": status.get("started_at")}
@@ -218,11 +208,7 @@ async def trigger_retrain(
     "/model/status",
     summary="État du dernier réentraînement + metrics courantes",
 )
-async def model_status(
-    request: Request,
-    x_service_token: str | None = Header(default=None, alias="X-Service-Token"),
-):
-    _service_token_guard(x_service_token)
+async def model_status(request: Request):
     status = getattr(request.app.state, "train_status", _train_status_default())
 
     # Charge les metrics disque (peuvent venir d'un retrain précédent au redémarrage)

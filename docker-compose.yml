@@ -198,7 +198,10 @@ services:
       NODE_API_URL: http://server:5000
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?AI_SERVICE_TOKEN must be set in .env}
     ports:
-      - "5002:5002"
+      # Bind localhost uniquement (cohérent avec mongo/redis) : le service IA
+      # n'est joignable que depuis l'hôte. Les comms internes server↔ia passent
+      # par le réseau Docker (http://ia:5002), pas par ce port publié.
+      - "127.0.0.1:5002:5002"
     # Port 5002 aligné avec uvicorn dans ai-service/main.py
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5002/health"]

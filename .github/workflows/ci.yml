@@ -173,6 +173,8 @@ jobs:
 
       - name: Run IA tests
         working-directory: ai-service
+        env:
+          AI_SERVICE_TOKEN: ci-test-token
         run: pytest tests/test_ia.py -v --tb=short
 
   # ──────────────────────────────────────────────────────────────────────────

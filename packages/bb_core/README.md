@@ -17,7 +17,7 @@ lib/
 ├── bb_core.dart          # barrel export
 └── src/
     ├── models/           # freezed typed models (Transport, Vehicle, ...)
-    ├── network/          # DioClient, TokenManager, SocketManagerBase
+    ├── network/          # DioClient, TokenManager
     ├── storage/          # SecureStorageWrapper
     ├── errors/           # sealed BbException + sub-types
     └── events/           # socket event constants (mirror of server/sockets/events.js)

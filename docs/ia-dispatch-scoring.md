@@ -13,7 +13,6 @@ Le module de dispatch IA assiste le dispatcher dans le choix du véhicule et du 
 ```
 Node.js (aiController.js)
   │
-  ├── aiDispatchService.js   ← enrichissement candidats (planning, ponctualité)
   ├── planningLoadService.js ← charge planning par conducteur / véhicule
   ├── driverPerformanceService.js ← historique ponctualité 90 jours
   │
@@ -28,15 +27,15 @@ Le microservice Python reçoit la liste des candidats enrichis et calcule le sco
 
 ## Critères de scoring
 
-| # | Critère | Poids | Description |
-|---|---------|-------|-------------|
-| 1 | `distance` | **25 %** | Distance GPS entre la position du véhicule et l'adresse de départ (formule Haversine). Pénalité progressive au-delà de 5 km. |
-| 2 | `driverAvailability` | **20 %** | Disponibilité du chauffeur : statut, planning du jour, absence de chevauchement. |
-| 3 | `vehicleTypeMatch` | **20 %** | Compatibilité entre le type de véhicule (VSL / TPMR / Ambulance) et la mobilité du patient. Un score de 0 exclut automatiquement le candidat. |
-| 4 | `planningLoad` | **15 %** | Charge de la journée — nombre de missions et chevauchements détectés. Favorise les véhicules moins chargés. |
-| 5 | `traffic` | **10 %** | Pénalité aux heures de pointe (7-9h et 17-19h) — estimation heuristique. |
-| 6 | `medicalPriority` | **5 %** | Urgence médicale du transport (URGENCE > URGENT > NORMAL). Favorise les ressources disponibles pour les cas critiques. |
-| 7 | `punctualityHistory` | **5 %** | Taux de ponctualité du chauffeur sur les 90 derniers jours (≥90 % → 100 pts, ≥75 % → 80, ≥55 % → 60, ≥40 % → 40, sinon 20). |
+| #   | Critère              | Poids    | Description                                                                                                                                   |
+| --- | -------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `distance`           | **25 %** | Distance GPS entre la position du véhicule et l'adresse de départ (formule Haversine). Pénalité progressive au-delà de 5 km.                  |
+| 2   | `driverAvailability` | **20 %** | Disponibilité du chauffeur : statut, planning du jour, absence de chevauchement.                                                              |
+| 3   | `vehicleTypeMatch`   | **20 %** | Compatibilité entre le type de véhicule (VSL / TPMR / Ambulance) et la mobilité du patient. Un score de 0 exclut automatiquement le candidat. |
+| 4   | `planningLoad`       | **15 %** | Charge de la journée — nombre de missions et chevauchements détectés. Favorise les véhicules moins chargés.                                   |
+| 5   | `traffic`            | **10 %** | Pénalité aux heures de pointe (7-9h et 17-19h) — estimation heuristique.                                                                      |
+| 6   | `medicalPriority`    | **5 %**  | Urgence médicale du transport (URGENCE > URGENT > NORMAL). Favorise les ressources disponibles pour les cas critiques.                        |
+| 7   | `punctualityHistory` | **5 %**  | Taux de ponctualité du chauffeur sur les 90 derniers jours (≥90 % → 100 pts, ≥75 % → 80, ≥55 % → 60, ≥40 % → 40, sinon 20).                   |
 
 ---
 
@@ -63,7 +62,7 @@ Chaque score partiel est dans [0, 100]. Le score global est arrondi à l'entier 
 ## Matrice de compatibilité véhicule / mobilité patient
 
 | Mobilité patient | VSL | TPMR | Ambulance |
-|------------------|-----|------|-----------|
+| ---------------- | --- | ---- | --------- |
 | Assis            | 100 | 85   | 60        |
 | Fauteuil roulant | 0   | 100  | 50        |
 | Allongé          | 0   | 0    | 100       |
@@ -130,6 +129,7 @@ Toutes les actions sont tracées dans l'`AuditLog` (actions `AI_DISPATCH_*`).
 ## Fallback si le microservice IA est indisponible
 
 Si le service Python (port 5002) est inaccessible, Node.js bascule sur un fallback simple :
+
 - Les véhicules compatibles avec la mobilité du patient sont filtrés.
 - Ils sont triés par proximité GPS si les coordonnées sont disponibles, sinon par ordre alphabétique.
 - La réponse indique `"fallbackUsed": true` et `"source": "fallback_node"`.
@@ -160,30 +160,33 @@ Si le service Python (port 5002) est inaccessible, Node.js bascule sur un fallba
 ## Fichiers concernés
 
 ### Backend Node.js
-| Fichier | Rôle |
-|---------|------|
-| `server/controllers/aiController.js` | Orchestration, sauvegarde `aiDispatch`, audit |
-| `server/services/aiClient.js` | Appel HTTP au microservice Python |
-| `server/services/planningLoadService.js` | Calcul charge planning par conducteur/véhicule |
-| `server/services/driverPerformanceService.js` | Score ponctualité chauffeur (90 jours) |
-| `server/models/Transport.js` | Sous-document `aiDispatch` |
-| `server/models/AuditLog.js` | Actions `AI_DISPATCH_*` |
-| `server/routes/ai.js` | Routes `/api/ai/dispatch/*` |
-| `server/routes/transports.js` | Routes `/:id/ai-recommendation/accept|reject` |
+
+| Fichier                                       | Rôle                                           |
+| --------------------------------------------- | ---------------------------------------------- | ------- |
+| `server/controllers/aiController.js`          | Orchestration, sauvegarde `aiDispatch`, audit  |
+| `server/services/aiClient.js`                 | Appel HTTP au microservice Python              |
+| `server/services/planningLoadService.js`      | Calcul charge planning par conducteur/véhicule |
+| `server/services/driverPerformanceService.js` | Score ponctualité chauffeur (90 jours)         |
+| `server/models/Transport.js`                  | Sous-document `aiDispatch`                     |
+| `server/models/AuditLog.js`                   | Actions `AI_DISPATCH_*`                        |
+| `server/routes/ai.js`                         | Routes `/api/ai/dispatch/*`                    |
+| `server/routes/transports.js`                 | Routes `/:id/ai-recommendation/accept          | reject` |
 
 ### Microservice Python (port 5002)
-| Fichier | Rôle |
-|---------|------|
+
+| Fichier                                  | Rôle                                |
+| ---------------------------------------- | ----------------------------------- |
 | `ai-service/services/dispatch_scorer.py` | Scoring multi-critères (7 critères) |
-| `ai-service/schemas/dispatch_schemas.py` | Schémas Pydantic requête/réponse |
+| `ai-service/schemas/dispatch_schemas.py` | Schémas Pydantic requête/réponse    |
 
 ### Frontend React
-| Fichier | Rôle |
-|---------|------|
-| `client/src/pages/TransportDetail.jsx` | Composant `SectionDispatchIA` (score, explications, accept/reject) |
-| `client/src/pages/NouveauTransport.jsx` | Option "Lancer recommandation IA après création" |
-| `client/src/pages/AideIA.jsx` | Onglet dispatch : `SectionPedagogique` (7 critères, formule, matrice) |
-| `client/src/services/api.js` | `aiService.recommanderDispatch`, `accepterRecommandation`, `refuserRecommandation` |
+
+| Fichier                                 | Rôle                                                                               |
+| --------------------------------------- | ---------------------------------------------------------------------------------- |
+| `client/src/pages/TransportDetail.jsx`  | Composant `SectionDispatchIA` (score, explications, accept/reject)                 |
+| `client/src/pages/NouveauTransport.jsx` | Option "Lancer recommandation IA après création"                                   |
+| `client/src/pages/AideIA.jsx`           | Onglet dispatch : `SectionPedagogique` (7 critères, formule, matrice)              |
+| `client/src/services/api.js`            | `aiService.recommanderDispatch`, `accepterRecommandation`, `refuserRecommandation` |
 
 ---
 
@@ -230,4 +233,3 @@ Règle métier : `sum(weights) == 1.0` (± 1e-3). Toute mise à jour est audité
 Le scorer Python lit `request.weights` quand le payload en contient ; sinon
 il retombe sur `DEFAULT_SCORING_WEIGHTS`. Le logger indique la source à
 chaque appel.
-
