@@ -1,10 +1,10 @@
+import 'package:bb_core/bb_core.dart' show AuthException;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../config/theme.dart';
 import '../services/api_service.dart';
 import 'factures_screen.dart';
-import 'login_screen.dart';
 import 'nouveau_transport_screen.dart';
 import 'prescriptions_screen.dart';
 import 'profile_screen.dart';
@@ -37,16 +37,13 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() { _isLoading = true; _error = null; });
       final data = await ApiService.getDashboard();
       if (mounted) setState(() { _dashboard = data; _isLoading = false; });
+    } on AuthException {
+      // Session expirée : clearSession + navigation Login gérés centralement
+      // par DioClient.onAuthFailed.
+      return;
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().replaceFirst('Exception: ', '');
-      if (msg == 'SESSION_EXPIRED') {
-        await ApiService.clearSession();
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (_) => const LoginScreen()));
-        return;
-      }
       setState(() { _error = msg; _isLoading = false; });
     }
   }
