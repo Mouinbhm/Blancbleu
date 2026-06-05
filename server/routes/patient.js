@@ -15,6 +15,7 @@ const Prescription = require("../models/Prescription");
 const RevokedToken = require("../models/RevokedToken");
 const mobileTokenService = require("../services/mobileTokenService");
 const logger = require("../utils/logger");
+const { userCanAccessTransport } = require("../utils/transportAccess");
 const {
   emitPatientCreated,
   emitTransportCreated,
@@ -552,14 +553,9 @@ router.get("/transports/:id", authPatient, async (req, res) => {
       return res.status(404).json({ message: "Transport introuvable" });
     }
 
-    // Vérification IDOR : le transport doit appartenir au patient connecté
-    const p = transport.patient;
-    const owned =
-      (req.user.email && p?.email === req.user.email) ||
-      (req.user.telephone?.trim() && p?.telephone === req.user.telephone) ||
-      (p?.nom === req.user.nom && p?.prenom === req.user.prenom);
-
-    if (!owned) {
+    // Vérification IDOR : appartenance basée sur des identifiants immuables/uniques
+    // (createdBy / chauffeur / patient.email) — jamais nom/prénom/téléphone.
+    if (!(await userCanAccessTransport(req.user, req.params.id))) {
       return res.status(403).json({ message: "Accès non autorisé" });
     }
 
@@ -580,6 +576,11 @@ router.get("/transports/:id/tracking", authPatient, async (req, res) => {
 
     if (!transport) {
       return res.status(404).json({ message: "Transport introuvable" });
+    }
+
+    // Vérification IDOR : même garde d'appartenance que GET /transports/:id.
+    if (!(await userCanAccessTransport(req.user, req.params.id))) {
+      return res.status(403).json({ message: "Accès non autorisé" });
     }
 
     // Calcul ETA par Haversine
@@ -883,9 +884,9 @@ router.post(
 // À exécuter une seule fois pour les comptes créés avant le syncPatientRecord.
 
 router.post("/sync-all", authPatient, async (req, res) => {
+  // Réservé au staff : opération de masse sur tous les comptes patients.
   if (!["admin", "superviseur"].includes(req.user?.role)) {
-    // Accepte aussi le premier appel depuis un patient connecté pour auto-sync
-    // (utile en dev — en prod, limiter à admin uniquement)
+    return res.status(403).json({ message: "Réservé aux administrateurs" });
   }
   try {
     const users = await User.find({ role: "patient", actif: true });
