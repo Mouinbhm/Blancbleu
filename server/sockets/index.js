@@ -11,6 +11,25 @@ const { initDriverSocket } = require("./driverSocket");
 const { initPatientSocket } = require("./patientSocket");
 const vehiclePositionStore = require("./vehiclePositionStore");
 const Notification = require("../models/Notification");
+const User = require("../models/User");
+const { userCanAccessTransport } = require("../utils/transportAccess");
+
+/**
+ * Résout role + email du demandeur derrière un socket.
+ * `socket.user` est le payload JWT brut : les tokens patient ne contiennent que
+ * { id, jti } (ni role ni email), alors que les tokens staff/personnel portent
+ * role/type. Pour le cas patient, on charge le minimum depuis User (email unique).
+ */
+async function resolveSocketUser(su) {
+  if (!su) return null;
+  // Staff/personnel : le token porte déjà role/type → pas de lookup nécessaire.
+  if (su.role || su.email || su.type === "personnel") {
+    return { id: su.id, role: su.role, email: su.email };
+  }
+  // Patient : token { id, jti } → résoudre role/email via User.
+  const u = await User.findById(su.id).select("role email").lean();
+  return u ? { id: su.id, role: u.role, email: u.email } : { id: su.id };
+}
 
 function initSockets(io) {
   // ── Attribution automatique des rooms à chaque connexion ────────────────────
@@ -60,7 +79,9 @@ function initSockets(io) {
         if (snapshot && Object.keys(snapshot).length > 0) {
           socket.emit("vehicle:positions_snapshot", snapshot);
         }
-      } catch { /* best-effort */ }
+      } catch {
+        /* best-effort */
+      }
     }
 
     // Envoyer le compteur de non-lus dès la connexion
@@ -75,11 +96,25 @@ function initSockets(io) {
       }
       const unreadCount = await Notification.countDocuments(query);
       socket.emit("notification:unread_count", { count: unreadCount });
-    } catch { /* non-bloquant */ }
+    } catch {
+      /* non-bloquant */
+    }
 
-    // Événement côté client pour rejoindre la room d'un transport précis
-    socket.on("join:transport", (transportId) => {
-      if (transportId) socket.join(`transport:${transportId}`);
+    // Événement côté client pour rejoindre la room d'un transport précis.
+    // Vérification IDOR : on ne rejoint la room (qui diffuse GPS, contact
+    // chauffeur, adresses) que si le demandeur a accès au transport.
+    socket.on("join:transport", async (transportId) => {
+      if (!transportId) return;
+      try {
+        const requester = await resolveSocketUser(socket.user);
+        if (await userCanAccessTransport(requester, transportId)) {
+          socket.join(`transport:${transportId}`);
+        } else {
+          socket.emit("error", { code: "FORBIDDEN_ROOM" });
+        }
+      } catch {
+        socket.emit("error", { code: "FORBIDDEN_ROOM" });
+      }
     });
     socket.on("leave:transport", (transportId) => {
       if (transportId) socket.leave(`transport:${transportId}`);
