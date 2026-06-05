@@ -6,7 +6,7 @@ module.exports = [
   {
     languageOptions: {
       ecmaVersion: 2023,
-      sourceType:  "commonjs",
+      sourceType: "commonjs",
       globals: {
         ...globals.node,
         ...globals.jest,
@@ -14,15 +14,15 @@ module.exports = [
     },
     rules: {
       "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
-      "no-console":     "error",
-      "prefer-const":   "error",
-      "eqeqeq":         ["error", "smart"],
+      "no-console": "error",
+      "prefer-const": "error",
+      eqeqeq: ["error", "smart"],
     },
   },
   {
     // CLI scripts one-shot — console.* autorisé (pas de logger Winston dans
     // un script run-and-exit, lancé manuellement).
-    files: ["scripts/**/*.js", "seed.js", "fix-transport.js"],
+    files: ["scripts/**/*.js", "seed.js"],
     rules: {
       "no-console": "off",
     },
