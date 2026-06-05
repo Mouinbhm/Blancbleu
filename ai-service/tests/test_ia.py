@@ -10,6 +10,7 @@ Couvre :
 Fonctionne en CI sans Tesseract, poppler, spaCy ni OR-Tools.
 """
 
+import os
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -56,7 +57,17 @@ from schemas.dispatch_schemas import (
 
 @pytest.fixture(scope="module")
 def client():
-    """TestClient FastAPI — exécute le lifespan (startup/shutdown)."""
+    """TestClient FastAPI — exécute le lifespan (startup/shutdown).
+    Envoie le token service-to-service par défaut sur toutes les requêtes pour
+    franchir le guard appliqué aux routers métier."""
+    with TestClient(app, raise_server_exceptions=False) as c:
+        c.headers.update({"X-Service-Token": os.environ["AI_SERVICE_TOKEN"]})
+        yield c
+
+
+@pytest.fixture(scope="module")
+def noauth_client():
+    """TestClient SANS token par défaut — pour les tests du guard d'auth."""
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
 
@@ -422,3 +433,53 @@ class TestDispatchEndpoint:
         justif = res.json()["recommandation"]["justification"]
         assert isinstance(justif, list)
         assert len(justif) > 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SUITE 5 — Garde service-to-service (X-Service-Token)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestServiceTokenGuard:
+    """Vérifie que les routes métier exigent le token et que /health, /ai/info
+    restent publics."""
+
+    def test_pmt_sans_header_401(self, noauth_client):
+        """(a) POST /pmt/extract sans header → 401."""
+        res = noauth_client.post("/pmt/extract")
+        assert res.status_code == 401
+
+    def test_pmt_mauvais_token_401(self, noauth_client):
+        """(b) Mauvais token → 401."""
+        res = noauth_client.post("/pmt/extract", headers={"X-Service-Token": "mauvais"})
+        assert res.status_code == 401
+
+    def test_pmt_bon_token_passe_le_guard(self, noauth_client):
+        """(c) Bon token → le guard passe ; 422 car aucun fichier fourni (≠ 401)."""
+        res = noauth_client.post(
+            "/pmt/extract", headers={"X-Service-Token": os.environ["AI_SERVICE_TOKEN"]}
+        )
+        assert res.status_code != 401
+        assert res.status_code in (200, 422)
+
+    def test_dispatch_sans_header_401(self, noauth_client):
+        """Le guard couvre aussi /dispatch."""
+        res = noauth_client.post("/dispatch/recommend", json={"transport": {}, "vehicules": []})
+        assert res.status_code == 401
+
+    def test_token_non_configure_503(self, noauth_client, monkeypatch):
+        """(d) AI_SERVICE_TOKEN non défini côté IA → 503."""
+        monkeypatch.delenv("AI_SERVICE_TOKEN", raising=False)
+        res = noauth_client.post(
+            "/dispatch/recommend", headers={"X-Service-Token": "peu-importe"}
+        )
+        assert res.status_code == 503
+
+    def test_health_public_sans_token(self, noauth_client):
+        """(e) GET /health reste public (sans token) → 200."""
+        res = noauth_client.get("/health")
+        assert res.status_code == 200
+
+    def test_ai_info_public_sans_token(self, noauth_client):
+        """(e) GET /ai/info reste public (sans token) → 200."""
+        res = noauth_client.get("/ai/info")
+        assert res.status_code == 200

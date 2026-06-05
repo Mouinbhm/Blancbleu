@@ -10,6 +10,7 @@ Fonctionne en CI avec les mêmes mocks que test_ia.py.
 Le modèle est entraîné une seule fois (scope="session") sur 300 échantillons.
 """
 
+import os
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -96,8 +97,10 @@ def optimizer(trained_predictor) -> RealtimeOptimizer:
 
 @pytest.fixture(scope="session")
 def optimizer_client(trained_predictor):
-    """TestClient avec le predictor entraîné injecté dans app.state."""
+    """TestClient avec le predictor entraîné injecté dans app.state.
+    Envoie le token service-to-service (routes /optimizer protégées par le guard)."""
     with TestClient(app, raise_server_exceptions=False) as c:
+        c.headers.update({"X-Service-Token": os.environ["AI_SERVICE_TOKEN"]})
         app.state.predictor = trained_predictor
         app.state.optimizer = RealtimeOptimizer(trained_predictor)
         yield c

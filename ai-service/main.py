@@ -14,7 +14,7 @@ Lancement :
   uvicorn main:app --host 0.0.0.0 --port 5002 --reload
 """
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import json
@@ -26,6 +26,7 @@ from routes.pmt       import router as pmt_router
 from routes.dispatch  import router as dispatch_router
 from routes.routing   import router as routing_router
 from routes.optimizer import router as optimizer_router
+from utils.auth import require_service_token
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -127,10 +128,13 @@ app.add_middleware(
 )
 
 # ─── Inclusion des routes ─────────────────────────────────────────────────────
-app.include_router(pmt_router,       prefix="/pmt",       tags=["PMT"])
-app.include_router(dispatch_router,  prefix="/dispatch",  tags=["Dispatch"])
-app.include_router(routing_router,   prefix="/routing",   tags=["Routing"])
-app.include_router(optimizer_router, prefix="/optimizer", tags=["Optimizer"])
+# Toutes les routes métier exigent le token service-to-service (X-Service-Token).
+# /health et /ai/info (déclarés au niveau app ci-dessous) restent PUBLICS.
+_secure = [Depends(require_service_token)]
+app.include_router(pmt_router,       prefix="/pmt",       tags=["PMT"],       dependencies=_secure)
+app.include_router(dispatch_router,  prefix="/dispatch",  tags=["Dispatch"],  dependencies=_secure)
+app.include_router(routing_router,   prefix="/routing",   tags=["Routing"],   dependencies=_secure)
+app.include_router(optimizer_router, prefix="/optimizer", tags=["Optimizer"], dependencies=_secure)
 
 
 # ─── Health check ─────────────────────────────────────────────────────────────

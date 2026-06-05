@@ -8,13 +8,10 @@
  *  - Le texte OCR brut n'est JAMAIS persisté (RGPD, données médicales)
  */
 const path = require("path");
-const axios = require("axios");
-const FormData = require("form-data");
-const fs = require("fs");
 const Prescription = require("../models/Prescription");
 const { audit } = require("./auditService");
+const aiClient = require("./aiClient");
 
-const AI_BASE = process.env.AI_SERVICE_URL || "http://localhost:5002";
 const UPLOAD_BASE = process.env.BASE_URL || "http://localhost:5000";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -41,9 +38,9 @@ async function uploadPmtDocument(prescriptionId, file, user) {
   const publicUrl = `${UPLOAD_BASE}/uploads/${relPath}`;
 
   prescription.document = {
-    fileUrl:    publicUrl,
-    fileName:   file.originalname || path.basename(file.path),
-    mimeType:   file.mimetype,
+    fileUrl: publicUrl,
+    fileName: file.originalname || path.basename(file.path),
+    mimeType: file.mimetype,
     uploadedAt: new Date(),
     uploadedBy: user._id,
   };
@@ -76,16 +73,9 @@ async function startOcrExtraction(prescriptionId, filePath, mimeType, user) {
   });
 
   try {
-    const form = new FormData();
-    form.append("pmt", fs.createReadStream(filePath), {
-      contentType: mimeType,
-      filename: path.basename(filePath),
-    });
-
-    const { data } = await axios.post(`${AI_BASE}/pmt/extract`, form, {
-      headers: form.getHeaders(),
-      timeout: 60_000,
-    });
+    // Délègue à aiClient (URL bien câblée via AI_API_URL + token service-to-service
+    // ajouté par l'intercepteur). Évite un second chemin HTTP divergent.
+    const data = await aiClient.extrairePMT(filePath, mimeType, path.basename(filePath));
 
     await saveOcrResult(prescriptionId, data, user);
   } catch (err) {
@@ -113,16 +103,16 @@ async function saveOcrResult(prescriptionId, aiResponse, user) {
   } = aiResponse;
 
   // Mise à jour champs OCR
-  prescription.ocr.statut          = "processed";
-  prescription.ocr.confiance        = confiance;
+  prescription.ocr.statut = "processed";
+  prescription.ocr.confiance = confiance;
   prescription.ocr.donneesExtraites = extraction;
   prescription.ocr.champsIncertains = champsIncertains;
-  prescription.ocr.traiteAt         = new Date();
+  prescription.ocr.traiteAt = new Date();
 
   // Rétrocompatibilité legacy
-  prescription.extractionIA         = extraction;
-  prescription.confiance            = confiance;
-  prescription.champsManquants      = champsManquants;
+  prescription.extractionIA = extraction;
+  prescription.confiance = confiance;
+  prescription.champsManquants = champsManquants;
 
   // Statut prescription : toujours en attente de validation humaine
   prescription.statut = "en_attente_validation";
@@ -164,9 +154,9 @@ async function correctExtractedFields(prescriptionId, donneesCorrigees, user, no
   const prescription = await Prescription.findOne({ _id: prescriptionId, deletedAt: null });
   if (!prescription) throw new Error("Prescription introuvable");
 
-  prescription.validation.statut          = "corrige";
+  prescription.validation.statut = "corrige";
   prescription.validation.donneesCorrigees = donneesCorrigees;
-  prescription.validation.notesCorrection  = notes;
+  prescription.validation.notesCorrection = notes;
 
   // Propager les corrections dans contenuExtrait
   prescription.contenuExtrait = donneesCorrigees;
@@ -184,31 +174,29 @@ async function validatePrescription(prescriptionId, user, contenuFinal = null) {
   if (!prescription) throw new Error("Prescription introuvable");
   if (prescription.validation.statut === "valide") throw new Error("Prescription déjà validée");
 
-  const donneesFin = contenuFinal
-    || prescription.validation.donneesCorrigees
-    || prescription.ocr.donneesExtraites
-    || prescription.extractionIA;
+  const donneesFin =
+    contenuFinal ||
+    prescription.validation.donneesCorrigees ||
+    prescription.ocr.donneesExtraites ||
+    prescription.extractionIA;
 
   // Champs legacy
-  prescription.validee   = true;
+  prescription.validee = true;
   prescription.validePar = user._id;
-  prescription.valideAt  = new Date();
-  prescription.statut    = "active";
+  prescription.valideAt = new Date();
+  prescription.statut = "active";
   if (donneesFin) prescription.contenuExtrait = donneesFin;
 
   // Workflow
-  prescription.validation.statut   = "valide";
+  prescription.validation.statut = "valide";
   prescription.validation.validePar = user._id;
-  prescription.validation.valideAt  = new Date();
+  prescription.validation.valideAt = new Date();
   if (donneesFin) prescription.validation.donneesCorrigees = donneesFin;
 
   _appendHistory(prescription, "VALIDATED", user, "Prescription validée par un humain");
   await prescription.save();
 
-  audit.pmtValidee(
-    { _id: prescriptionId, numero: prescription.numero },
-    _userCtx(user),
-  );
+  audit.pmtValidee({ _id: prescriptionId, numero: prescription.numero }, _userCtx(user));
 
   return prescription;
 }
@@ -219,11 +207,11 @@ async function rejectPrescription(prescriptionId, user, motif = "") {
   const prescription = await Prescription.findOne({ _id: prescriptionId, deletedAt: null });
   if (!prescription) throw new Error("Prescription introuvable");
 
-  prescription.validation.statut    = "rejete";
+  prescription.validation.statut = "rejete";
   prescription.validation.validePar = user._id;
-  prescription.validation.valideAt  = new Date();
+  prescription.validation.valideAt = new Date();
   prescription.validation.motifRejet = motif;
-  prescription.statut               = "incomplet";
+  prescription.statut = "incomplet";
   prescription.commentaireDispatcher = motif;
 
   _appendHistory(prescription, "REJECTED", user, motif);
@@ -274,7 +262,12 @@ async function getPendingValidation({ page = 1, limit = 20 } = {}) {
       .limit(parseInt(limit)),
     Prescription.countDocuments(filtre),
   ]);
-  return { prescriptions: items, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) };
+  return {
+    prescriptions: items,
+    total,
+    page: parseInt(page),
+    pages: Math.ceil(total / parseInt(limit)),
+  };
 }
 
 module.exports = {
