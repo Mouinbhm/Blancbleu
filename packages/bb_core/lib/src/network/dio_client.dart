@@ -28,6 +28,7 @@ class DioClient {
   final String _refreshPath;
   final Future<void> Function()? _onRefreshSuccess;
   final Future<void> Function()? _onAuthFailed;
+  final bool _forbiddenTriggersLogout;
 
   // Single-flight refresh : un seul appel /refresh à la fois, les autres
   // requêtes en 401 attendent ce Completer.
@@ -35,6 +36,15 @@ class DioClient {
 
   /// Marker dans RequestOptions.extra pour éviter de retry indéfiniment.
   static const String _retriedKey = '_bb_retried';
+
+  /// Permet à un appelant de désactiver le refresh/retry automatique pour UNE
+  /// requête : `options: Options(extra: {DioClient.skipRefreshExtra: true})`.
+  ///
+  /// Utile pour les requêtes non rejouables (ex. multipart `FormData`, qui est
+  /// un stream à usage unique : un retry après 401 planterait sur un corps déjà
+  /// finalisé). Sur 401, une telle requête est rejetée directement en
+  /// `AuthException` sans tentative de refresh ni `onAuthFailed`.
+  static const String skipRefreshExtra = _retriedKey;
 
   DioClient({
     required String baseUrl,
@@ -44,6 +54,11 @@ class DioClient {
     Duration receiveTimeout = const Duration(seconds: 30),
     Future<void> Function()? onRefreshSuccess,
     Future<void> Function()? onAuthFailed,
+    /// 403 = interdit. Par défaut (driver) un 403 déclenche `onAuthFailed`
+    /// (logout). Le patient passe `false` : un 403 remonte alors comme
+    /// `ForbiddenException` SANS logout (comportement historique = message
+    /// affiché à l'utilisateur).
+    bool forbiddenTriggersLogout = true,
     /// Sprint M5 — SSL public-key pinning (SPKI SHA-256 base64).
     /// Vide ou baseUrl non https → adapter par défaut (dev).
     /// Voir docs/mobile-security.md pour la procédure d'extraction.
@@ -51,7 +66,8 @@ class DioClient {
   })  : _tokens = tokens,
         _refreshPath = refreshPath,
         _onRefreshSuccess = onRefreshSuccess,
-        _onAuthFailed = onAuthFailed {
+        _onAuthFailed = onAuthFailed,
+        _forbiddenTriggersLogout = forbiddenTriggersLogout {
     dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: connectTimeout,
@@ -86,7 +102,7 @@ class DioClient {
 
         // 403 → vraiment interdit, pas une expiration.
         if (status == 403) {
-          await _onAuthFailed?.call();
+          if (_forbiddenTriggersLogout) await _onAuthFailed?.call();
           return handler.reject(err.copyWith(error: ForbiddenException(_msg(err))));
         }
 

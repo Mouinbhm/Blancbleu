@@ -1,8 +1,8 @@
+import 'package:bb_core/bb_core.dart' show AuthException;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../config/theme.dart';
 import '../services/api_service.dart';
-import 'login_screen.dart';
 import 'transport_detail_screen.dart';
 import 'tracking_screen.dart';
 import 'nouveau_transport_screen.dart';
@@ -41,19 +41,13 @@ class _TransportsScreenState extends State<TransportsScreen> {
       final t = await ApiService.getTransports();
       if (!mounted) return;
       setState(() { _transports = t; _loading = false; });
+    } on AuthException {
+      // Session expirée : clearSession + navigation Login gérés centralement
+      // par DioClient.onAuthFailed.
+      return;
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().replaceFirst('Exception: ', '');
-      if (msg == 'SESSION_EXPIRED') {
-        await ApiService.clearSession();
-        if (!mounted) return;
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-          (_) => false,
-        );
-        return;
-      }
       setState(() { _error = msg; _loading = false; });
     }
   }

@@ -1,11 +1,11 @@
 import 'dart:io';
+import 'package:bb_core/bb_core.dart' show AuthException;
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import '../config/theme.dart';
 import '../services/api_service.dart';
-import 'login_screen.dart';
 
 class FacturesScreen extends StatefulWidget {
   const FacturesScreen({super.key});
@@ -40,16 +40,13 @@ class _FacturesScreenState extends State<FacturesScreen> {
       final f = await ApiService.getFactures();
       if (!mounted) return;
       setState(() { _factures = f; _loading = false; });
+    } on AuthException {
+      // Session expirée : clearSession + navigation Login gérés centralement
+      // par DioClient.onAuthFailed.
+      return;
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().replaceFirst('Exception: ', '');
-      if (msg == 'SESSION_EXPIRED') {
-        await ApiService.clearSession();
-        if (!mounted) return;
-        Navigator.pushAndRemoveUntil(
-            context, MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
-        return;
-      }
       setState(() { _error = msg; _loading = false; });
     }
   }
