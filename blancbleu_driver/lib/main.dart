@@ -197,6 +197,9 @@ class _RootState extends State<_Root> {
     super.initState();
     // When the server returns 401/403, auto-logout and go back to login
     ApiClient.onUnauthorized = () {
+      // [DIAG TEMP] — trace du vrai déclencheur du bandeau "Session expirée".
+      debugPrint('[DIAG] onUnauthorized fired → bandeau "Session expirée"\n'
+          '${StackTrace.current}');
       if (!mounted) return;
       context.read<AuthCubit>().logout();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

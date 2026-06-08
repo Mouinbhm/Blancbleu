@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:bb_core/bb_core.dart';
 import '../utils/constants.dart';
@@ -55,6 +56,10 @@ class ApiClient {
   /// ou 403. Purge les 3 clés (le TokenManager ne connaît pas userKey) puis
   /// notifie l'app via onUnauthorized.
   Future<void> _forceLogout() async {
+    // [DIAG TEMP] — confirme si _forceLogout est réellement atteint et via quel
+    // chemin DioClient (403 / 401-refresh-échoué). silentMode indique l'auto-login.
+    debugPrint('[DIAG] _forceLogout() appelé (silentMode=$_silentMode)\n'
+        '${StackTrace.current}');
     if (_loggedOut) return;
     _loggedOut = true;
     await _tokens.clear(); // tokenKey + refreshKey
