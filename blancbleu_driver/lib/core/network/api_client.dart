@@ -33,12 +33,23 @@ class ApiClient {
 
   bool _loggedOut = false; // prevent multiple logout calls in rapid succession
 
+  // Auto-login silencieux : pendant tryAutoLogin, un token stocké rejeté ne
+  // doit PAS afficher le bandeau "Session expirée" — on retombe simplement
+  // sur l'écran de login. Distingue "expiré au démarrage" de "expiré en cours
+  // d'utilisation".
+  bool _silentMode = false;
+
   ApiClient._();
 
   static ApiClient get instance => _instance ??= ApiClient._();
 
   /// Call after a successful login so the 401-guard is reset for the new session.
   void resetSession() => _loggedOut = false;
+
+  /// Encadre `AuthCubit.tryAutoLogin`. En mode silencieux, `_forceLogout` vide
+  /// le storage SANS déclencher `onUnauthorized` (pas de bandeau rouge).
+  void beginSilentSession() => _silentMode = true;
+  void endSilentSession()   => _silentMode = false;
 
   /// Logout idempotent appelé par DioClient (onAuthFailed) sur échec de refresh
   /// ou 403. Purge les 3 clés (le TokenManager ne connaît pas userKey) puis
@@ -48,7 +59,9 @@ class ApiClient {
     _loggedOut = true;
     await _tokens.clear(); // tokenKey + refreshKey
     await _storage.delete(AppConstants.userKey); // 'personnel_data'
-    onUnauthorized?.call();
+    // Pas de bandeau si l'expiration est détectée pendant l'auto-login
+    // silencieux : l'utilisateur arrive simplement sur le login.
+    if (!_silentMode) onUnauthorized?.call();
   }
 
   // ── Auth ──────────────────────────────────────────────────────────────────

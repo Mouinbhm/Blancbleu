@@ -28,6 +28,7 @@ class AuthCubit extends Cubit<AuthState> {
     // onUnauthorized → on tombera sur AuthInitial.
     try {
       // getActiveShift est légère et always-authenticated.
+      ApiClient.instance.beginSilentSession();
       await ApiClient.instance.getActiveShift();
       ApiClient.instance.resetSession();
       emit(AuthSuccess(user: user, token: token));
@@ -42,6 +43,8 @@ class AuthCubit extends Cubit<AuthState> {
         // l'utilisateur retentera ses actions plus tard.
         emit(AuthSuccess(user: user, token: token));
       }
+    } finally {
+      ApiClient.instance.endSilentSession();
     }
   }
 
