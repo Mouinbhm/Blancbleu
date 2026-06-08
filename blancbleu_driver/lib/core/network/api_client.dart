@@ -15,6 +15,12 @@ class ApiClient {
 
   bool _loggedOut = false; // prevent multiple logout calls in rapid succession
 
+  // Auto-login silencieux : pendant tryAutoLogin, un token stocké rejeté ne
+  // doit PAS afficher le bandeau "Session expirée" — on retombe simplement
+  // sur l'écran de login. Distingue "expiré au démarrage" de "expiré en cours
+  // d'utilisation".
+  bool _silentMode = false;
+
   // Single-flight refresh : si plusieurs requêtes échouent en 401 en parallèle,
   // une seule tentative de refresh est lancée ; les autres attendent son résultat.
   static Completer<bool>? _refreshCompleter;
@@ -105,6 +111,11 @@ class ApiClient {
   /// Call after a successful login so the 401-guard is reset for the new session.
   void resetSession() => _loggedOut = false;
 
+  /// Encadre `AuthCubit.tryAutoLogin`. En mode silencieux, `_forceLogout` vide
+  /// le storage SANS déclencher `onUnauthorized` (pas de bandeau rouge).
+  void beginSilentSession() => _silentMode = true;
+  void endSilentSession()   => _silentMode = false;
+
   // ── Refresh single-flight ─────────────────────────────────────────────────
   Future<bool> _ensureRefreshed() async {
     if (_refreshCompleter != null) return _refreshCompleter!.future;
@@ -160,7 +171,9 @@ class ApiClient {
     await _storage.delete(key: AppConstants.tokenKey);
     await _storage.delete(key: AppConstants.refreshKey);
     await _storage.delete(key: AppConstants.userKey);
-    onUnauthorized?.call();
+    // Pas de bandeau si l'expiration est détectée pendant l'auto-login
+    // silencieux : l'utilisateur arrive simplement sur le login.
+    if (!_silentMode) onUnauthorized?.call();
   }
 
   // ── Auth ──────────────────────────────────────────────────────────────────
