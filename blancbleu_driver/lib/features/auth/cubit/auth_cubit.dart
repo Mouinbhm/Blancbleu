@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -73,6 +74,9 @@ class AuthCubit extends Cubit<AuthState> {
   }
 
   Future<void> logout() async {
+    // [DIAG TEMP] — capture quel appelant déclenche le logout (onUnauthorized,
+    // bouton profil, etc.).
+    debugPrint('[DIAG] AuthCubit.logout() appelé\n${StackTrace.current}');
     await _storage.delete(key: AppConstants.tokenKey);
     await _storage.delete(key: AppConstants.userKey);
     await _storage.delete(key: AppConstants.refreshKey);

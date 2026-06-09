@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:bb_core/bb_core.dart';
 import '../utils/constants.dart';
@@ -55,6 +56,10 @@ class ApiClient {
   /// ou 403. Purge les 3 clés (le TokenManager ne connaît pas userKey) puis
   /// notifie l'app via onUnauthorized.
   Future<void> _forceLogout() async {
+    // [DIAG TEMP] — confirme si _forceLogout est réellement atteint et via quel
+    // chemin DioClient (403 / 401-refresh-échoué). silentMode indique l'auto-login.
+    debugPrint('[DIAG] _forceLogout() appelé (silentMode=$_silentMode)\n'
+        '${StackTrace.current}');
     if (_loggedOut) return;
     _loggedOut = true;
     await _tokens.clear(); // tokenKey + refreshKey
@@ -175,6 +180,7 @@ class ApiClient {
       await _dio.post(
         '${AppConstants.baseUrl}/api/v1/personnel/auth/fcm-token',
         data: {'token': token},
+        options: Options(extra: {DioClient.skipRefreshExtra: true}),
       );
     } catch (_) {
       // Best-effort : si l'enregistrement échoue, on n'empêche pas le boot.
@@ -184,7 +190,10 @@ class ApiClient {
 
   Future<void> deleteFcmToken() async {
     try {
-      await _dio.delete('${AppConstants.baseUrl}/api/v1/personnel/auth/fcm-token');
+      await _dio.delete(
+        '${AppConstants.baseUrl}/api/v1/personnel/auth/fcm-token',
+        options: Options(extra: {DioClient.skipRefreshExtra: true}),
+      );
     } catch (_) { /* best-effort */ }
   }
 
@@ -202,7 +211,10 @@ class ApiClient {
   // ── Notifications ─────────────────────────────────────────────────────────
   Future<int> getNotificationsUnreadCount() async {
     try {
-      final res = await _dio.get('${AppConstants.baseUrl}/api/notifications/unread-count');
+      final res = await _dio.get(
+        '${AppConstants.baseUrl}/api/notifications/unread-count',
+        options: Options(extra: {DioClient.skipRefreshExtra: true}),
+      );
       final body = res.data as Map<String, dynamic>;
       return (body['count'] as num?)?.toInt() ?? 0;
     } catch (_) { return 0; }
@@ -213,6 +225,7 @@ class ApiClient {
       final res = await _dio.get(
         '${AppConstants.baseUrl}/api/notifications',
         queryParameters: {'page': page, 'limit': limit},
+        options: Options(extra: {DioClient.skipRefreshExtra: true}),
       );
       final body = res.data as Map<String, dynamic>;
       final list = body['notifications'] as List<dynamic>? ?? [];
@@ -222,7 +235,10 @@ class ApiClient {
 
   Future<void> markNotificationRead(String id) async {
     try {
-      await _dio.patch('${AppConstants.baseUrl}/api/notifications/$id/read');
+      await _dio.patch(
+        '${AppConstants.baseUrl}/api/notifications/$id/read',
+        options: Options(extra: {DioClient.skipRefreshExtra: true}),
+      );
     } catch (_) {}
   }
 

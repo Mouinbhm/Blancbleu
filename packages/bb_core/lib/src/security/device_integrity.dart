@@ -17,7 +17,7 @@
 /// ```
 library;
 
-import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
+import 'package:jailbreak_root_detection/jailbreak_root_detection.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import '../utils/logger.dart';
@@ -29,7 +29,7 @@ class DeviceIntegrity {
   /// détection a échoué (on ne bloque jamais sur une erreur de détection).
   static Future<bool> isCompromised() async {
     try {
-      return await FlutterJailbreakDetection.jailbroken;
+      return await JailbreakRootDetection.instance.isJailBroken;
     } catch (e) {
       // Plugin indisponible / plateforme non supportée → on considère le
       // device comme sain pour ne pas dégrader l'app.
