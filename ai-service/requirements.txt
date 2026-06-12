@@ -39,4 +39,4 @@ scikit-learn==1.4.2            # LinearRegression, RandomForest, métriques
 pandas==2.2.2                  # Manipulation datasets
 numpy==1.26.4                  # Calculs numériques
 matplotlib==3.8.4              # Génération plots SHAP
-joblib==1.3.2                  # Sérialisation modèles
+joblib==1.5.3                  # Sérialisation modèles
