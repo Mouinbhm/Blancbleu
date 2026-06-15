@@ -96,7 +96,7 @@ jobs:
         run: flutter build apk --debug --flavor dev --dart-define=FLAVOR=dev
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: driver-dev-debug-apk
           path: blancbleu_driver/build/app/outputs/flutter-apk/*.apk
@@ -139,7 +139,7 @@ jobs:
         run: flutter build apk --debug --flavor dev --dart-define=FLAVOR=dev
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: patient-dev-debug-apk
           path: blancbleu_patient/build/app/outputs/flutter-apk/*.apk
