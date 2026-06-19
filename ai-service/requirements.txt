@@ -27,7 +27,7 @@ pydantic==2.7.1                # Validation schémas (inclus dans FastAPI)
 httpx==0.27.0                  # Client HTTP async
 
 # ── Utilitaires ───────────────────────────────────────────────────────────────
-python-dateutil==2.9.0         # Parsing dates flexibles
+python-dateutil==2.9.0.post0         # Parsing dates flexibles
 
 # ── Dev / Lint ────────────────────────────────────────────────────────────────
 ruff==0.6.9                    # Linter + formatter Python (Sprint 5)
