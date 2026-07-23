@@ -14,9 +14,11 @@ const TEST_USERS = {
     password: process.env.E2E_ADMIN_PASSWORD || "admin123",
   },
   dispatcher: {
-    // Aligné sur server/seed.js (dispatcher123, pas dispatcher1234).
-    email:    process.env.E2E_DISPATCHER_EMAIL    || "dispatcher@blancbleu.fr",
-    password: process.env.E2E_DISPATCHER_PASSWORD || "dispatcher123",
+    // Compte dispatcher réel de l'app (dispatcher@demo.com). NB : server/seed.js
+    // crée dispatcher@blancbleu.fr — override via E2E_DISPATCHER_EMAIL en CI si
+    // la base est peuplée par ce seed plutôt que par le compte démo.
+    email:    process.env.E2E_DISPATCHER_EMAIL    || "dispatcher@demo.com",
+    password: process.env.E2E_DISPATCHER_PASSWORD || "mouin123",
   },
 };
 

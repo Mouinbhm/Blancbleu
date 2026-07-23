@@ -1,7 +1,7 @@
 /**
  * E2E — Authentification.
  *
- * Pré-requis : voir e2e/README.md (compte dispatcher@blancbleu.fr en base).
+ * Pré-requis : voir e2e/README.md (compte dispatcher@demo.com en base).
  */
 
 const { test, expect } = require("@playwright/test");
@@ -26,7 +26,7 @@ test.describe.skip("Authentification", () => {
 
   test("login avec mauvais mot de passe → message d'erreur", async ({ page }) => {
     await page.goto("/login");
-    await page.fill('input[name="email"]', "dispatcher@blancbleu.fr");
+    await page.fill('input[name="email"]', "dispatcher@demo.com");
     await page.fill('input[name="password"]', "wrong-password");
     await page.click('button[type="submit"]');
 

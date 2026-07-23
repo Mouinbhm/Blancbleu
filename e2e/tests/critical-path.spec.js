@@ -11,7 +11,7 @@
  *     fonctionne, pas de tester le wizard lui-même.
  *
  * Pré-requis (assuré par le seed standard `npm --prefix server run seed`) :
- *   - utilisateur dispatcher@blancbleu.fr / dispatcher123
+ *   - utilisateur dispatcher@demo.com / mouin123
  *   - au moins 1 véhicule Disponible
  *   - au moins 1 transport en statut SCHEDULED
  */
@@ -21,6 +21,12 @@ const { TEST_USERS } = require("../fixtures/auth");
 
 const SCHEDULED_STATUS = "SCHEDULED";
 const ASSIGNED_STATUS = "ASSIGNED";
+
+// Le baseURL Playwright pointe sur le front (:3000) pour la navigation UI. Les
+// appels API directs doivent viser le back (:5000) — le front CRA n'a pas de
+// proxy /api. Le cookie d'auth httpOnly est posé sur l'hôte localhost (port-
+// agnostic), donc réutilisé automatiquement par `request` vers :5000.
+const API_BASE = process.env.E2E_API_URL || "http://localhost:5000";
 
 async function loginViaUi(page) {
   const { email, password } = TEST_USERS.dispatcher;
@@ -51,7 +57,6 @@ async function logoutViaUi(page) {
 test.describe("Critical path dispatcher", () => {
   test("login → liste → ouvre transport SCHEDULED → assigne véhicule → ASSIGNED → logout", async ({
     page,
-    request,
   }) => {
     // ── 1. LOGIN UI ──────────────────────────────────────────────────────
     await loginViaUi(page);
@@ -87,18 +92,21 @@ test.describe("Critical path dispatcher", () => {
     const transportId = match[1];
 
     // ── 4. ASSIGNATION VIA API (stable, déterministe) ────────────────────
-    // Les cookies httpOnly du login UI sont déjà dans le context Playwright,
-    // donc `request` les ré-utilise automatiquement. On récupère un véhicule
+    // Les cookies httpOnly du login UI vivent dans le context navigateur. On
+    // utilise `page.request` (et NON la fixture `request` isolée) pour que ces
+    // cookies soient ré-utilisés automatiquement. On récupère un véhicule
     // "Disponible" puis on POST l'assignation via le contrôleur Express.
-    const vehiclesRes = await request.get("/api/vehicles?statut=Disponible&limit=10");
+    const vehiclesRes = await page.request.get(`${API_BASE}/api/vehicles?statut=Disponible&limit=10`);
     expect(vehiclesRes.ok()).toBeTruthy();
     const vehiclesBody = await vehiclesRes.json();
-    const vehicles = vehiclesBody.vehicles || vehiclesBody;
+    // La route liste renvoie { data, pagination } (cf. routes/vehicles.js).
+    const vehicles = vehiclesBody.data || vehiclesBody.vehicles || vehiclesBody;
     expect(Array.isArray(vehicles)).toBeTruthy();
     expect(vehicles.length).toBeGreaterThan(0);
     const vehiculeId = vehicles[0]._id;
 
-    const assignRes = await request.post(`/api/transports/${transportId}/assigner`, {
+    // Route réelle : PATCH /api/transports/:id/assign (cf. routes/transports.js).
+    const assignRes = await page.request.patch(`${API_BASE}/api/transports/${transportId}/assign`, {
       data: { vehiculeId },
     });
     // Tolère 200 (assigné OK) ou 409 (déjà assigné par un run précédent — le
