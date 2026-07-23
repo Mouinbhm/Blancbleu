@@ -269,6 +269,12 @@ jobs:
       CI: "true"
       REACT_APP_API_URL: http://localhost:5000/api
       E2E_BASE_URL: http://localhost:3000
+      # La base E2E est peuplée par server/seed.js (via e2e/fixtures/seed.js), qui
+      # crée dispatcher@blancbleu.fr / dispatcher123 — PAS le compte démo
+      # dispatcher@demo.com. On aligne donc les fixtures (e2e/fixtures/auth.js)
+      # sur le compte réellement seedé.
+      E2E_DISPATCHER_EMAIL: dispatcher@blancbleu.fr
+      E2E_DISPATCHER_PASSWORD: dispatcher123
 
     steps:
       - uses: actions/checkout@v4
