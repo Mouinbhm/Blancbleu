@@ -275,6 +275,11 @@ jobs:
       # sur le compte réellement seedé.
       E2E_DISPATCHER_EMAIL: dispatcher@blancbleu.fr
       E2E_DISPATCHER_PASSWORD: dispatcher123
+      # stripePaymentService.js instancie `new Stripe(STRIPE_SECRET_KEY)` au
+      # chargement du module → Server.js crashe au démarrage si la clé est vide.
+      # Valeur factice (aucun appel réseau Stripe en E2E), comme les tests unit.
+      STRIPE_SECRET_KEY: sk_test_ci_dummy
+      STRIPE_WEBHOOK_SECRET: whsec_test_ci_blancbleu
 
     steps:
       - uses: actions/checkout@v4
