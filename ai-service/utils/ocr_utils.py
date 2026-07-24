@@ -77,7 +77,7 @@ configurer_tesseract()
 
 # ─── Prétraitement image ──────────────────────────────────────────────────────
 
-def ameliorer_image_scan(img) -> "Image.Image":
+def ameliorer_image_scan(img):
     """
     Améliore la qualité d'un scan de PMT CERFA avant OCR.
     Pipeline : redimensionner → niveaux de gris →

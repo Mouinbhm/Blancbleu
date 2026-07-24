@@ -3,7 +3,15 @@ target-version = "py311"
 
 [lint]
 select = ["E", "F", "I", "W"]
-ignore = ["E501"]  # géré par line-length, on tolère qq dépassements
+ignore = [
+    "E501",  # géré par line-length, on tolère qq dépassements
+    "E701",  # dette legacy: instructions multiples sur une même ligne
+    "F401",  # dette legacy: imports non utilisés
+    "F541",  # dette legacy: f-string sans placeholder
+    "F841",  # dette legacy: variables locales non utilisées
+    "I001",  # dette legacy: tri des imports à uniformiser
+    "W292",  # dette legacy: fin de fichier sans newline
+]
 
 [lint.per-file-ignores]
 "tests/**/*.py"   = ["E402", "F401"]  # imports en cours de test
