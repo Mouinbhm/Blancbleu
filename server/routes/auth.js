@@ -15,7 +15,7 @@ const {
   toggleUser,
   deleteUser,
   adminResetPassword,
-} = require("../controllers/authController");
+} = require("../controllers/AuthController");
 const {
   forgotPassword,
   verifyResetToken,
@@ -150,13 +150,7 @@ router.delete("/2fa", protect, disable2FA);
 // ─── Admin : création de compte ───────────────────────────────────────────────
 // Register est désormais protégé — seul un admin connecté peut créer des comptes
 // Le premier admin doit être créé via : node server/scripts/create-admin.js
-router.post(
-  "/register",
-  protect,
-  authorize("admin"),
-  registerLimiter,
-  register,
-);
+router.post("/register", protect, authorize("admin"), registerLimiter, register);
 
 // ─── Admin : gestion des utilisateurs ────────────────────────────────────────
 router.get("/users", protect, authorize("admin"), getAllUsers);

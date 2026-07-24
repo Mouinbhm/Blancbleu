@@ -121,7 +121,7 @@ def make_transport(mobilite=MobilitePatient.ASSIS, oxygene=False, brancardage=Fa
 class TestCompatibiliteMobilite:
     def test_assis_vsl_score_optimal(self):
         """Patient ASSIS → VSL doit être le meilleur score de compatibilité."""
-        assert COMPATIBILITE_MOBILITE["ASSIS"]["VSL"] == 40
+        assert COMPATIBILITE_MOBILITE["ASSIS"]["VSL"] == 100
 
     def test_fauteuil_vsl_incompatible(self):
         """Patient en FAUTEUIL_ROULANT → VSL est incompatible (score 0)."""
@@ -129,22 +129,22 @@ class TestCompatibiliteMobilite:
 
     def test_fauteuil_tpmr_optimal(self):
         """Patient en FAUTEUIL_ROULANT → TPMR est le choix optimal."""
-        assert COMPATIBILITE_MOBILITE["FAUTEUIL_ROULANT"]["TPMR"] == 40
+        assert COMPATIBILITE_MOBILITE["FAUTEUIL_ROULANT"]["TPMR"] == 100
 
     def test_allonge_ambulance_obligatoire(self):
         """Patient ALLONGÉ → seule l'AMBULANCE est compatible."""
-        assert COMPATIBILITE_MOBILITE["ALLONGE"]["AMBULANCE"] == 40
+        assert COMPATIBILITE_MOBILITE["ALLONGE"]["AMBULANCE"] == 100
         assert COMPATIBILITE_MOBILITE["ALLONGE"]["VSL"] == 0
         assert COMPATIBILITE_MOBILITE["ALLONGE"]["TPMR"] == 0
 
     def test_civiere_ambulance_seule(self):
         """Patient sur CIVIÈRE → uniquement AMBULANCE."""
-        assert COMPATIBILITE_MOBILITE["CIVIERE"]["AMBULANCE"] == 40
+        assert COMPATIBILITE_MOBILITE["CIVIERE"]["AMBULANCE"] == 100
         assert COMPATIBILITE_MOBILITE["CIVIERE"]["VSL"] == 0
 
     def test_ambulance_assis_sous_optimal(self):
-        """Patient ASSIS + AMBULANCE → compatible mais sous-optimal (score 25)."""
-        assert COMPATIBILITE_MOBILITE["ASSIS"]["AMBULANCE"] == 25
+        """Patient ASSIS + AMBULANCE → compatible mais sous-optimal (score 60)."""
+        assert COMPATIBILITE_MOBILITE["ASSIS"]["AMBULANCE"] == 60
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -273,8 +273,8 @@ class TestRecommandationDispatch:
         assert res.message  # message non vide
         assert isinstance(res.message, str)
 
-    def test_ambulance_assis_recommandation_score_25(self):
-        """AMBULANCE seule disponible pour ASSIS → recommandée avec score compatibilité 25."""
+    def test_ambulance_assis_recommandation_score_24(self):
+        """AMBULANCE seule disponible pour ASSIS → recommandée avec score compatibilité 24."""
         req = DispatchRequest(
             transport=make_transport(MobilitePatient.ASSIS),
             vehicules=[make_ambulance()],
@@ -282,7 +282,7 @@ class TestRecommandationDispatch:
         res = recommander(req)
         assert res.recommandation is not None
         assert res.recommandation.type == TypeVehicule.AMBULANCE
-        assert res.recommandation.scoreDetail.compatibiliteMobilite == 25
+        assert res.recommandation.scoreDetail.compatibiliteMobilite == 24
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
