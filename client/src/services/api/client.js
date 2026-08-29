@@ -50,6 +50,23 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// ─── Refresh de session mutualisé ────────────────────────────────────────────
+// POST /auth/refresh fait TOURNER le refresh token : le serveur revoque
+// l'ancien et en emet un nouveau. Deux appels concurrents partiraient donc avec
+// le meme cookie ; le second recevrait 401 et le serveur ferait clearCookie(),
+// tuant la session. On garantit un seul appel en vol : tous les appelants
+// (bootstrap AuthContext + intercepteur 401) partagent la meme promesse.
+let refreshPromise = null;
+
+export function refreshSession() {
+  if (!refreshPromise) {
+    refreshPromise = api.post("/auth/refresh").finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
 // ─── Intercepteur réponse — gère les 401 et le refresh automatique ────────────
 let isRefreshing = false;
 let pendingQueue = [];
@@ -96,7 +113,7 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        await api.post("/auth/refresh");
+        await refreshSession();
         processQueue(null);
         return api(originalRequest);
       } catch (refreshError) {
