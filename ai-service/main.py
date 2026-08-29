@@ -17,6 +17,7 @@ Lancement :
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
 import json
 import logging
 import os
@@ -27,6 +28,11 @@ from routes.dispatch  import router as dispatch_router
 from routes.routing   import router as routing_router
 from routes.optimizer import router as optimizer_router
 from utils.auth import require_service_token
+
+# Charge ai-service/.env en dev local (hors Docker). override=False : les
+# variables deja presentes dans l'environnement reel gardent la priorite,
+# donc en Docker les valeurs de docker-compose.yml ne sont jamais ecrasees.
+load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(

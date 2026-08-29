@@ -1,59 +1,47 @@
 /**
  * BlancBleu — Service Optimizer IA
- * Appels directs au microservice FastAPI sur port 5002.
- * Toutes les fonctions retournent une Promise.
- * En cas d'échec (service hors ligne), la Promise rejette silencieusement.
+ *
+ * Les routes /optimizer du microservice Python exigent le header
+ * X-Service-Token (cf. ai-service/main.py) : un appel direct du navigateur au
+ * port 5002 repart en 401. Et le secret partagé Node ↔ Python n'a rien à faire
+ * dans un bundle JS. On passe donc par le backend Node (/api/ai/optimizer/*),
+ * qui relaie via aiClient en attachant le token côté serveur.
+ *
+ * Les fonctions résolvent la charge utile JSON (pas l'enveloppe axios), pour
+ * rester compatibles avec les appelants existants.
+ * En cas d'échec, la Promise rejette — l'appelant décide quoi afficher.
  */
 
-const AI_BASE =
-  process.env.REACT_APP_AI_URL ||
-  (process.env.NODE_ENV === "production"
-    ? "http://localhost:5002"
-    : "http://localhost:5002");
+import api from "./api/client";
 
-const AI_TIMEOUT = 8000; // ms
-
-async function _fetch(method, path, body) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT);
-
-  try {
-    const res = await fetch(`${AI_BASE}${path}`, {
-      method,
-      headers: body ? { "Content-Type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-      signal: controller.signal,
-    });
-
-    clearTimeout(timer);
-
-    if (!res.ok) {
-      const detail = await res.json().catch(() => ({}));
-      throw new Error(detail?.detail || `HTTP ${res.status}`);
-    }
-    return res.json();
-  } catch (err) {
-    clearTimeout(timer);
-    throw err;
-  }
-}
+const AI_TIMEOUT = 15000; // ms — la prédiction traverse Node puis Python
 
 // ── Prédiction durée (XGBoost) ────────────────────────────────────────────────
 export async function predictDuree(transportData) {
-  return _fetch("POST", "/optimizer/predict/duree", transportData);
+  const res = await api.post("/ai/optimizer/predict/duree", transportData, {
+    timeout: AI_TIMEOUT,
+  });
+  return res.data;
 }
 
 // ── Métriques du modèle entraîné ─────────────────────────────────────────────
 export async function getModelMetrics() {
-  return _fetch("GET", "/optimizer/model/metrics");
+  const res = await api.get("/ai/optimizer/model/metrics", { timeout: AI_TIMEOUT });
+  return res.data;
 }
 
 // ── État de l'optimiseur temps réel ──────────────────────────────────────────
 export async function getOptimizerStats() {
-  return _fetch("GET", "/optimizer/optimizer/stats");
+  const res = await api.get("/ai/optimizer/stats", { timeout: AI_TIMEOUT });
+  return res.data;
 }
 
 // ── Optimisation temps réel (VRP greedy) ─────────────────────────────────────
 export async function optimizeRealtime({ transport, vehicules }) {
-  return _fetch("POST", "/optimizer/optimize/realtime", { transport, vehicules });
+  const res = await api.post(
+    "/ai/optimizer/optimize/realtime",
+    { transport, vehicules },
+    { timeout: AI_TIMEOUT },
+  );
+  return res.data;
 }

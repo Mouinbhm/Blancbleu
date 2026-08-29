@@ -177,7 +177,6 @@ const recommanderDispatch = async (req, res) => {
       Vehicle.find(candidatesQuery).limit(limitVehicules).lean(),
       Personnel.find({ statut: "Disponible", role: { $in: ["Ambulancier", "Chauffeur"] } }).lean(),
     ]);
-
     if (vehicules.length === 0) {
       return res.status(409).json({
         success: false,
@@ -932,6 +931,81 @@ const getModelStatus = async (req, res) => {
   }
 };
 
+/**
+ * Traduit une erreur axios venant du microservice IA en reponse HTTP utile.
+ * On NE renvoie pas 503 pour tout : un 401 (token absent/incorrect) ou un 422
+ * (payload invalide) doivent rester distinguables cote client, sinon un
+ * probleme de config ressemble a une panne. 503 est reserve au cas ou le
+ * service est reellement injoignable.
+ */
+const _relayerErreurIA = (res, err, contexte) => {
+  const status = err.response?.status;
+  const detail = err.response?.data?.detail || err.message;
+
+  if (!status) {
+    return res.status(503).json({
+      message: "Microservice IA indisponible",
+      error: detail,
+      contexte,
+    });
+  }
+  return res.status(status).json({
+    message: `Microservice IA — erreur ${status}`,
+    error: detail,
+    contexte,
+  });
+};
+
+/**
+ * POST /api/ai/optimizer/predict/duree
+ * Proxy vers Python /optimizer/predict/duree (XGBoost).
+ * @access  staff authentifie
+ */
+const predictDuree = async (req, res) => {
+  try {
+    return res.json(await aiClient.predireDuree(req.body));
+  } catch (err) {
+    return _relayerErreurIA(res, err, "predict/duree");
+  }
+};
+
+/**
+ * POST /api/ai/optimizer/optimize/realtime
+ * @access  superviseur | admin
+ */
+const optimizeRealtime = async (req, res) => {
+  try {
+    const { transport, vehicules } = req.body || {};
+    return res.json(await aiClient.optimiserTempsReel({ transport, vehicules }));
+  } catch (err) {
+    return _relayerErreurIA(res, err, "optimize/realtime");
+  }
+};
+
+/**
+ * GET /api/ai/optimizer/model/metrics
+ * @access  staff authentifie
+ */
+const getModelMetrics = async (req, res) => {
+  try {
+    return res.json(await aiClient.metriquesModele());
+  } catch (err) {
+    return _relayerErreurIA(res, err, "model/metrics");
+  }
+};
+
+/**
+ * GET /api/ai/optimizer/stats
+ * @access  staff authentifie
+ */
+const getOptimizerStats = async (req, res) => {
+  try {
+    return res.json(await aiClient.statsOptimiseur());
+  } catch (err) {
+    return _relayerErreurIA(res, err, "optimizer/stats");
+  }
+};
+
 module.exports = {
   extrairePMT,
   validerPMT,
@@ -948,4 +1022,8 @@ module.exports = {
   getModelStatus,
   getDispatchConfig,
   updateDispatchConfig,
+  predictDuree,
+  optimizeRealtime,
+  getModelMetrics,
+  getOptimizerStats,
 };

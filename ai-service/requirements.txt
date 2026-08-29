@@ -13,7 +13,7 @@ pymupdf==1.24.5                # Conversion PDF → images (sans Poppler)
 pdf2image==1.17.0              # Conversion PDF → images (fallback, nécessite Poppler)
 
 # ── NLP / Extraction ──────────────────────────────────────────────────────────
-spacy==3.7.4                   # NER pour noms, lieux
+spacy==3.7.5                   # NER pour noms, lieux
 # Modèle français à installer séparément :
 # python -m spacy download fr_core_news_sm
 
@@ -28,6 +28,7 @@ httpx==0.27.0                  # Client HTTP async
 
 # ── Utilitaires ───────────────────────────────────────────────────────────────
 python-dateutil==2.9.0         # Parsing dates flexibles
+python-dotenv==1.2.3           # Chargement de ai-service/.env en dev local
 
 # ── Dev / Lint ────────────────────────────────────────────────────────────────
 ruff==0.6.9                    # Linter + formatter Python (Sprint 5)

@@ -282,6 +282,37 @@ async function statutModele() {
   return data;
 }
 
+// ── Proxy navigateur → Python : routes /optimizer consommees par le front ──
+// Le front NE PEUT PAS appeler le port 5002 directement : toutes les routes
+// metier exigent X-Service-Token, et un secret partage n'a rien a faire dans
+// un bundle JS. Ces wrappers passent par l'intercepteur qui attache le token.
+
+async function predireDuree(features) {
+  const { data } = await client.post("/optimizer/predict/duree", features, {
+    timeout: 10_000,
+  });
+  return data;
+}
+
+async function optimiserTempsReel({ transport, vehicules }) {
+  const { data } = await client.post(
+    "/optimizer/optimize/realtime",
+    { transport, vehicules },
+    { timeout: 20_000 },
+  );
+  return data;
+}
+
+async function metriquesModele() {
+  const { data } = await client.get("/optimizer/model/metrics", { timeout: 10_000 });
+  return data;
+}
+
+async function statsOptimiseur() {
+  const { data } = await client.get("/optimizer/optimizer/stats", { timeout: 10_000 });
+  return data;
+}
+
 module.exports = {
   extrairePMT,
   recommanderDispatch,
@@ -289,4 +320,8 @@ module.exports = {
   verifierSante,
   relancerEntrainement,
   statutModele,
+  predireDuree,
+  optimiserTempsReel,
+  metriquesModele,
+  statsOptimiseur,
 };

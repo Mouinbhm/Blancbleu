@@ -8,6 +8,10 @@
  * GET   /api/ai/dispatch/:id/explanation        → Explication recommandation sauvegardée
  * POST  /api/ai/routing/optimize                → Optimiser la tournée d'une journée
  * GET   /api/ai/status                          → Statut microservice IA
+ * POST  /api/ai/optimizer/predict/duree          → Prediction duree (XGBoost)
+ * POST  /api/ai/optimizer/optimize/realtime      → Optimisation temps reel
+ * GET   /api/ai/optimizer/model/metrics          → Metriques du modele
+ * GET   /api/ai/optimizer/stats                  → Etat de l'optimiseur
  */
 
 const express = require("express");
@@ -213,6 +217,20 @@ router.post("/model/retrain", protect, authorize("admin"), ctrl.triggerModelRetr
  *       503: { description: Microservice IA indisponible }
  */
 router.get("/model/status", protect, authorize("admin", "superviseur"), ctrl.getModelStatus);
+
+// ── Proxy /optimizer : le front passe par Node, jamais par le port 5002 ─────
+// Le microservice exige X-Service-Token sur toutes ses routes metier (cf.
+// ai-service/main.py). Le navigateur ne peut pas porter ce secret : ces routes
+// relaient l'appel via aiClient, qui attache le token cote serveur.
+router.post("/optimizer/predict/duree", protect, authorize(...STAFF), ctrl.predictDuree);
+router.get("/optimizer/model/metrics", protect, authorize(...STAFF), ctrl.getModelMetrics);
+router.get("/optimizer/stats", protect, authorize(...STAFF), ctrl.getOptimizerStats);
+router.post(
+  "/optimizer/optimize/realtime",
+  protect,
+  authorize("superviseur", "admin"),
+  ctrl.optimizeRealtime,
+);
 
 // ── Admin — Pondérations dispatch (singleton MongoDB) ────────────────────────
 
