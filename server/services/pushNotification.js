@@ -32,48 +32,65 @@ function _parseServiceAccount(raw) {
   const trimmed = raw.trim();
   // 1. JSON inline
   if (trimmed.startsWith("{")) {
-    try { return JSON.parse(trimmed); } catch { /* fallthrough */ }
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      /* fallthrough */
+    }
   }
   // 2. JSON base64
   try {
     const decoded = Buffer.from(trimmed, "base64").toString("utf-8").trim();
     if (decoded.startsWith("{")) return JSON.parse(decoded);
-  } catch { /* fallthrough */ }
+  } catch {
+    /* fallthrough */
+  }
   // 3. Chemin de fichier
   try {
     const filePath = path.isAbsolute(trimmed) ? trimmed : path.resolve(process.cwd(), trimmed);
     if (fs.existsSync(filePath)) {
       return JSON.parse(fs.readFileSync(filePath, "utf-8"));
     }
-  } catch { /* fallthrough */ }
+  } catch {
+    /* fallthrough */
+  }
   return null;
 }
 
 (function initFirebase() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) {
-    logger.info("[PushNotification] FIREBASE_SERVICE_ACCOUNT absent — push désactivé (dégradation gracieuse)");
+    logger.info(
+      "[PushNotification] FIREBASE_SERVICE_ACCOUNT absent — push désactivé (dégradation gracieuse)",
+    );
     return;
   }
   const sa = _parseServiceAccount(raw);
   if (!sa) {
-    logger.warn("[PushNotification] FIREBASE_SERVICE_ACCOUNT invalide (ni JSON ni base64 ni chemin) — push désactivé");
+    logger.warn(
+      "[PushNotification] FIREBASE_SERVICE_ACCOUNT invalide (ni JSON ni base64 ni chemin) — push désactivé",
+    );
     return;
   }
   try {
-    const admin = require("firebase-admin");
-    if (!admin.apps.length) {
-      admin.initializeApp({ credential: admin.credential.cert(sa) });
-    }
-    _messaging = admin.messaging();
+    // firebase-admin v14 : API modulaire uniquement (les namespaces legacy
+    // `admin.apps` / `admin.credential` / `admin.messaging()` ont ete retires).
+    const { initializeApp, getApps, cert } = require("firebase-admin/app");
+    const { getMessaging } = require("firebase-admin/messaging");
+    const app = getApps().length ? getApps()[0] : initializeApp({ credential: cert(sa) });
+    _messaging = getMessaging(app);
     _enabled = true;
-    logger.info("[PushNotification] Firebase Admin SDK initialisé (projectId=" + (sa.project_id || "?") + ")");
+    logger.info(
+      "[PushNotification] Firebase Admin SDK initialisé (projectId=" + (sa.project_id || "?") + ")",
+    );
   } catch (err) {
     logger.warn("[PushNotification] Firebase init échoué : " + err.message + " — push désactivé");
   }
 })();
 
-function isEnabled() { return _enabled; }
+function isEnabled() {
+  return _enabled;
+}
 
 /**
  * Construit le message FCM hybride (notification + data + android tuning).
@@ -128,10 +145,16 @@ async function sendToToken(fcmToken, payload, hooks = {}) {
     return { success: true, messageId };
   } catch (err) {
     const code = err?.errorInfo?.code || err?.code || "";
-    if (code === "messaging/registration-token-not-registered" ||
-        code === "messaging/invalid-registration-token") {
-      logger.info("[PushNotification] Token périmé → cleanup demandé : " + fcmToken.slice(0, 20) + "...");
-      try { await hooks.onInvalidToken?.(fcmToken); } catch (e) {
+    if (
+      code === "messaging/registration-token-not-registered" ||
+      code === "messaging/invalid-registration-token"
+    ) {
+      logger.info(
+        "[PushNotification] Token périmé → cleanup demandé : " + fcmToken.slice(0, 20) + "...",
+      );
+      try {
+        await hooks.onInvalidToken?.(fcmToken);
+      } catch (e) {
         logger.warn("[PushNotification] onInvalidToken hook échoué : " + e.message);
       }
       return { error: code, cleaned: true };
@@ -157,8 +180,10 @@ async function sendToTokens(tokens, payload) {
     res.responses.forEach((r, i) => {
       if (!r.success) {
         const code = r.error?.code || "";
-        if (code === "messaging/registration-token-not-registered" ||
-            code === "messaging/invalid-registration-token") {
+        if (
+          code === "messaging/registration-token-not-registered" ||
+          code === "messaging/invalid-registration-token"
+        ) {
           invalidTokens.push(list[i]);
         }
       }
@@ -191,11 +216,15 @@ async function notifyPatient({ userId, title, body, data = {}, channelId }) {
     const User = require("../models/User");
     const user = await User.findById(userId).select("fcmToken").lean();
     if (!user?.fcmToken) return { skipped: "no_token" };
-    return sendToToken(user.fcmToken, { title, body, data, channelId }, {
-      onInvalidToken: async () => {
-        await User.findByIdAndUpdate(userId, { $unset: { fcmToken: 1 } });
+    return sendToToken(
+      user.fcmToken,
+      { title, body, data, channelId },
+      {
+        onInvalidToken: async () => {
+          await User.findByIdAndUpdate(userId, { $unset: { fcmToken: 1 } });
+        },
       },
-    });
+    );
   } catch (err) {
     logger.warn("[PushNotification] notifyPatient échoué : " + err.message);
   }
@@ -208,14 +237,17 @@ async function notifyPatientByEmail({ email, title, body, data = {}, channelId }
   if (!_enabled) return { skipped: "push_disabled" };
   try {
     const User = require("../models/User");
-    const user = await User.findOne({ email, role: "patient" })
-      .select("fcmToken _id").lean();
+    const user = await User.findOne({ email, role: "patient" }).select("fcmToken _id").lean();
     if (!user?.fcmToken) return { skipped: "no_token" };
-    return sendToToken(user.fcmToken, { title, body, data, channelId }, {
-      onInvalidToken: async () => {
-        await User.findByIdAndUpdate(user._id, { $unset: { fcmToken: 1 } });
+    return sendToToken(
+      user.fcmToken,
+      { title, body, data, channelId },
+      {
+        onInvalidToken: async () => {
+          await User.findByIdAndUpdate(user._id, { $unset: { fcmToken: 1 } });
+        },
       },
-    });
+    );
   } catch (err) {
     logger.warn("[PushNotification] notifyPatientByEmail échoué : " + err.message);
   }
