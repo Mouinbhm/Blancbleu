@@ -18,7 +18,7 @@
  * Script idempotent : peut être relancé sans risque.
  */
 
-require("dotenv").config();
+require("../config/env");
 const mongoose = require("mongoose");
 const logger = require("../utils/logger");
 

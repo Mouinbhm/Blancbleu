@@ -7,7 +7,7 @@
  *   MONGO_URI=... node server/scripts/migrate-vehicle-location.js
  */
 
-require("dotenv").config();
+require("../config/env");
 const mongoose = require("mongoose");
 
 async function run() {

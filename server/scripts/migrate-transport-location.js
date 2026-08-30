@@ -10,7 +10,7 @@
  *   MONGO_URI=... node server/scripts/migrate-transport-location.js
  */
 
-require("dotenv").config();
+require("../config/env");
 const mongoose = require("mongoose");
 
 function buildPoint(adresse) {
@@ -33,13 +33,13 @@ async function run() {
   const cursor = Transport.find({
     $or: [
       {
-        "adresseDepart.coordonnees.lat":  { $exists: true, $ne: null },
-        "adresseDepart.coordonnees.lng":  { $exists: true, $ne: null },
+        "adresseDepart.coordonnees.lat": { $exists: true, $ne: null },
+        "adresseDepart.coordonnees.lng": { $exists: true, $ne: null },
         "adresseDepart.location.coordinates": { $exists: false },
       },
       {
-        "adresseDestination.coordonnees.lat":  { $exists: true, $ne: null },
-        "adresseDestination.coordonnees.lng":  { $exists: true, $ne: null },
+        "adresseDestination.coordonnees.lat": { $exists: true, $ne: null },
+        "adresseDestination.coordonnees.lng": { $exists: true, $ne: null },
         "adresseDestination.location.coordinates": { $exists: false },
       },
     ],

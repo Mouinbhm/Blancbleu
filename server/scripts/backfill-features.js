@@ -6,7 +6,7 @@
  *   MONGO_URI=... node server/scripts/backfill-features.js
  */
 
-require("dotenv").config();
+require("../config/env");
 const mongoose = require("mongoose");
 
 async function run() {
@@ -23,13 +23,16 @@ async function run() {
   const cursor = Transport.find({ statut: { $in: FINAL_STATUS } }).cursor();
 
   let captured = 0;
-  let skipped  = 0;
-  let errors   = 0;
+  let skipped = 0;
+  let errors = 0;
   const skipReasons = {};
 
   for await (const t of cursor) {
     const res = await collector.captureTransportFeatures(t);
-    if (!res) { errors++; continue; }
+    if (!res) {
+      errors++;
+      continue;
+    }
     if (res.skipped) {
       skipped++;
       skipReasons[res.skipped] = (skipReasons[res.skipped] || 0) + 1;

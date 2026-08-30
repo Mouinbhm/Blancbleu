@@ -10,7 +10,7 @@
  * Idempotent : relançable sans créer de doublons.
  */
 
-require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
+require("../config/env");
 
 const mongoose = require("mongoose");
 const Transport = require("../models/Transport");

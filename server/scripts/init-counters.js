@@ -10,7 +10,7 @@
  *   MONGO_URI=... node server/scripts/init-counters.js
  */
 
-require("dotenv").config();
+require("../config/env");
 const mongoose = require("mongoose");
 
 // Extrait le suffixe XXXX d'un numéro comme "PAT-20260520-0042" → 42
@@ -24,7 +24,9 @@ function extractSuffix(numero) {
 async function maxSuffix(Model, field) {
   // Itérer en streaming pour ne pas charger 1M docs en RAM
   let max = 0;
-  const cursor = Model.find({ [field]: { $exists: true, $ne: null } }).select(field).cursor();
+  const cursor = Model.find({ [field]: { $exists: true, $ne: null } })
+    .select(field)
+    .cursor();
   for await (const doc of cursor) {
     const n = extractSuffix(doc[field]);
     if (n > max) max = n;
@@ -40,11 +42,7 @@ async function seedCounter(Counter, id, value) {
     console.log(`  [${id}] seq déjà à ${currentSeq} ≥ ${value} → inchangé`);
     return;
   }
-  await Counter.findOneAndUpdate(
-    { _id: id },
-    { $set: { seq: target } },
-    { upsert: true },
-  );
+  await Counter.findOneAndUpdate({ _id: id }, { $set: { seq: target } }, { upsert: true });
   console.log(`  [${id}] seq ${currentSeq} → ${target}`);
 }
 
@@ -52,23 +50,23 @@ async function run() {
   await mongoose.connect(process.env.MONGO_URI);
   console.log("MongoDB connecté");
 
-  const Counter      = require("../models/Counter");
-  const Patient      = require("../models/Patient");
+  const Counter = require("../models/Counter");
+  const Patient = require("../models/Patient");
   const Prescription = require("../models/Prescription");
-  const Facture      = require("../models/Facture");
+  const Facture = require("../models/Facture");
 
   console.log("Calcul des max(seq) actuels…");
   const [patMax, presMax, facMax] = await Promise.all([
-    maxSuffix(Patient,      "numeroPatient"),
+    maxSuffix(Patient, "numeroPatient"),
     maxSuffix(Prescription, "numero"),
-    maxSuffix(Facture,      "numero"),
+    maxSuffix(Facture, "numero"),
   ]);
 
   console.log(`Patient.max = ${patMax} / Prescription.max = ${presMax} / Facture.max = ${facMax}`);
 
-  await seedCounter(Counter, "patient",      patMax);
+  await seedCounter(Counter, "patient", patMax);
   await seedCounter(Counter, "prescription", presMax);
-  await seedCounter(Counter, "facture",      facMax);
+  await seedCounter(Counter, "facture", facMax);
 
   console.log("Compteurs initialisés.");
   await mongoose.disconnect();

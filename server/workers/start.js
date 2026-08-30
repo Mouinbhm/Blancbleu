@@ -11,9 +11,9 @@
  * cleanup à intervalles fixes.
  */
 
-require("dotenv").config();
+require("../config/env");
 const mongoose = require("mongoose");
-const logger   = require("../utils/logger");
+const logger = require("../utils/logger");
 const { queues, QUEUES } = require("../queues");
 
 async function main() {

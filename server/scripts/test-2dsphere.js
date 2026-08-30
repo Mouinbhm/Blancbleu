@@ -12,13 +12,13 @@
  *    qu'en dev/test sur une base dédiée.
  */
 
-require("dotenv").config();
+require("../config/env");
 const mongoose = require("mongoose");
 
 const FIXTURES = [
-  { immatriculation: "TEST-NICE-1", nom: "Nice-test",      type: "VSL", lat: 43.7102, lng: 7.262 },
-  { immatriculation: "TEST-CAN-1",  nom: "Cannes-test",    type: "VSL", lat: 43.5528, lng: 7.0174 },
-  { immatriculation: "TEST-MAR-1",  nom: "Marseille-test", type: "VSL", lat: 43.2965, lng: 5.3698 },
+  { immatriculation: "TEST-NICE-1", nom: "Nice-test", type: "VSL", lat: 43.7102, lng: 7.262 },
+  { immatriculation: "TEST-CAN-1", nom: "Cannes-test", type: "VSL", lat: 43.5528, lng: 7.0174 },
+  { immatriculation: "TEST-MAR-1", nom: "Marseille-test", type: "VSL", lat: 43.2965, lng: 5.3698 },
 ];
 
 async function run() {

@@ -13,7 +13,7 @@
  * Idempotent : relancer le script ne modifie pas les transports déjà corrects.
  */
 
-require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
+require("../config/env");
 
 const mongoose = require("mongoose");
 const readline = require("readline");
@@ -23,15 +23,15 @@ const DRY_RUN = process.argv.includes("--dry-run");
 
 // Mobilité correcte attendue pour chaque type de véhicule
 const MOBILITE_CORRECTE = {
-  VSL:       "ASSIS",
-  TPMR:      "FAUTEUIL_ROULANT",
+  VSL: "ASSIS",
+  TPMR: "FAUTEUIL_ROULANT",
   AMBULANCE: "ALLONGE", // valeur par défaut pour AMBULANCE
 };
 
 // Mobilités acceptables (sans correction nécessaire) par type de véhicule
 const MOBILITES_OK = {
-  VSL:       ["ASSIS"],
-  TPMR:      ["FAUTEUIL_ROULANT"],
+  VSL: ["ASSIS"],
+  TPMR: ["FAUTEUIL_ROULANT"],
   AMBULANCE: ["ALLONGE", "CIVIERE"],
 };
 
@@ -87,10 +87,10 @@ async function main() {
   console.log("├─────────────────────────────────────────────────────────────────────┤");
 
   for (const t of aReparer) {
-    const num    = (t.numero || "N/A").padEnd(20);
-    const nom    = `${t.patient?.nom || ""} ${t.patient?.prenom || ""}`.trim().padEnd(24);
-    const type   = (t.typeTransport || "").padEnd(9);
-    const mob    = (t.patient?.mobilite || "").padEnd(14);
+    const num = (t.numero || "N/A").padEnd(20);
+    const nom = `${t.patient?.nom || ""} ${t.patient?.prenom || ""}`.trim().padEnd(24);
+    const type = (t.typeTransport || "").padEnd(9);
+    const mob = (t.patient?.mobilite || "").padEnd(14);
     const correct = MOBILITE_CORRECTE[t.typeTransport] || "?";
     console.log(`│  ${num} ${nom} ${type} ${mob} → ${correct}  │`);
   }
@@ -104,7 +104,7 @@ async function main() {
 
   // ── Demande de confirmation ───────────────────────────────────────────────
   const reponse = await demanderConfirmation(
-    `⚠️  Appliquer les corrections sur ${aReparer.length} transport(s) ? [oui/non] : `
+    `⚠️  Appliquer les corrections sur ${aReparer.length} transport(s) ? [oui/non] : `,
   );
 
   if (reponse !== "oui" && reponse !== "o") {
@@ -114,16 +114,15 @@ async function main() {
 
   // ── Application des corrections ───────────────────────────────────────────
   let corriges = 0;
-  let erreurs  = 0;
+  let erreurs = 0;
 
   for (const t of aReparer) {
     const mobiliteCorrecte = MOBILITE_CORRECTE[t.typeTransport];
     try {
-      await Transport.findByIdAndUpdate(
-        t._id,
-        { $set: { "patient.mobilite": mobiliteCorrecte } }
+      await Transport.findByIdAndUpdate(t._id, { $set: { "patient.mobilite": mobiliteCorrecte } });
+      console.log(
+        `✅ ${t.numero} — ${t.typeTransport} : ${t.patient?.mobilite} → ${mobiliteCorrecte}`,
       );
-      console.log(`✅ ${t.numero} — ${t.typeTransport} : ${t.patient?.mobilite} → ${mobiliteCorrecte}`);
       corriges++;
     } catch (err) {
       console.error(`❌ ${t.numero} — Erreur : ${err.message}`);

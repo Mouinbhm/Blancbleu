@@ -26,7 +26,7 @@
  *   ENCRYPTION_KEY=... MONGO_URI=... node server/scripts/encrypt-medical-fields.js --dry-run
  */
 
-require("dotenv").config();
+require("../config/env");
 const mongoose = require("mongoose");
 const { encrypt } = require("../utils/encryption");
 

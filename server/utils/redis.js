@@ -13,15 +13,22 @@
  *     sans crash grâce à maxRetriesPerRequest:null + enableOfflineQueue:false.
  */
 
-const Redis  = require("ioredis");
+const Redis = require("ioredis");
 const logger = require("./logger");
 
 function makeStub(reason) {
   if (reason) logger.warn(`Redis désactivé : ${reason}`);
   const noop = async () => null;
   return {
-    get: noop, set: noop, del: noop, keys: async () => [], call: noop,
-    on: () => {}, quit: noop, status: "ready", _stub: true,
+    get: noop,
+    set: noop,
+    del: noop,
+    keys: async () => [],
+    call: noop,
+    on: () => {},
+    quit: noop,
+    status: "ready",
+    _stub: true,
   };
 }
 
@@ -34,8 +41,21 @@ function makeClient() {
   const client = new Redis(url, {
     // null = retry indéfiniment sans jamais throw MaxRetriesPerRequestError
     maxRetriesPerRequest: null,
-    // Ne pas buffer les commandes pendant que Redis est down — fail fast
-    enableOfflineQueue: false,
+    // Buffer les commandes émises avant que la connexion soit prête.
+    //
+    // ioredis se connecte de façon ASYNCHRONE : au require-time, plusieurs
+    // modules envoient déjà des commandes — middleware/rateLimiter.js construit
+    // ses RedisStore (express-rate-limit appelle store.init() → SCRIPT LOAD) et
+    // Server.js branche l'adapter Socket.IO (psubscribe). Avec
+    // enableOfflineQueue:false, ces commandes lèvent immédiatement
+    // "Stream isn't writeable and enableOfflineQueue options is false" et le
+    // process meurt au boot — alors que Redis est parfaitement joignable.
+    // En file d'attente, elles partent dès que la connexion est prête.
+    //
+    // La résilience en RUNTIME reste assurée par maxRetriesPerRequest:null +
+    // retryStrategy (reconnexion) et par le wrapper safe() qui avale les
+    // erreurs de cache.
+    enableOfflineQueue: true,
     enableReadyCheck: true,
     lazyConnect: false,
     // Backoff exponentiel sur la reconnexion (max 30s)
@@ -63,14 +83,22 @@ const redis = makeClient();
 
 const safe = async (op, fallback = null) => {
   if (redis._stub) return fallback;
-  try { return await op(); } catch { return fallback; }
+  try {
+    return await op();
+  } catch {
+    return fallback;
+  }
 };
 
 /** Cache wrapper avec TTL (secondes). Renvoie null si miss/échec. */
 async function getJSON(key) {
   const raw = await safe(() => redis.get(key));
   if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 async function setJSON(key, value, ttlSeconds) {

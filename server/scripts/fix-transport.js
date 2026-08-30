@@ -5,7 +5,7 @@
  */
 const mongoose = require("mongoose");
 const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
+require("../config/env");
 
 const Transport = require("../models/Transport");
 const DriverShift = require("../models/DriverShift");

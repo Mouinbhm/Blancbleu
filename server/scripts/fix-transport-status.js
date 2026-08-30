@@ -11,7 +11,7 @@
  *   node server/scripts/fix-transport-status.js
  */
 
-require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
+require("../config/env");
 
 const mongoose = require("mongoose");
 const Transport = require("../models/Transport");
@@ -37,9 +37,7 @@ const TIMESTAMPS_TERRAIN = [
 
 async function main() {
   const uri =
-    process.env.MONGODB_URI ||
-    process.env.MONGO_URI ||
-    "mongodb://localhost:27017/blancbleu";
+    process.env.MONGODB_URI || process.env.MONGO_URI || "mongodb://localhost:27017/blancbleu";
 
   await mongoose.connect(uri);
   console.log(`✔ Connecté à MongoDB : ${uri.replace(/\/\/.*@/, "//***@")}`);
@@ -49,7 +47,9 @@ async function main() {
   debutDemain.setDate(debutDemain.getDate() + 1);
   debutDemain.setHours(0, 0, 0, 0);
 
-  console.log(`\n📅 Recherche des transports en statut terrain avec dateTransport ≥ ${debutDemain.toLocaleDateString("fr-FR")}…`);
+  console.log(
+    `\n📅 Recherche des transports en statut terrain avec dateTransport ≥ ${debutDemain.toLocaleDateString("fr-FR")}…`,
+  );
 
   const transports = await Transport.find({
     statut: { $in: STATUTS_TERRAIN },
@@ -71,7 +71,11 @@ async function main() {
     const statutCible = t.vehicule ? "ASSIGNED" : "SCHEDULED";
     const ancienStatut = t.statut;
     const dateStr = t.dateTransport
-      ? t.dateTransport.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })
+      ? t.dateTransport.toLocaleDateString("fr-FR", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        })
       : "date inconnue";
 
     try {
@@ -106,7 +110,9 @@ async function main() {
       );
 
       corriges.push({ numero: t.numero, de: ancienStatut, vers: statutCible, date: dateStr });
-      console.log(`  ✅ ${t.numero.padEnd(20)} ${ancienStatut.padEnd(26)} → ${statutCible.padEnd(12)} [${dateStr}]`);
+      console.log(
+        `  ✅ ${t.numero.padEnd(20)} ${ancienStatut.padEnd(26)} → ${statutCible.padEnd(12)} [${dateStr}]`,
+      );
     } catch (err) {
       erreurs.push({ numero: t.numero, err: err.message });
       console.error(`  ❌ ${t.numero} — ERREUR : ${err.message}`);

@@ -1,8 +1,17 @@
 /**
+ * NOTE — `create()` et pas `insertMany()` :
+ * insertMany court-circuite les hooks pre("save") de Mongoose. Or plusieurs
+ * modèles y génèrent des champs indispensables : Patient.numeroPatient,
+ * Prescription/Transport/Facture.numero (compteur atomique) et
+ * Vehicle.location (Point GeoJSON alimenté depuis position, indispensable aux
+ * requêtes $near du dispatch IA). Avec insertMany ces champs restent null —
+ * l'index unique rejette le 2e document, et $near ne renvoie aucun véhicule.
+ */
+/**
  * BlancBleu — Seed Transport Sanitaire Non Urgent
  * Données réalistes : dialyse, chimio, RDV médicaux, Nice
  */
-require("dotenv").config();
+require("./config/env");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
@@ -119,7 +128,7 @@ const seed = async () => {
     // ── PERSONNEL MÉTIER ──────────────────────────────────────────────────────
     // users[2] = Faure Nicolas (chauffeur1), users[3] = Laurent Eva (chauffeur2)
     // On crée les fiches Personnel et on les relie aux comptes User via userId.
-    const personnel = await Personnel.insertMany([
+    const personnel = await Personnel.create([
       {
         nom: "Faure",
         prenom: "Nicolas",
@@ -150,7 +159,7 @@ const seed = async () => {
     console.log(`🧑‍⚕️  ${personnel.length} personnels créés`);
 
     // ── VÉHICULES ─────────────────────────────────────────────────────────────
-    const vehicles = await Vehicle.insertMany([
+    const vehicles = await Vehicle.create([
       {
         immatriculation: "AA-001-NI",
         nom: "VSL-01",
@@ -246,9 +255,10 @@ const seed = async () => {
     console.log(`🚐 ${vehicles.length} véhicules créés`);
 
     // ── PATIENTS ──────────────────────────────────────────────────────────────
-    const patients = await Patient.insertMany([
+    const patients = await Patient.create([
       {
-        nom: "Dubois", prenom: "Marcel",
+        nom: "Dubois",
+        prenom: "Marcel",
         dateNaissance: new Date("1945-03-12"),
         telephone: "06 11 22 33 44",
         mobilite: "FAUTEUIL_ROULANT",
@@ -262,7 +272,8 @@ const seed = async () => {
         actif: true,
       },
       {
-        nom: "Ferrero", prenom: "Anna",
+        nom: "Ferrero",
+        prenom: "Anna",
         dateNaissance: new Date("1958-07-22"),
         telephone: "06 22 33 44 55",
         mobilite: "ASSIS",
@@ -275,7 +286,8 @@ const seed = async () => {
         actif: true,
       },
       {
-        nom: "Rosso", prenom: "Pierre",
+        nom: "Rosso",
+        prenom: "Pierre",
         dateNaissance: new Date("1952-11-05"),
         telephone: "06 33 44 55 66",
         mobilite: "ASSIS",
@@ -284,7 +296,8 @@ const seed = async () => {
         actif: true,
       },
       {
-        nom: "Garcia", prenom: "Luis",
+        nom: "Garcia",
+        prenom: "Luis",
         dateNaissance: new Date("1938-04-18"),
         telephone: "06 44 55 66 77",
         mobilite: "ALLONGE",
@@ -297,7 +310,8 @@ const seed = async () => {
         actif: true,
       },
       {
-        nom: "Martin", prenom: "Sophie",
+        nom: "Martin",
+        prenom: "Sophie",
         dateNaissance: new Date("1965-09-30"),
         mobilite: "ASSIS",
         telephone: "06 55 66 77 88",
@@ -306,7 +320,8 @@ const seed = async () => {
         actif: true,
       },
       {
-        nom: "Blanc", prenom: "Thomas",
+        nom: "Blanc",
+        prenom: "Thomas",
         dateNaissance: new Date("1970-02-14"),
         mobilite: "ASSIS",
         telephone: "06 66 77 88 99",
@@ -319,33 +334,54 @@ const seed = async () => {
     console.log(`👤 ${patients.length} patients créés`);
 
     // ── PRESCRIPTIONS ─────────────────────────────────────────────────────────
-    const prescriptions = await Prescription.insertMany([
+    const prescriptions = await Prescription.create([
       {
         patientId: patients[0]._id,
         motif: "Dialyse",
         dateEmission: new Date("2025-01-10"),
         dateExpiration: new Date("2026-12-31"),
-        medecin: { nom: "Martin", prenom: "Jean-Pierre", specialite: "Néphrologie", etablissement: "CHU Pasteur Nice" },
+        medecin: {
+          nom: "Martin",
+          prenom: "Jean-Pierre",
+          specialite: "Néphrologie",
+          etablissement: "CHU Pasteur Nice",
+        },
         statut: "active",
         validee: true,
-        contenuExtrait: { diagnostic: "Insuffisance rénale chronique stade 5", frequence: "3x/semaine" },
+        contenuExtrait: {
+          diagnostic: "Insuffisance rénale chronique stade 5",
+          frequence: "3x/semaine",
+        },
       },
       {
         patientId: patients[1]._id,
         motif: "Chimiothérapie",
         dateEmission: new Date("2025-09-01"),
         dateExpiration: new Date("2026-06-30"),
-        medecin: { nom: "Rossi", prenom: "Marco", specialite: "Oncologie", etablissement: "Hôpital de l'Archet" },
+        medecin: {
+          nom: "Rossi",
+          prenom: "Marco",
+          specialite: "Oncologie",
+          etablissement: "Hôpital de l'Archet",
+        },
         statut: "active",
         validee: true,
-        contenuExtrait: { diagnostic: "Cancer du sein — protocole AC", frequence: "Toutes les 3 semaines" },
+        contenuExtrait: {
+          diagnostic: "Cancer du sein — protocole AC",
+          frequence: "Toutes les 3 semaines",
+        },
       },
       {
         patientId: patients[2]._id,
         motif: "Consultation",
         dateEmission: new Date("2026-03-15"),
         dateExpiration: new Date("2026-09-15"),
-        medecin: { nom: "Bernard", prenom: "Claire", specialite: "Cardiologie", etablissement: "Clinique du Parc Impérial" },
+        medecin: {
+          nom: "Bernard",
+          prenom: "Claire",
+          specialite: "Cardiologie",
+          etablissement: "Clinique du Parc Impérial",
+        },
         statut: "active",
         validee: true,
       },
@@ -353,7 +389,12 @@ const seed = async () => {
         patientId: patients[3]._id,
         motif: "Hospitalisation",
         dateEmission: new Date("2026-04-20"),
-        medecin: { nom: "Moreau", prenom: "Paul", specialite: "Cardiologie", etablissement: "CHU Pasteur Nice" },
+        medecin: {
+          nom: "Moreau",
+          prenom: "Paul",
+          specialite: "Cardiologie",
+          etablissement: "CHU Pasteur Nice",
+        },
         statut: "en_attente_validation",
         validee: false,
       },
@@ -362,7 +403,12 @@ const seed = async () => {
         motif: "Radiothérapie",
         dateEmission: new Date("2025-11-01"),
         dateExpiration: new Date("2026-07-31"),
-        medecin: { nom: "Dupuis", prenom: "Henri", specialite: "Radiothérapie", etablissement: "Hôpital de l'Archet" },
+        medecin: {
+          nom: "Dupuis",
+          prenom: "Henri",
+          specialite: "Radiothérapie",
+          etablissement: "Hôpital de l'Archet",
+        },
         statut: "active",
         validee: true,
         contenuExtrait: { diagnostic: "Cancer de la prostate", nbSeances: 25, seanceActuelle: 12 },
@@ -377,7 +423,7 @@ const seed = async () => {
     const apres_demain = new Date();
     apres_demain.setDate(apres_demain.getDate() + 2);
 
-    const transports = await Transport.insertMany([
+    const transports = await Transport.create([
       // 1. Dialyse récurrente — patient en fauteuil
       {
         patientId: patients[0]._id,

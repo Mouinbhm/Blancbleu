@@ -16,7 +16,7 @@
  *   NODE_ENV=production node server/scripts/migrate-chauffeur-ref.js --dry-run
  */
 
-require("dotenv").config();
+require("../config/env");
 const mongoose = require("mongoose");
 const Transport = require("../models/Transport");
 const Personnel = require("../models/Personnel");
@@ -26,7 +26,9 @@ const DRY_RUN = process.argv.includes("--dry-run");
 
 async function run() {
   await mongoose.connect(process.env.MONGO_URI || "mongodb://localhost:27017/blancbleu");
-  console.log(`\n🔗 Connecté à MongoDB — mode : ${DRY_RUN ? "DRY RUN (aucune écriture)" : "ÉCRITURE RÉELLE"}\n`);
+  console.log(
+    `\n🔗 Connecté à MongoDB — mode : ${DRY_RUN ? "DRY RUN (aucune écriture)" : "ÉCRITURE RÉELLE"}\n`,
+  );
 
   const transports = await Transport.find({
     chauffeur: { $ne: null },
@@ -46,7 +48,9 @@ async function run() {
     // 1. Vérifier si l'ID pointe déjà vers un Personnel
     const personnelExistant = await Personnel.findById(chauffeurId).select("_id nom prenom role");
     if (personnelExistant) {
-      console.log(`  ✅ [${t.numero}] déjà Personnel : ${personnelExistant.nom} ${personnelExistant.prenom} (${personnelExistant.role})`);
+      console.log(
+        `  ✅ [${t.numero}] déjà Personnel : ${personnelExistant.nom} ${personnelExistant.prenom} (${personnelExistant.role})`,
+      );
       deja_personnel++;
       ok++;
       continue;
@@ -56,9 +60,13 @@ async function run() {
     const user = await User.findById(chauffeurId).select("_id nom prenom email");
     if (user) {
       // Chercher le Personnel lié via userId
-      const personnelLie = await Personnel.findOne({ userId: chauffeurId }).select("_id nom prenom role");
+      const personnelLie = await Personnel.findOne({ userId: chauffeurId }).select(
+        "_id nom prenom role",
+      );
       if (personnelLie) {
-        console.log(`  🔄 [${t.numero}] User "${user.email}" → Personnel "${personnelLie.nom} ${personnelLie.prenom}" (${personnelLie.role})`);
+        console.log(
+          `  🔄 [${t.numero}] User "${user.email}" → Personnel "${personnelLie.nom} ${personnelLie.prenom}" (${personnelLie.role})`,
+        );
         if (!DRY_RUN) {
           await Transport.findByIdAndUpdate(t._id, { chauffeur: personnelLie._id });
         }
@@ -73,7 +81,9 @@ async function run() {
         }).select("_id nom prenom role");
 
         if (personnelParNom) {
-          console.log(`  🔄 [${t.numero}] User "${user.email}" → Personnel (nom match) "${personnelParNom.nom} ${personnelParNom.prenom}"`);
+          console.log(
+            `  🔄 [${t.numero}] User "${user.email}" → Personnel (nom match) "${personnelParNom.nom} ${personnelParNom.prenom}"`,
+          );
           if (!DRY_RUN) {
             await Transport.findByIdAndUpdate(t._id, { chauffeur: personnelParNom._id });
             // Lier aussi le userId pour les prochaines fois
@@ -82,7 +92,9 @@ async function run() {
           migrated++;
           ok++;
         } else {
-          console.log(`  ⚠️  [${t.numero}] User "${user.email}" sans Personnel correspondant → chauffeur mis à null`);
+          console.log(
+            `  ⚠️  [${t.numero}] User "${user.email}" sans Personnel correspondant → chauffeur mis à null`,
+          );
           if (!DRY_RUN) {
             await Transport.findByIdAndUpdate(t._id, { chauffeur: null });
           }
@@ -90,7 +102,9 @@ async function run() {
         }
       }
     } else {
-      console.log(`  ❓ [${t.numero}] chauffeur ID ${chauffeurId} introuvable dans User ET Personnel → mis à null`);
+      console.log(
+        `  ❓ [${t.numero}] chauffeur ID ${chauffeurId} introuvable dans User ET Personnel → mis à null`,
+      );
       if (!DRY_RUN) {
         await Transport.findByIdAndUpdate(t._id, { chauffeur: null });
       }

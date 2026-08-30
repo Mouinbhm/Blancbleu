@@ -7,7 +7,7 @@ const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
 const cookieLib = require("cookie");
 const { Server } = require("socket.io");
-require("dotenv").config();
+require("./config/env");
 
 // Sentry — init tout en haut, avant les imports des middlewares qui peuvent
 // throw au require-time. No-op si SENTRY_DSN n'est pas défini.

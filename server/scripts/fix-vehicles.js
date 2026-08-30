@@ -7,7 +7,7 @@
  * Idempotent : sans effet de bord si relancé plusieurs fois.
  */
 
-require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
+require("../config/env");
 
 const mongoose = require("mongoose");
 const Vehicle = require("../models/Vehicle");
@@ -23,11 +23,7 @@ const STATUTS_ACTIFS = new Set([
 ]);
 
 // Statuts où le transport est terminé → libérer le véhicule
-const STATUTS_TERMINES = new Set([
-  "COMPLETED",
-  "CANCELLED",
-  "NO_SHOW",
-]);
+const STATUTS_TERMINES = new Set(["COMPLETED", "CANCELLED", "NO_SHOW"]);
 
 async function liberer(vehiculeId) {
   await Vehicle.findByIdAndUpdate(vehiculeId, {
@@ -48,7 +44,7 @@ async function main() {
   const vehicules = await Vehicle.find({ statut: "En service", deletedAt: null });
 
   if (vehicules.length === 0) {
-    console.log("ℹ️  Aucun véhicule en statut \"En service\" trouvé.");
+    console.log('ℹ️  Aucun véhicule en statut "En service" trouvé.');
     return;
   }
 

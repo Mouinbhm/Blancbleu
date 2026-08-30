@@ -5,7 +5,7 @@
  * Usage : node server/scripts/geocode-existing-transports.js
  */
 
-require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") });
+require("../config/env");
 const mongoose = require("mongoose");
 const Transport = require("../models/Transport");
 const { geocodeTransport } = require("../utils/geocodeUtils");
@@ -28,22 +28,26 @@ async function run() {
 
   for (const t of transports) {
     const manqueDepart = !t.adresseDepart?.coordonnees?.lat;
-    const manqueDest   = !t.adresseDestination?.coordonnees?.lat;
+    const manqueDest = !t.adresseDestination?.coordonnees?.lat;
 
     try {
       const [geoD, geoDest] = await geocodeTransport(
         manqueDepart ? t.adresseDepart : null,
-        manqueDest   ? t.adresseDestination : null,
+        manqueDest ? t.adresseDestination : null,
       );
 
       const update = {};
       if (manqueDepart && geoD) {
         update["adresseDepart.coordonnees"] = { lat: geoD.lat, lng: geoD.lng };
-        console.log(`  ✓ ${t.numero} départ  → ${geoD.lat}, ${geoD.lng} (score ${geoD.score?.toFixed(2)})`);
+        console.log(
+          `  ✓ ${t.numero} départ  → ${geoD.lat}, ${geoD.lng} (score ${geoD.score?.toFixed(2)})`,
+        );
       }
       if (manqueDest && geoDest) {
         update["adresseDestination.coordonnees"] = { lat: geoDest.lat, lng: geoDest.lng };
-        console.log(`  ✓ ${t.numero} dest    → ${geoDest.lat}, ${geoDest.lng} (score ${geoDest.score?.toFixed(2)})`);
+        console.log(
+          `  ✓ ${t.numero} dest    → ${geoDest.lat}, ${geoDest.lng} (score ${geoDest.score?.toFixed(2)})`,
+        );
       }
 
       if (Object.keys(update).length) {

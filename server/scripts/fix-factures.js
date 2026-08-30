@@ -10,7 +10,7 @@
  * Idempotent : sans effet de bord si relancé plusieurs fois.
  */
 
-require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
+require("../config/env");
 
 const mongoose = require("mongoose");
 const Facture = require("../models/Facture");
@@ -73,9 +73,8 @@ async function main() {
       }
     }
 
-    const montantBase = Math.round(
-      (tarif.bareme.forfait + tarif.bareme.prixKm * tarif.distanceFacturee) * 100,
-    ) / 100;
+    const montantBase =
+      Math.round((tarif.bareme.forfait + tarif.bareme.prixKm * tarif.distanceFacturee) * 100) / 100;
     const majoration = tarif.supplements ?? 0;
     const tauxPriseEnCharge = tarif.tauxPriseEnCharge ?? facture.tauxPriseEnCharge ?? 65;
     const montantTotal = Math.round((montantBase + majoration) * 100) / 100;
@@ -124,7 +123,9 @@ async function main() {
   if (DRY_RUN) {
     console.log(`${CYAN}DRY-RUN terminé : ${ok} facture(s) seraient corrigées${RESET}`);
   } else {
-    console.log(`${GREEN}Terminé : ${ok} corrigée(s)${RESET}${erreurs ? `, ${RED}${erreurs} erreur(s)${RESET}` : ""}`);
+    console.log(
+      `${GREEN}Terminé : ${ok} corrigée(s)${RESET}${erreurs ? `, ${RED}${erreurs} erreur(s)${RESET}` : ""}`,
+    );
   }
 
   await mongoose.disconnect();

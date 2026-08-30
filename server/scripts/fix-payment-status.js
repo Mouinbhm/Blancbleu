@@ -8,23 +8,23 @@
  *   node server/scripts/fix-payment-status.js [--dry-run]
  */
 
-require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
+require("../config/env");
 
 const mongoose = require("mongoose");
-const Facture   = require("../models/Facture");
+const Facture = require("../models/Facture");
 
 const DRY_RUN = process.argv.includes("--dry-run");
 
 const STATUT_TO_PAYMENT = {
-  payee:                     "SUCCEEDED",
-  payment_failed:            "FAILED",
-  remboursee:                "REFUNDED",
-  partiellement_remboursee:  "PARTIALLY_REFUNDED",
-  annulee:                   "UNPAID",
-  brouillon:                 "UNPAID",
-  emise:                     "UNPAID",
-  en_attente:                "PENDING",
-  en_retard:                 "PENDING",
+  payee: "SUCCEEDED",
+  payment_failed: "FAILED",
+  remboursee: "REFUNDED",
+  partiellement_remboursee: "PARTIALLY_REFUNDED",
+  annulee: "UNPAID",
+  brouillon: "UNPAID",
+  emise: "UNPAID",
+  en_attente: "PENDING",
+  en_retard: "PENDING",
 };
 
 async function run() {
@@ -44,9 +44,13 @@ async function run() {
       continue;
     }
 
-    console.log(`\n⚠  ${mismatched.length} facture(s) avec statut="${statut}" mais paymentStatus≠"${expectedPaymentStatus}" :`);
+    console.log(
+      `\n⚠  ${mismatched.length} facture(s) avec statut="${statut}" mais paymentStatus≠"${expectedPaymentStatus}" :`,
+    );
     mismatched.forEach((f) => {
-      console.log(`   ${f.numero || f._id}  montantTotal=${f.montantTotal}  paymentStatus actuel="${f.paymentStatus}"`);
+      console.log(
+        `   ${f.numero || f._id}  montantTotal=${f.montantTotal}  paymentStatus actuel="${f.paymentStatus}"`,
+      );
     });
 
     if (!DRY_RUN) {
@@ -80,7 +84,9 @@ async function run() {
     }
   }
 
-  console.log(`\n${ DRY_RUN ? "[DRY-RUN]" : "RÉSULTAT"} : ${totalFixed} facture(s) corrigée(s) au total`);
+  console.log(
+    `\n${DRY_RUN ? "[DRY-RUN]" : "RÉSULTAT"} : ${totalFixed} facture(s) corrigée(s) au total`,
+  );
   await mongoose.disconnect();
 }
 

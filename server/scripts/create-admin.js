@@ -1,6 +1,4 @@
-
-
-require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
+require("../config/env");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
@@ -19,9 +17,7 @@ if (!MONGO_URI) {
   process.exit(1);
 }
 if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
-  console.error(
-    "❌ ADMIN_EMAIL et ADMIN_PASSWORD doivent être définis dans .env",
-  );
+  console.error("❌ ADMIN_EMAIL et ADMIN_PASSWORD doivent être définis dans .env");
   console.error("   Exemple : ADMIN_EMAIL=admin@blancbleu.fr");
   console.error("             ADMIN_PASSWORD=MonMotDePasse123!");
   process.exit(1);
@@ -67,9 +63,7 @@ async function run() {
     console.log(`   Nom      : ${ADMIN_PRENOM} ${ADMIN_NOM}`);
     console.log(`   Rôle     : admin`);
     console.log("");
-    console.log(
-      "⚠️  Retirez ADMIN_PASSWORD de votre .env après cette opération.",
-    );
+    console.log("⚠️  Retirez ADMIN_PASSWORD de votre .env après cette opération.");
   }
 
   await mongoose.disconnect();

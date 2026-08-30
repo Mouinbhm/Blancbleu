@@ -18,7 +18,7 @@
  *   MONGO_URI=mongodb+srv://...
  */
 
-require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
+require("../config/env");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 

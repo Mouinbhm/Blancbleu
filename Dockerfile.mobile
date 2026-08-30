@@ -1,0 +1,93 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# BlancBleu — Image de BUILD des apps Flutter (driver / patient)
+#
+# Produit des APK/AAB reproductibles, identiques en local et en CI. Ce n'est
+# PAS une image d'exécution : un APK a besoin d'un runtime Android (appareil ou
+# émulateur), pas d'un conteneur Linux. Cf. docs/mobile-build.md.
+#
+# Pourquoi cette image existe :
+#   - la version de Flutter est épinglée (celle de .github/workflows/mobile.yml),
+#     alors qu'un Flutter local plus récent casse le build ;
+#   - le JDK et le SDK Android sont fixes pour les DEUX apps, ce qui supprime
+#     les écarts de poste à poste (ex. chemins JDK absolus).
+#
+# Base Debian + SDK installés explicitement : pas de dépendance à une image
+# Flutter tierce (et pas de pull ghcr.io, qui échoue si une identité périmée
+# traîne dans ~/.docker/config.json).
+#
+# Usage (depuis la racine du repo) :
+#   docker build -f Dockerfile.mobile -t blancbleu-mobile .
+#   ./scripts/mobile-build.sh driver dev debug
+#
+# Ou directement — les 2 volumes nommés sont IMPORTANTS : sans eux, chaque run
+# retélécharge tout le cache Gradle/pub (~10 min au lieu de ~1 min) :
+#   docker run --rm \
+#     -v "$PWD:/repo" \
+#     -v blancbleu-gradle:/opt/gradle-cache \
+#     -v blancbleu-pub:/opt/pub-cache \
+#     blancbleu-mobile driver dev debug
+#
+# L'APK atterrit dans <app>/build/app/outputs/flutter-apk/ sur l'hôte.
+# ══════════════════════════════════════════════════════════════════════════════
+FROM debian:bookworm-slim
+
+# Versions épinglées — FLUTTER_VERSION doit rester alignée sur le workflow CI.
+ARG FLUTTER_VERSION=3.16.9
+ARG ANDROID_CMDLINE_TOOLS=11076708
+ARG BUILD_TOOLS=34.0.0
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    ANDROID_SDK_ROOT=/opt/android-sdk \
+    FLUTTER_HOME=/opt/flutter \
+    GRADLE_USER_HOME=/opt/gradle-cache \
+    PUB_CACHE=/opt/pub-cache
+
+# AGP 8.1 exige un JDK 17 pour la JVM Gradle.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      openjdk-17-jdk-headless \
+      curl git unzip xz-utils ca-certificates \
+      libglu1-mesa \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
+# ── Flutter SDK (version épinglée) ───────────────────────────────────────────
+RUN curl -fsSL -o /tmp/flutter.tar.xz \
+      "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
+    && tar -xJf /tmp/flutter.tar.xz -C /opt \
+    && rm /tmp/flutter.tar.xz
+
+# ── Android SDK (cmdline-tools + plateformes) ────────────────────────────────
+# 34 pour driver, 35 pour patient : les deux apps ne ciblent pas le même niveau.
+RUN mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools" \
+    && curl -fsSL -o /tmp/tools.zip \
+      "https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_CMDLINE_TOOLS}_latest.zip" \
+    && unzip -q /tmp/tools.zip -d "${ANDROID_SDK_ROOT}/cmdline-tools" \
+    && mv "${ANDROID_SDK_ROOT}/cmdline-tools/cmdline-tools" "${ANDROID_SDK_ROOT}/cmdline-tools/latest" \
+    && rm /tmp/tools.zip
+
+ENV PATH="${JAVA_HOME}/bin:${FLUTTER_HOME}/bin:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${PATH}"
+
+RUN yes | sdkmanager --licenses > /dev/null 2>&1 || true \
+    && sdkmanager --install \
+        "platforms;android-34" \
+        "platforms;android-35" \
+        "build-tools;${BUILD_TOOLS}" \
+        "platform-tools" > /dev/null
+
+# Le repo est monté en volume : Flutter refuse d'opérer sur un dépôt git dont
+# le propriétaire diffère (dubious ownership) — on l'autorise explicitement.
+RUN git config --global --add safe.directory '*' \
+    && flutter config --no-analytics --android-sdk "${ANDROID_SDK_ROOT}" \
+    && flutter precache --android \
+    && chmod -R a+rw "${FLUTTER_HOME}"
+
+# Le repo est monté sur /repo au run — rien n'est copié dans l'image, pour que
+# le build porte toujours sur les sources courantes de l'hôte.
+WORKDIR /repo
+
+COPY scripts/docker-build-mobile.sh /usr/local/bin/build-mobile
+RUN chmod +x /usr/local/bin/build-mobile
+
+ENTRYPOINT ["/usr/local/bin/build-mobile"]
+CMD ["driver", "dev", "debug"]

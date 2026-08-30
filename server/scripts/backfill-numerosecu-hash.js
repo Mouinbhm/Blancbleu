@@ -9,7 +9,7 @@
  *   ENCRYPTION_KEY=... MONGO_URI=... node server/scripts/backfill-numerosecu-hash.js
  */
 
-require("dotenv").config();
+require("../config/env");
 const mongoose = require("mongoose");
 
 async function run() {
@@ -31,7 +31,10 @@ async function run() {
   for await (const patient of cursor) {
     // Le hook post('init') a déjà déchiffré patient.numeroSecu en clair
     const plainText = patient.numeroSecu;
-    if (!plainText) { ignorés++; continue; }
+    if (!plainText) {
+      ignorés++;
+      continue;
+    }
 
     const hash = hashDeterministic(plainText);
     await Patient.updateOne({ _id: patient._id }, { $set: { numeroSecuHash: hash } });
@@ -42,7 +45,9 @@ async function run() {
     }
   }
 
-  console.log(`Backfill terminé — ${traités} patient(s) mis à jour, ${ignorés} ignoré(s) (numeroSecu vide).`);
+  console.log(
+    `Backfill terminé — ${traités} patient(s) mis à jour, ${ignorés} ignoré(s) (numeroSecu vide).`,
+  );
   await mongoose.disconnect();
 }
 

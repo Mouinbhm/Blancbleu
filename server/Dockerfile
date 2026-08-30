@@ -35,4 +35,8 @@ EXPOSE 5000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
   CMD wget -qO- http://localhost:5000/api/health || exit 1
 
+# Seed au premier démarrage (idempotent) puis lancement du CMD.
+# Le fichier est déjà présent via le COPY du code source ; on s'assure juste
+# qu'il est exécutable, y compris si le dépôt a été cloné sous Windows.
+ENTRYPOINT ["/bin/sh", "/app/docker-entrypoint.sh"]
 CMD ["node", "Server.js"]

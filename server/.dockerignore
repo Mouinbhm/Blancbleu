@@ -40,7 +40,12 @@ docker-compose*.yml
 # Docs
 *.md
 !README.md
+# docs/ contient de la DOC (openapi.json) mais aussi du CODE D'EXÉCUTION :
+# middleware/swagger.js fait require("../docs/openapi-components"). L'exclure
+# entièrement fait crasher le serveur au boot (MODULE_NOT_FOUND) dans l'image,
+# alors que tout va bien en local — d'où la réinclusion des .js.
 docs/
+!docs/*.js
 
 # OS
 .DS_Store

@@ -1,2 +1,11 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Les scripts shell DOIVENT rester en LF, même sur un poste Windows :
+# `core.autocrlf=true` les checkout en CRLF et bash échoue alors sur
+# "bad interpreter: /usr/bin/env bash^M". Idem pour les fichiers consommés
+# par des images Linux.
+*.sh            text eol=lf
+Dockerfile*     text eol=lf
+*.yml           text eol=lf
+gradlew         text eol=lf

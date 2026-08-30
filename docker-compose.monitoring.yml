@@ -27,7 +27,7 @@ services:
       - ./monitoring/metrics_token:/etc/prometheus/metrics_token:ro
       - prometheus_data:/prometheus
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9090}:9090"
     networks:
       - blancbleu-net
     depends_on:
@@ -48,7 +48,7 @@ services:
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     ports:
-      - "3001:3000"
+      - "${GRAFANA_PORT:-3001}:3000"
     networks:
       - blancbleu-net
     depends_on:
@@ -64,7 +64,7 @@ services:
     volumes:
       - /:/host:ro,rslave
     ports:
-      - "9100:9100"
+      - "${NODE_EXPORTER_PORT:-9100}:9100"
     networks:
       - blancbleu-net
 

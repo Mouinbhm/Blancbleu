@@ -17,7 +17,7 @@
  * pre('save') synchronise position -> location GeoJSON.
  */
 
-require("dotenv").config();
+require("../config/env");
 const mongoose = require("mongoose");
 const Vehicle = require("../models/Vehicle");
 
@@ -26,10 +26,10 @@ const NICE_POSITIONS = [
   { lat: 43.7034, lng: 7.2663, adresse: "Madeleine, Nice" },
   { lat: 43.6961, lng: 7.2761, adresse: "CHU Pasteur, Nice" },
   { lat: 43.7185, lng: 7.2496, adresse: "Magnan, Nice" },
-  { lat: 43.7253, lng: 7.2730, adresse: "Cimiez, Nice" },
+  { lat: 43.7253, lng: 7.273, adresse: "Cimiez, Nice" },
   { lat: 43.7038, lng: 7.2868, adresse: "Saint-Roch, Nice" },
-  { lat: 43.7000, lng: 7.2935, adresse: "Riquier, Nice" },
-  { lat: 43.6960, lng: 7.2752, adresse: "Vieux-Nice" },
+  { lat: 43.7, lng: 7.2935, adresse: "Riquier, Nice" },
+  { lat: 43.696, lng: 7.2752, adresse: "Vieux-Nice" },
   { lat: 43.6584, lng: 7.2156, adresse: "Aéroport Nice" },
 ];
 

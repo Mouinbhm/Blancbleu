@@ -3,8 +3,14 @@
 # ══════════════════════════════════════════════════════════════════════════════
 FROM python:3.11-slim AS builder
 
+# PIP_DEFAULT_TIMEOUT / PIP_RETRIES : les wheels lourdes (ortools ~100 Mo,
+# scipy, xgboost, matplotlib) font régulièrement expirer le timeout par défaut
+# de pip (15 s) sur une connexion lente → ReadTimeoutError en plein build.
+# PIP_NO_CACHE_DIR est volontairement ABSENT : on monte un cache BuildKit
+# ci-dessous, pour qu'un retry reparte des wheels déjà téléchargées.
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1 \
+    PIP_DEFAULT_TIMEOUT=180 \
+    PIP_RETRIES=10 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
@@ -20,7 +26,16 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /build
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt && \
+
+# Cache BuildKit : les wheels déjà téléchargées survivent aux rebuilds et aux
+# retries après un timeout réseau — on ne repart pas de zéro.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install -r requirements.txt
+
+# Étape séparée : si le téléchargement du modèle spaCy échoue (réseau), le
+# `pip install` ci-dessus reste en cache et n'est pas rejoué.
+RUN --mount=type=cache,target=/root/.cache/pip \
     python -m spacy download fr_core_news_sm
 
 

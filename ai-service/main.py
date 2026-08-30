@@ -29,10 +29,20 @@ from routes.routing   import router as routing_router
 from routes.optimizer import router as optimizer_router
 from utils.auth import require_service_token
 
-# Charge ai-service/.env en dev local (hors Docker). override=False : les
-# variables deja presentes dans l'environnement reel gardent la priorite,
-# donc en Docker les valeurs de docker-compose.yml ne sont jamais ecrasees.
-load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
+# Variables d'environnement — meme regle que cote Node (server/config/env.js) :
+# le .env de la RACINE du depot est la source de verite (c'est celui que lit
+# docker compose) ; ai-service/.env ne sert que pour des surcharges locales.
+#
+# Priorite (du plus fort au plus faible) :
+#   1. environnement reel du process (docker compose)
+#   2. ai-service/.env               (surcharges locales, optionnel)
+#   3. <racine>/.env                 (source de verite, partagee)
+#
+# override=False garantit qu'on ne remplace jamais une valeur deja presente :
+# charger le local avant la racine suffit a obtenir cet ordre.
+_AI_DIR = Path(__file__).resolve().parent
+load_dotenv(_AI_DIR / ".env", override=False)
+load_dotenv(_AI_DIR.parent / ".env", override=False)
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(

@@ -45,6 +45,9 @@ android {
     ndkVersion flutter.ndkVersion
 
     compileOptions {
+        // flutter_local_notifications exige le desugaring des APIs java.time
+        // (zoned scheduling) pour rester compatible minSdk 21.
+        coreLibraryDesugaringEnabled true
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
@@ -116,4 +119,6 @@ flutter {
     source '../..'
 }
 
-dependencies {}
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
+}

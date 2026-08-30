@@ -39,6 +39,9 @@ services:
       LOG_LEVEL: warn
       NODE_ENV: production
       SWAGGER_IN_PROD: "false"
+      # seed.js VIDE les collections avant d'insérer : jamais d'exécution
+      # automatique en production, même si la base paraît vide.
+      AUTO_SEED: "false"
     logging: *default-logging
     deploy:
       resources:

@@ -16,7 +16,7 @@
  *   MONGO_URI=mongodb://...
  */
 
-require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
+require("../config/env");
 const mongoose = require("mongoose");
 
 async function run() {
@@ -39,10 +39,7 @@ async function run() {
 
   // ── 2. Supprimer l'ancien index unique sur email seul ──────────────────────
   const oldIndex = indexes.find(
-    (idx) =>
-      idx.key.email === 1 &&
-      Object.keys(idx.key).length === 1 &&
-      idx.unique === true,
+    (idx) => idx.key.email === 1 && Object.keys(idx.key).length === 1 && idx.unique === true,
   );
 
   if (oldIndex) {
@@ -54,9 +51,7 @@ async function run() {
   }
 
   // ── 3. Créer le nouvel index composé (email + role) ────────────────────────
-  const existingCompound = indexes.find(
-    (idx) => idx.key.email === 1 && idx.key.role === 1,
-  );
+  const existingCompound = indexes.find((idx) => idx.key.email === 1 && idx.key.role === 1);
 
   if (existingCompound) {
     console.log("ℹ️  Index composé email+role déjà présent — rien à créer.");
