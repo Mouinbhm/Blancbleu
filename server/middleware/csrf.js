@@ -19,6 +19,7 @@
  */
 
 const { doubleCsrf } = require("csrf-csrf");
+const jwt = require("jsonwebtoken");
 const logger = require("../utils/logger");
 
 const ENABLED =
@@ -35,9 +36,31 @@ const CSRF_SECRET =
 
 const { generateCsrfToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsrf({
   getSecret: () => CSRF_SECRET,
-  // Lie le token à la session (cookie d'accès). Un token généré pour une
-  // session ne vaut pas pour une autre.
-  getSessionIdentifier: (req) => req.cookies?.bb_access || req.ip || "anon",
+  // Lie le token à la session — mais à l'ID utilisateur porté par l'access
+  // token, PAS à la valeur brute du cookie bb_access.
+  //
+  // bb_access tourne à chaque refresh (TTL 15 min) et change à la connexion :
+  // l'utiliser comme identifiant invalidait le token CSRF mis en cache par le
+  // SPA à chaque rotation, et toutes les requêtes mutantes repartaient en
+  // 403 EBADCSRFTOKEN (cf. POST /api/auth/users/:id/reset-password). L'ID
+  // utilisateur, lui, est stable sur toute la durée de la session.
+  //
+  // jwt.decode sans vérification suffit : cet identifiant n'est qu'une entrée
+  // du HMAC CSRF, l'authentification réelle est faite par `protect`. Un JWT
+  // forgé ne donne rien à un attaquant — il lui faudrait en plus la valeur du
+  // cookie bb_csrf, httpOnly et illisible cross-origin.
+  getSessionIdentifier: (req) => {
+    const raw = req.cookies?.bb_access;
+    if (raw) {
+      try {
+        const id = jwt.decode(raw)?.id;
+        if (id) return String(id);
+      } catch {
+        // Token illisible — on retombe sur l'IP.
+      }
+    }
+    return req.ip || "anon";
+  },
   cookieName: isProd ? "__Host-bb_csrf" : "bb_csrf",
   cookieOptions: {
     httpOnly: true,

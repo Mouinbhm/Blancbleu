@@ -86,3 +86,58 @@ describe("CSRF — désactivé", () => {
     expect(res.status).toBe(200);
   });
 });
+
+/**
+ * Régression : le token CSRF est lié à l'IDENTITÉ de la session (ID utilisateur),
+ * pas à la valeur brute du cookie bb_access.
+ *
+ * Ce cookie tourne à chaque refresh (TTL 15 min) : le lier tel quel invalidait
+ * le token mis en cache par le SPA et renvoyait 403 EBADCSRFTOKEN sur toutes
+ * les requêtes mutantes après rotation (POST /auth/users/:id/reset-password).
+ */
+describe("CSRF — liaison à la session", () => {
+  const jwt = require("jsonwebtoken");
+  // decode() ne vérifie pas la signature : le secret importe peu ici.
+  const sign = (id, jti) => jwt.sign({ id, jti }, "secret-de-test-sans-importance");
+
+  const USER_A = "6a959aadde757ad84e0d8577";
+  const USER_B = "6a95a1e14e8731e0f99e75f9";
+
+  // On gère le cookie à la main : request.agent() tient son propre pot de
+  // cookies et entre en conflit avec un header Cookie explicite.
+  const bbCsrfFrom = (res) =>
+    res.headers["set-cookie"].find((c) => c.startsWith("bb_csrf=")).split(";")[0];
+
+  async function tokenFor(app, accessToken) {
+    const res = await request(app).get("/api/csrf-token").set("Cookie", `bb_access=${accessToken}`);
+    return { token: res.body.csrfToken, csrfCookie: bbCsrfFrom(res) };
+  }
+
+  test("le token survit à la rotation du cookie bb_access (même utilisateur)", async () => {
+    const { app } = buildApp({ NODE_ENV: "test", CSRF_ENABLED: "true" });
+    const { token, csrfCookie } = await tokenFor(app, sign(USER_A, "avant-refresh"));
+
+    // Même utilisateur, access token renouvelé → le token CSRF reste valide.
+    const res = await request(app)
+      .post("/api/transports")
+      .set("Cookie", `${csrfCookie}; bb_access=${sign(USER_A, "apres-refresh")}`)
+      .set("X-CSRF-Token", token)
+      .send({ foo: "bar" });
+
+    expect(res.status).toBe(200);
+  });
+
+  test("le token d'un utilisateur ne vaut pas pour un autre → 403", async () => {
+    const { app } = buildApp({ NODE_ENV: "test", CSRF_ENABLED: "true" });
+    const { token, csrfCookie } = await tokenFor(app, sign(USER_A, "a"));
+
+    const res = await request(app)
+      .post("/api/transports")
+      .set("Cookie", `${csrfCookie}; bb_access=${sign(USER_B, "b")}`)
+      .set("X-CSRF-Token", token)
+      .send({ foo: "bar" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("EBADCSRFTOKEN");
+  });
+});

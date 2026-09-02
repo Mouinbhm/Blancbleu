@@ -4,7 +4,7 @@
  * Un patient peut avoir plusieurs transports, prescriptions et factures.
  */
 const mongoose = require("mongoose");
-const Counter = require("./Counter");
+const { nextNumero } = require("../utils/sequence");
 const { encrypt, decrypt } = require("../utils/encryption");
 const { hashDeterministic } = require("../utils/hashing");
 
@@ -178,12 +178,12 @@ patientSchema.post("init", function (doc) {
 patientSchema.pre("save", async function (next) {
   if (!this.numeroPatient) {
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const counter = await Counter.findOneAndUpdate(
-      { _id: "patient" },
-      { $inc: { seq: 1 } },
-      { upsert: true, new: true },
-    );
-    this.numeroPatient = `PAT-${date}-${String(counter.seq).padStart(4, "0")}`;
+    this.numeroPatient = await nextNumero(this.constructor, {
+      counterId: "patient",
+      prefix: "PAT-",
+      field: "numeroPatient",
+      build: (seq) => `PAT-${date}-${String(seq).padStart(4, "0")}`,
+    });
   }
   next();
 });

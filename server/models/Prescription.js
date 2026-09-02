@@ -4,7 +4,7 @@
  * Une prescription peut couvrir plusieurs transports (ex: dialyse hebdomadaire).
  */
 const mongoose = require("mongoose");
-const Counter = require("./Counter");
+const { nextNumero } = require("../utils/sequence");
 const { encrypt, decrypt } = require("../utils/encryption");
 
 const medecinSchema = new mongoose.Schema(
@@ -185,12 +185,11 @@ prescriptionSchema.index({ "validation.statut": 1 });
 prescriptionSchema.pre("save", async function (next) {
   if (!this.numero) {
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const counter = await Counter.findOneAndUpdate(
-      { _id: "prescription" },
-      { $inc: { seq: 1 } },
-      { upsert: true, new: true },
-    );
-    this.numero = `PMT-${date}-${String(counter.seq).padStart(4, "0")}`;
+    this.numero = await nextNumero(this.constructor, {
+      counterId: "prescription",
+      prefix: "PMT-",
+      build: (seq) => `PMT-${date}-${String(seq).padStart(4, "0")}`,
+    });
   }
   next();
 });

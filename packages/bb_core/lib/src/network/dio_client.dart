@@ -32,7 +32,7 @@ class DioClient {
 
   // Single-flight refresh : un seul appel /refresh à la fois, les autres
   // requêtes en 401 attendent ce Completer.
-  Completer<bool>? _refreshCompleter;
+  Completer<_RefreshOutcome>? _refreshCompleter;
 
   /// Marker dans RequestOptions.extra pour éviter de retry indéfiniment.
   static const String _retriedKey = '_bb_retried';
@@ -110,8 +110,18 @@ class DioClient {
           return handler.reject(err.copyWith(error: mapDioError(err)));
         }
 
-        final ok = await _ensureRefreshed();
-        if (!ok) {
+        final outcome = await _ensureRefreshed();
+
+        // Un refresh qui échoue pour cause de réseau (timeout, pas de
+        // connectivité, 5xx) ne dit RIEN sur la validité de la session : la
+        // déconnexion effacerait des identifiants encore bons, en plein shift
+        // et souvent hors couverture — exactement le scénario que l'app
+        // offline-first doit encaisser. On remonte l'erreur réseau telle
+        // quelle et la session reste intacte pour la prochaine tentative.
+        if (outcome == _RefreshOutcome.transientFailure) {
+          return handler.reject(err.copyWith(error: mapDioError(err)));
+        }
+        if (outcome == _RefreshOutcome.sessionExpired) {
           await _onAuthFailed?.call();
           return handler.reject(err.copyWith(error: AuthException(_msg(err))));
         }
@@ -150,15 +160,16 @@ class DioClient {
   /// L'app fournit le shape de la requête/réponse via [_refreshRequest] et
   /// [_extractTokens] passés en sous-classe ? Non — on simplifie : on POST
   /// `{refreshToken}` et on s'attend à `{token | accessToken, refreshToken?}`.
-  Future<bool> _ensureRefreshed() async {
+  Future<_RefreshOutcome> _ensureRefreshed() async {
     if (_refreshCompleter != null) return _refreshCompleter!.future;
-    final c = Completer<bool>();
+    final c = Completer<_RefreshOutcome>();
     _refreshCompleter = c;
     try {
       final raw = await _tokens.getRefreshToken();
       if (raw == null || raw.isEmpty) {
-        c.complete(false);
-        return false;
+        // Pas de refresh token stocké : rien à renouveler, session finie.
+        c.complete(_RefreshOutcome.sessionExpired);
+        return _RefreshOutcome.sessionExpired;
       }
       // Dio standalone sans intercepteur pour éviter de re-déclencher refresh.
       final plain = Dio(BaseOptions(
@@ -167,6 +178,9 @@ class DioClient {
         receiveTimeout: const Duration(seconds: 10),
         headers: {'Content-Type': 'application/json'},
       ));
+      // Même transport que le client principal : seule la chaîne d'intercepteurs
+      // diffère. Garde aussi le pinning SSL et rend le refresh testable.
+      plain.httpClientAdapter = dio.httpClientAdapter;
       final res = await plain.post(
         _refreshPath,
         data: {'refreshToken': raw},
@@ -180,20 +194,34 @@ class DioClient {
         if (newAccess != null && newAccess.isNotEmpty) {
           await _tokens.saveTokens(access: newAccess, refresh: newRefresh);
           await _onRefreshSuccess?.call();
-          c.complete(true);
-          return true;
+          c.complete(_RefreshOutcome.refreshed);
+          return _RefreshOutcome.refreshed;
         }
       }
-      c.complete(false);
-      return false;
+
+      // Seul le serveur qui REFUSE le refresh token prouve que la session est
+      // morte (401/403, ou 400 "refreshToken requis"). Un 5xx est une panne
+      // serveur, pas une révocation.
+      final status = res.statusCode ?? 0;
+      final outcome = (status >= 400 && status < 500)
+          ? _RefreshOutcome.sessionExpired
+          : _RefreshOutcome.transientFailure;
+      c.complete(outcome);
+      return outcome;
     } catch (_) {
-      c.complete(false);
-      return false;
+      // Timeout, DNS, connexion refusée… : on ne sait pas si la session est
+      // encore valide, donc on ne la détruit pas.
+      c.complete(_RefreshOutcome.transientFailure);
+      return _RefreshOutcome.transientFailure;
     } finally {
       _refreshCompleter = null;
     }
   }
 }
+
+/// Issue d'une tentative de refresh — distingue « session révoquée » (il faut
+/// déconnecter) de « le réseau a échoué » (il faut réessayer plus tard).
+enum _RefreshOutcome { refreshed, sessionExpired, transientFailure }
 
 String _msg(DioException e) =>
     e.message ?? (e.response?.statusMessage ?? 'Erreur HTTP');

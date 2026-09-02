@@ -1,14 +1,15 @@
 import { useParams } from "react-router-dom";
 import { ErrorBoundary } from "react-error-boundary";
-import { TransportHeader }     from "../components/transport/TransportHeader";
-import { TransportInfoPanel }  from "../components/transport/TransportInfoPanel";
-import { TransportTimeline }   from "../components/transport/TransportTimeline";
-import { PatientCard }         from "../components/transport/PatientCard";
-import { PrescriptionPanel }   from "../components/transport/PrescriptionPanel";
-import { SignaturePad }        from "../components/transport/SignaturePad";
-import { DispatchAIPanel }     from "../components/transport/DispatchAIPanel";
-import { TransportMapPanel }   from "../components/transport/TransportMapPanel";
-import { ErrorState }          from "../components/ui";
+import { TransportHeader } from "../components/transport/TransportHeader";
+import { TransportInfoPanel } from "../components/transport/TransportInfoPanel";
+import { TransportAssignPanel } from "../components/transport/TransportAssignPanel";
+import { TransportTimeline } from "../components/transport/TransportTimeline";
+import { PatientCard } from "../components/transport/PatientCard";
+import { PrescriptionPanel } from "../components/transport/PrescriptionPanel";
+import { SignaturePad } from "../components/transport/SignaturePad";
+import { DispatchAIPanel } from "../components/transport/DispatchAIPanel";
+import { TransportMapPanel } from "../components/transport/TransportMapPanel";
+import { ErrorState } from "../components/ui";
 
 /**
  * TransportDetail — orchestrator
@@ -40,15 +41,16 @@ export default function TransportDetail() {
 
         <div className="grid grid-cols-12 gap-6 mt-6">
           <div className="col-span-12 lg:col-span-8 space-y-6">
-            <TransportInfoPanel  transportId={id} />
-            <TransportMapPanel   transportId={id} />
-            <DispatchAIPanel     transportId={id} />
-            <PrescriptionPanel   transportId={id} />
-            <SignaturePad        transportId={id} />
+            <TransportInfoPanel transportId={id} />
+            <TransportAssignPanel transportId={id} />
+            <TransportMapPanel transportId={id} />
+            <DispatchAIPanel transportId={id} />
+            <PrescriptionPanel transportId={id} />
+            <SignaturePad transportId={id} />
           </div>
           <aside className="col-span-12 lg:col-span-4 space-y-6">
-            <PatientCard         transportId={id} />
-            <TransportTimeline   transportId={id} />
+            <PatientCard transportId={id} />
+            <TransportTimeline transportId={id} />
           </aside>
         </div>
       </ErrorBoundary>

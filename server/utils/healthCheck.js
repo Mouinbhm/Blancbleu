@@ -79,13 +79,18 @@ async function checkIA() {
  */
 async function checkRedis() {
   try {
-     
-    const { redis } = require("./redis");
+    const { redis, withTimeout } = require("./redis");
     if (redis?._stub) {
       return { status: "skipped", reason: "REDIS_URL absent ou REDIS_DISABLED" };
     }
+    // Sans ce garde, `ping()` part dans l'offline queue d'ioredis quand Redis
+    // est down et ne revient JAMAIS : /api/health pendait indéfiniment alors
+    // que son rôle est justement de signaler la panne.
+    if (redis.status !== "ready") {
+      return { status: "unhealthy", error: `connexion ${redis.status}` };
+    }
     const start = Date.now();
-    const pong = await redis.ping();
+    const pong = await withTimeout(redis.ping(), 2_000);
     return {
       status: pong === "PONG" ? "healthy" : "degraded",
       latencyMs: Date.now() - start,

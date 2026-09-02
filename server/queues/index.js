@@ -67,18 +67,26 @@ if (redisDisabled) {
       }
     });
 
+    // BullMQ ré-émet les erreurs de connexion sur chaque Queue. Sans listener,
+    // queue-base.js retombe sur console.error(err) et déverse une stack brute
+    // par queue à chaque tentative de reconnexion — log illisible quand Redis
+    // est down. connection.on("error") ci-dessus logue déjà (throttlé).
+    const silenceErrors = (q) => (q.on("error", () => {}), q);
+
     queues = Object.fromEntries(
       Object.values(QUEUES).map((name) => [
         name,
-        new Queue(name, {
-          connection,
-          defaultJobOptions: {
-            attempts: 3,
-            backoff: { type: "exponential", delay: 5000 },
-            removeOnComplete: { age: 24 * 3600, count: 1000 },
-            removeOnFail: { age: 7 * 24 * 3600 },
-          },
-        }),
+        silenceErrors(
+          new Queue(name, {
+            connection,
+            defaultJobOptions: {
+              attempts: 3,
+              backoff: { type: "exponential", delay: 5000 },
+              removeOnComplete: { age: 24 * 3600, count: 1000 },
+              removeOnFail: { age: 7 * 24 * 3600 },
+            },
+          }),
+        ),
       ]),
     );
   } catch (err) {

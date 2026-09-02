@@ -7,7 +7,7 @@
  */
 const mongoose = require("mongoose");
 const { STATUTS, LABELS } = require("../services/transportStateMachine");
-const Counter = require("./Counter");
+const { nextNumero } = require("../utils/sequence");
 const { encrypt, decrypt } = require("../utils/encryption");
 
 const journalSchema = new mongoose.Schema(
@@ -452,12 +452,11 @@ transportSchema.pre("validate", function (next) {
 transportSchema.pre("save", async function (next) {
   if (!this.numero) {
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const counter = await Counter.findOneAndUpdate(
-      { _id: "transport" },
-      { $inc: { seq: 1 } },
-      { upsert: true, new: true },
-    );
-    this.numero = `TRS-${date}-${String(counter.seq).padStart(4, "0")}`;
+    this.numero = await nextNumero(this.constructor, {
+      counterId: "transport",
+      prefix: "TRS-",
+      build: (seq) => `TRS-${date}-${String(seq).padStart(4, "0")}`,
+    });
   }
   next();
 });

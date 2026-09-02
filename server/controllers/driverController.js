@@ -130,24 +130,36 @@ const getTournee = async (req, res) => {
       .populate("vehicule", "immatriculation type")
       .sort({ heureRDV: 1 });
 
-    // Fallback : si aucun transport lié au shift, chercher par véhicule
-    if (transports.length === 0 && shift.vehicleId) {
-      const legacy = await Transport.find({
+    // Rattrapage des missions détachées du shift courant.
+    //
+    // L'assignation fige le shiftId actif AU MOMENT où le dispatcher assigne.
+    // Si le chauffeur termine ensuite son shift et en ouvre un nouveau (pause,
+    // changement de journée, reconnexion), la mission reste collée à un shift
+    // désormais COMPLETED : elle disparaît de la tournée alors qu'elle est
+    // toujours ASSIGNED sur ce véhicule. L'ancien filtre `shiftId: null` ne
+    // rattrapait que les transports jamais rattachés, pas ceux-là.
+    //
+    // Un véhicule ne peut porter qu'un shift ACTIVE à la fois (claim atomique
+    // sur Vehicle.currentShiftId), donc tout transport encore ouvert sur ce
+    // véhicule appartient bien au chauffeur qui le conduit maintenant.
+    if (shift.vehicleId) {
+      const filtreDetaches = {
         vehicule: shift.vehicleId,
-        shiftId: null,
+        shiftId: { $ne: shift._id },
         deletedAt: null,
         statut: { $nin: ["CANCELLED", "COMPLETED", "BILLED", "PAID", "NO_SHOW", "FAILED"] },
-      })
-        .select(SELECT_FIELDS)
-        .populate("vehicule", "immatriculation type")
-        .sort({ heureRDV: 1 });
+      };
 
-      if (legacy.length > 0) {
-        await Transport.updateMany(
-          { vehicule: shift.vehicleId, shiftId: null, deletedAt: null },
-          { $set: { shiftId: shift._id, chauffeur: shift.personnelId } },
-        );
-        transports = legacy;
+      // On compte d'abord : pas de write sur chaque appel de /tournee.
+      const nbDetaches = await Transport.countDocuments(filtreDetaches);
+      if (nbDetaches > 0) {
+        await Transport.updateMany(filtreDetaches, {
+          $set: { shiftId: shift._id, chauffeur: shift.personnelId },
+        });
+        transports = await Transport.find({ shiftId: shift._id, deletedAt: null })
+          .select(SELECT_FIELDS)
+          .populate("vehicule", "immatriculation type")
+          .sort({ heureRDV: 1 });
       }
     }
 

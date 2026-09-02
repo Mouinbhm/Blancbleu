@@ -7,7 +7,7 @@
  * Statuts paiement : UNPAID → PENDING → SUCCEEDED | FAILED | REFUNDED | PARTIALLY_REFUNDED
  */
 const mongoose = require("mongoose");
-const Counter = require("./Counter");
+const { nextNumero } = require("../utils/sequence");
 
 // ── Sous-schéma historique ─────────────────────────────────────────────────────
 const historyEntrySchema = new mongoose.Schema(
@@ -181,13 +181,12 @@ factureSchema.index({ "accounting.exported": 1, dateEmission: -1 });
 // Numérotation globale (non remise à zéro chaque année — préserve l'unicité absolue).
 factureSchema.pre("save", async function (next) {
   if (!this.numero) {
-    const counter = await Counter.findOneAndUpdate(
-      { _id: "facture" },
-      { $inc: { seq: 1 } },
-      { upsert: true, new: true },
-    );
     const y = new Date().getFullYear();
-    this.numero = `FAC-${y}-${String(counter.seq).padStart(4, "0")}`;
+    this.numero = await nextNumero(this.constructor, {
+      counterId: "facture",
+      prefix: "FAC-",
+      build: (seq) => `FAC-${y}-${String(seq).padStart(4, "0")}`,
+    });
   }
   // Calcul automatique montantTotal et parts CPAM/patient
   if (

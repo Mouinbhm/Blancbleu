@@ -60,7 +60,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
 };
 app.use(cors(corsOptions));
 
@@ -109,7 +109,12 @@ try {
   const { redis: pubBase } = require("./utils/redis");
   if (!pubBase._stub) {
     const { createAdapter } = require("@socket.io/redis-adapter");
+    // duplicate() ne recopie pas les listeners : sans handler 'error' propre,
+    // le redis-adapter log "missing 'error' handler on this Redis client" à
+    // chaque échec de connexion et ioredis déverse la stack brute. La connexion
+    // principale logue déjà (throttlée dans utils/redis.js), on absorbe ici.
     const subClient = pubBase.duplicate();
+    subClient.on("error", () => {});
     io.adapter(createAdapter(pubBase, subClient));
     logger.info("Socket.IO Redis adapter actif (multi-instance ready)");
   } else {

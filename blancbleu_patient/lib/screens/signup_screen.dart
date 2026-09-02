@@ -646,19 +646,27 @@ class _SignupScreenState extends State<SignupScreen> {
                       disabledBackgroundColor: AppTheme.primaryContainer.withOpacity(0.6),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       elevation: 4,
+                      // Padding par défaut (16 de chaque côté) trop large : le
+                      // libellé + l'icône débordaient de 11 px sur un écran 360dp.
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
                     ),
                     child: _isLoading
                       ? const SizedBox(
                           width: 20, height: 20,
                           child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
-                      : const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text('Créer mon compte', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                            SizedBox(width: 8),
-                            Icon(Icons.check, size: 18),
-                          ],
+                      // scaleDown : sur les écrans les plus étroits le libellé
+                      // rétrécit légèrement au lieu de déborder.
+                      : const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text('Créer mon compte', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                              SizedBox(width: 8),
+                              Icon(Icons.check, size: 18),
+                            ],
+                          ),
                         ),
                   ),
                 ),

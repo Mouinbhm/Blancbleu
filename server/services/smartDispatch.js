@@ -43,13 +43,13 @@ function scoreCompatibilite(vehicle, mobilite) {
 }
 
 // ─── Score disponibilité créneau (20pts) ──────────────────────────────────────
-async function scoreDisponibilite(
-  vehicle,
-  dateTransport,
-  heureRDV,
-  dureeEstimeeMin = 90,
-) {
-  if (vehicle.statut !== "Disponible") {
+async function scoreDisponibilite(vehicle, dateTransport, heureRDV, dureeEstimeeMin = 90) {
+  // "En service" sans transport en cours = véhicule sur shift actif, prêt à
+  // recevoir une mission. Seule une mission déjà en cours le rend indisponible.
+  const surShiftLibre =
+    vehicle.statut === "En service" && vehicle.currentShiftId && !vehicle.transportEnCours;
+
+  if (vehicle.statut !== "Disponible" && !surShiftLibre) {
     return { score: 0, detail: `Véhicule ${vehicle.statut}` };
   }
 
@@ -130,21 +130,26 @@ function scoreFiabilite(vehicle) {
 // ══════════════════════════════════════════════════════════════════════════════
 // DISPATCH PRINCIPAL
 // ══════════════════════════════════════════════════════════════════════════════
-async function smartDispatch({
-  mobilite,
-  dateTransport,
-  heureRDV,
-  coordonneesDepart,
-}) {
+async function smartDispatch({ mobilite, dateTransport, heureRDV, coordonneesDepart }) {
   const lat = coordonneesDepart?.lat;
   const lng = coordonneesDepart?.lng;
 
   // Récupérer les types compatibles
   const typesCompatibles = MOBILITE_VEHICULE[mobilite] || ["VSL"];
 
-  // Charger les véhicules candidats
+  // Charger les véhicules candidats. Un véhicule tenu par un shift actif est
+  // "En service" sans transport en cours (cf. shiftController.startShift) :
+  // c'est un chauffeur prêt à partir, donc un candidat — pas un véhicule occupé.
+  // Seul `transportEnCours` distingue "en mission" de "disponible sur shift".
   const vehicules = await Vehicle.find({
-    statut: "Disponible",
+    $or: [
+      { statut: "Disponible" },
+      {
+        statut: "En service",
+        currentShiftId: { $ne: null },
+        $or: [{ transportEnCours: null }, { transportEnCours: { $exists: false } }],
+      },
+    ],
     type: { $in: typesCompatibles },
     deletedAt: null,
   }).populate("chauffeurAssigne", "nom prenom email tauxPonctualite");
@@ -155,9 +160,7 @@ async function smartDispatch({
       chauffeur: null,
       scoreTotal: 0,
       alternatives: [],
-      justification: [
-        `Aucun véhicule disponible compatible avec mobilité ${mobilite}`,
-      ],
+      justification: [`Aucun véhicule disponible compatible avec mobilité ${mobilite}`],
     };
   }
 
@@ -204,9 +207,7 @@ async function smartDispatch({
       chauffeur: null,
       scoreTotal: 0,
       alternatives: [],
-      justification: [
-        `Aucun véhicule disponible sur ce créneau pour mobilité ${mobilite}`,
-      ],
+      justification: [`Aucun véhicule disponible sur ce créneau pour mobilité ${mobilite}`],
     };
   }
 

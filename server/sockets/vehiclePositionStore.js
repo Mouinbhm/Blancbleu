@@ -13,7 +13,7 @@
  * horizontal possible en dev/test — c'est cohérent avec le reste du stack.
  */
 
-const { redis } = require("../utils/redis");
+const { redis, withTimeout } = require("../utils/redis");
 
 const KEY_PREFIX = "vehicle:position:";
 const TTL_SECONDS = 120;
@@ -21,20 +21,22 @@ const TTL_SECONDS = 120;
 // Fallback Map mémoire (utilisée quand Redis._stub)
 const _memory = new Map();
 
-const _redisUsable = !redis._stub;
+// Évalué à CHAQUE appel, pas une fois au require : REDIS_URL peut être
+// configuré alors que le serveur Redis est down. Dans ce cas les commandes
+// partent dans l'offline queue d'ioredis et leur promesse ne se résout jamais
+// — les try/catch ci-dessous ne se déclencheraient donc pas et l'appelant
+// pendrait (sockets/index.js await getAll() à chaque connexion staff).
+const _redisUsable = () => !redis._stub && redis.status === "ready";
 
 async function set(vehicleId, payload) {
   if (!vehicleId) return;
-  if (!_redisUsable) {
+  if (!_redisUsable()) {
     _memory.set(String(vehicleId), payload);
     return;
   }
   try {
-    await redis.set(
-      KEY_PREFIX + String(vehicleId),
-      JSON.stringify(payload),
-      "EX",
-      TTL_SECONDS,
+    await withTimeout(
+      redis.set(KEY_PREFIX + String(vehicleId), JSON.stringify(payload), "EX", TTL_SECONDS),
     );
   } catch {
     // Best-effort : ne JAMAIS faire crasher l'emit GPS si Redis hoquete
@@ -44,9 +46,9 @@ async function set(vehicleId, payload) {
 
 async function get(vehicleId) {
   if (!vehicleId) return null;
-  if (!_redisUsable) return _memory.get(String(vehicleId)) || null;
+  if (!_redisUsable()) return _memory.get(String(vehicleId)) || null;
   try {
-    const raw = await redis.get(KEY_PREFIX + String(vehicleId));
+    const raw = await withTimeout(redis.get(KEY_PREFIX + String(vehicleId)));
     return raw ? JSON.parse(raw) : null;
   } catch {
     return _memory.get(String(vehicleId)) || null;
@@ -59,13 +61,13 @@ async function get(vehicleId) {
  * vient de se connecter.
  */
 async function getAll() {
-  if (!_redisUsable) {
+  if (!_redisUsable()) {
     return Object.fromEntries(_memory);
   }
   try {
-    const keys = await redis.keys(KEY_PREFIX + "*");
+    const keys = await withTimeout(redis.keys(KEY_PREFIX + "*"));
     if (!keys || keys.length === 0) return {};
-    const values = await Promise.all(keys.map((k) => redis.get(k)));
+    const values = await withTimeout(Promise.all(keys.map((k) => redis.get(k))));
     const out = {};
     for (let i = 0; i < keys.length; i += 1) {
       const id = keys[i].slice(KEY_PREFIX.length);
@@ -84,11 +86,13 @@ async function getAll() {
 /** Tests : reset complet. */
 async function _reset() {
   _memory.clear();
-  if (_redisUsable) {
+  if (_redisUsable()) {
     try {
-      const keys = await redis.keys(KEY_PREFIX + "*");
-      if (keys && keys.length) await redis.del(...keys);
-    } catch { /* best-effort */ }
+      const keys = await withTimeout(redis.keys(KEY_PREFIX + "*"));
+      if (keys && keys.length) await withTimeout(redis.del(...keys));
+    } catch {
+      /* best-effort */
+    }
   }
 }
 
@@ -97,6 +101,6 @@ module.exports = {
   get,
   getAll,
   _reset,
-  _isRedisUsable: () => _redisUsable,
+  _isRedisUsable: _redisUsable,
   TTL_SECONDS,
 };

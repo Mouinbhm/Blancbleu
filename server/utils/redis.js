@@ -56,6 +56,11 @@ function makeClient() {
     // retryStrategy (reconnexion) et par le wrapper safe() qui avale les
     // erreurs de cache.
     enableOfflineQueue: true,
+    // PAS de `commandTimeout` ici : il ferait rejeter TOUTES les commandes,
+    // y compris les fire-and-forget que personne ne catche (psubscribe /
+    // subscribe / publish du redis-adapter Socket.IO) → unhandled rejection →
+    // crash du process. Le timeout est appliqué par withTimeout() ci-dessous,
+    // uniquement sur les appels dont on possède le catch.
     enableReadyCheck: true,
     lazyConnect: false,
     // Backoff exponentiel sur la reconnexion (max 30s)
@@ -81,10 +86,39 @@ function makeClient() {
 
 const redis = makeClient();
 
+const COMMAND_TIMEOUT_MS = 5_000;
+
+/**
+ * Borne une commande Redis dans le temps.
+ *
+ * Avec enableOfflineQueue:true + maxRetriesPerRequest:null, une commande émise
+ * pendant que Redis est down part dans la file d'attente et sa promesse ne se
+ * résout JAMAIS — ni succès, ni erreur. Tout `await` dessus pend pour de bon.
+ * À n'utiliser que sur un appel dont l'appelant catche la rejection.
+ */
+function withTimeout(promise, ms = COMMAND_TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Redis command timeout")), ms);
+    Promise.resolve(promise).then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 const safe = async (op, fallback = null) => {
   if (redis._stub) return fallback;
+  // Court-circuit tant que la connexion n'est pas prête : on rend la main
+  // immédiatement au lieu d'attendre le timeout à chaque appel.
+  if (redis.status !== "ready") return fallback;
   try {
-    return await op();
+    return await withTimeout(op());
   } catch {
     return fallback;
   }
@@ -114,4 +148,4 @@ async function delPattern(pattern) {
   if (keys && keys.length) await safe(() => redis.del(...keys));
 }
 
-module.exports = { redis, getJSON, setJSON, del, delPattern };
+module.exports = { redis, getJSON, setJSON, del, delPattern, withTimeout };

@@ -115,11 +115,24 @@ async function assignerVehicule(
   // Étape 3 : transition state-machine (statusLog + horodatages + sockets/audit).
   // Catch global : libère le véhicule (et best-effort revert des champs transport)
   //                pour tout échec en cours de processus.
+  //
+  // Un véhicule tenu par un shift actif est déjà "En service" sans transport en
+  // cours (cf. shiftController.startShift) : c'est l'état normal d'un chauffeur
+  // qui a pris son service, et précisément celui qu'on veut pouvoir assigner.
+  // On n'élargit le claim que dans ce cas précis — `currentShiftId` doit
+  // correspondre au shift résolu plus haut, sinon "En service" signifie bien
+  // "déjà en mission" et le claim doit échouer.
+  const vehiculeLibre = shiftIdFinal
+    ? { $or: [{ statut: "Disponible" }, { statut: "En service", currentShiftId: shiftIdFinal }] }
+    : { statut: "Disponible" };
+
   const claimedVehicle = await Vehicle.findOneAndUpdate(
     {
       _id: vehiculeIdFinal,
-      statut: "Disponible",
-      $or: [{ transportEnCours: null }, { transportEnCours: { $exists: false } }],
+      $and: [
+        vehiculeLibre,
+        { $or: [{ transportEnCours: null }, { transportEnCours: { $exists: false } }] },
+      ],
     },
     {
       $set: {
@@ -127,11 +140,15 @@ async function assignerVehicule(
         transportEnCours: transportId,
       },
     },
-    { new: true },
+    // new:false → on récupère l'état AVANT claim, pour que le rollback restaure
+    // le statut réel ("En service" si le véhicule était sur un shift) au lieu de
+    // le remettre à "Disponible" et de casser le shift en cours.
+    { new: false },
   );
   if (!claimedVehicle) {
     throw new ConflictError("Véhicule déjà occupé ou indisponible — un autre transport l'utilise.");
   }
+  const statutVehiculeAvantClaim = claimedVehicle.statut;
 
   let transportUpdated;
   try {
@@ -168,7 +185,7 @@ async function assignerVehicule(
     // évite de libérer un véhicule qu'un autre processus aurait re-claimé).
     await Vehicle.findOneAndUpdate(
       { _id: vehiculeIdFinal, transportEnCours: transportId },
-      { $set: { statut: "Disponible", transportEnCours: null } },
+      { $set: { statut: statutVehiculeAvantClaim, transportEnCours: null } },
     ).catch((rollbackErr) =>
       logger.error("Rollback véhicule échoué", { err: rollbackErr.message }),
     );

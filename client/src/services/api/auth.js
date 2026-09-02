@@ -25,6 +25,10 @@ export const userService = {
   create: (data) => api.post("/auth/register", data),
   toggle: (id) => api.patch(`/auth/users/${id}/toggle`),
   delete: (id) => api.delete(`/auth/users/${id}`),
-  resetPassword: (id, motDePasse) => api.post(`/auth/users/${id}/reset-password`, { motDePasse }),
+  // Le serveur lit `nouveauPassword` (cf. AuthController.adminResetPassword et
+  // validators/schemas.js) — un autre nom part en undefined et se fait rejeter
+  // par le garde "8 caractères minimum" quel que soit le mot de passe saisi.
+  resetPassword: (id, nouveauPassword) =>
+    api.post(`/auth/users/${id}/reset-password`, { nouveauPassword }),
   updatePassword: (data) => api.patch("/auth/password", data),
 };
